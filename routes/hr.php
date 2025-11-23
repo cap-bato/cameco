@@ -23,6 +23,10 @@ use App\Http\Controllers\HR\Timekeeping\AttendanceController;
 use App\Http\Controllers\HR\Timekeeping\OvertimeController;
 use App\Http\Controllers\HR\Timekeeping\ImportController;
 use App\Http\Controllers\HR\Timekeeping\AnalyticsController as TimekeepingAnalyticsController;
+use App\Http\Controllers\HR\Appraisal\AppraisalCycleController;
+use App\Http\Controllers\HR\Appraisal\AppraisalController;
+use App\Http\Controllers\HR\Appraisal\PerformanceMetricsController;
+use App\Http\Controllers\HR\Appraisal\RehireRecommendationController;
 use App\Http\Middleware\EnsureHRManager;
 // use App\Http\Middleware\EnsureProfileComplete; for future useronboarding workflow
 
@@ -81,6 +85,86 @@ Route::middleware(['auth', 'verified' , EnsureHRManager::class])
             Route::post('/generate/{template}', [EmployeeController::class, 'storeDocument'])->name('generate.store');
             Route::get('/list', [EmployeeController::class, 'listDocuments'])->name('list');
             Route::get('/{document}/download', [EmployeeController::class, 'downloadDocument'])->name('download');
+        });
+
+        // Appraisal & Performance Management Module
+        Route::prefix('appraisals')->name('appraisals.')->group(function () {
+            // Appraisal Cycles
+            Route::prefix('cycles')->name('cycles.')->group(function () {
+                Route::get('/', [AppraisalCycleController::class, 'index'])
+                    ->middleware('permission:appraisal.cycles.view')
+                    ->name('index');
+                Route::get('/create', [AppraisalCycleController::class, 'create'])
+                    ->middleware('permission:appraisal.cycles.create')
+                    ->name('create');
+                Route::post('/', [AppraisalCycleController::class, 'store'])
+                    ->middleware('permission:appraisal.cycles.create')
+                    ->name('store');
+                Route::get('/{id}', [AppraisalCycleController::class, 'show'])
+                    ->middleware('permission:appraisal.cycles.view')
+                    ->name('show');
+                Route::get('/{id}/edit', [AppraisalCycleController::class, 'edit'])
+                    ->middleware('permission:appraisal.cycles.edit')
+                    ->name('edit');
+                Route::put('/{id}', [AppraisalCycleController::class, 'update'])
+                    ->middleware('permission:appraisal.cycles.edit')
+                    ->name('update');
+                Route::post('/{id}/close', [AppraisalCycleController::class, 'close'])
+                    ->middleware('permission:appraisal.cycles.close')
+                    ->name('close');
+                Route::get('/{id}/assign', [AppraisalCycleController::class, 'assignEmployees'])
+                    ->middleware('permission:appraisal.cycles.assign')
+                    ->name('assign.show');
+                Route::post('/{id}/assign', [AppraisalCycleController::class, 'storeAssignment'])
+                    ->middleware('permission:appraisal.cycles.assign')
+                    ->name('assign.store');
+            });
+
+            // Appraisals (Individual)
+            Route::get('/', [AppraisalController::class, 'index'])
+                ->middleware('permission:appraisal.view')
+                ->name('index');
+            Route::get('/{id}', [AppraisalController::class, 'show'])
+                ->middleware('permission:appraisal.view')
+                ->name('show');
+            Route::post('/', [AppraisalController::class, 'store'])
+                ->middleware('permission:appraisal.create')
+                ->name('store');
+            Route::put('/{id}/scores', [AppraisalController::class, 'updateScores'])
+                ->middleware('permission:appraisal.edit')
+                ->name('update-scores');
+            Route::put('/{id}/status', [AppraisalController::class, 'updateStatus'])
+                ->middleware('permission:appraisal.edit')
+                ->name('update-status');
+            Route::put('/{id}/feedback', [AppraisalController::class, 'submitFeedback'])
+                ->middleware('permission:appraisal.submit_feedback')
+                ->name('submit-feedback');
+        });
+
+        // Performance Metrics & Rehire Recommendations
+        Route::get('/performance-metrics', [PerformanceMetricsController::class, 'index'])
+            ->middleware('permission:performance.metrics.view')
+            ->name('performance-metrics.index');
+        Route::get('/performance-metrics/{employeeId}', [PerformanceMetricsController::class, 'show'])
+            ->middleware('permission:performance.metrics.view')
+            ->name('performance-metrics.show');
+        Route::get('/performance-metrics/department/comparison', [PerformanceMetricsController::class, 'departmentComparison'])
+            ->middleware('permission:performance.metrics.view')
+            ->name('performance-metrics.department-comparison');
+
+        Route::prefix('rehire-recommendations')->name('rehire-recommendations.')->group(function () {
+            Route::get('/', [RehireRecommendationController::class, 'index'])
+                ->middleware('permission:rehire.recommendations.view')
+                ->name('index');
+            Route::get('/{id}', [RehireRecommendationController::class, 'show'])
+                ->middleware('permission:rehire.recommendations.view')
+                ->name('show');
+            Route::put('/{id}/override', [RehireRecommendationController::class, 'override'])
+                ->middleware('permission:rehire.recommendations.override')
+                ->name('override');
+            Route::post('/bulk/approve', [RehireRecommendationController::class, 'bulkApprove'])
+                ->middleware('permission:rehire.recommendations.override')
+                ->name('bulk-approve');
         });
 
         // ATS (Applicant Tracking System) Module
