@@ -374,6 +374,14 @@ class EmployeeSeeder extends Seeder
         $createdEmployees = [];
 
         foreach ($employees as $data) {
+            // Check if employee already exists
+            $existingEmployee = Employee::where('employee_number', $data['employee']['employee_number'])->first();
+            
+            if ($existingEmployee) {
+                $createdEmployees[$data['employee']['employee_number']] = $existingEmployee;
+                continue;
+            }
+
             // Create profile
             $profile = Profile::create($data['profile']);
 

@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Download, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { LeaveReportsPageProps } from '@/types/hr-pages';
-import Heading, { HeadingSmall } from '@/components/heading';
 
 const breadcrumbs = [
     { title: 'Dashboard', href: '/dashboard' },

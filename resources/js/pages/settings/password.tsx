@@ -6,8 +6,6 @@ import { type BreadcrumbItem } from '@/types';
 import { Transition } from '@headlessui/react';
 import { Form, Head } from '@inertiajs/react';
 import { useRef } from 'react';
-
-import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,10 +28,10 @@ export default function Password() {
 
             <SettingsLayout>
                 <div className="space-y-6">
-                    <HeadingSmall
-                        title="Update password"
-                        description="Ensure your account is using a long, random password to stay secure"
-                    />
+                    <div>
+                        <h2 className="text-lg font-semibold">Update password</h2>
+                        <p className="text-sm text-neutral-600">Ensure your account is using a long, random password to stay secure</p>
+                    </div>
 
                     <Form
                         {...PasswordController.update.form()}
