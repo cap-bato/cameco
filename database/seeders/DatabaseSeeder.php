@@ -143,6 +143,11 @@ class DatabaseSeeder extends Seeder
             $this->call(\Database\Seeders\EmployeeSeeder::class);
         }
 
+        // Seed Workforce Management data
+        if (class_exists(\Database\Seeders\WorkforceSeeder::class)) {
+            $this->call(\Database\Seeders\WorkforceSeeder::class);
+        }
+
     }
 
 

@@ -19,17 +19,21 @@ return new class extends Migration
             $table->dropColumn('position');
             $table->foreignId('position_id')->nullable()->after('department_id')->constrained('positions')->onDelete('set null');
             
-            // Update employment_type enum values to match form
+            // Update employment_type enum values to match form - drop index first for SQLite compatibility
+            $table->dropIndex('employees_employment_type_index');
             $table->dropColumn('employment_type');
             $table->enum('employment_type', ['regular', 'probationary', 'contractual', 'project-based', 'part-time'])->nullable()->after('position_id');
+            $table->index('employment_type');
             
             // Rename date fields to match form expectations
             $table->renameColumn('date_employed', 'date_hired');
             $table->renameColumn('date_regularized', 'regularization_date');
             
-            // Update status enum values
+            // Update status enum values - drop index first for SQLite compatibility
+            $table->dropIndex('employees_status_index');
             $table->dropColumn('status');
             $table->enum('status', ['active', 'on_leave', 'suspended', 'terminated', 'archived'])->default('active')->after('immediate_supervisor_id');
+            $table->index('status');
             
             // Make audit fields nullable (will be set by service/controller logic)
             $table->foreignId('created_by')->nullable()->change();

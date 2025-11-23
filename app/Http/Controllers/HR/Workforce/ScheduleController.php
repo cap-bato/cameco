@@ -530,4 +530,169 @@ class ScheduleController extends Controller
         return redirect()->route('hr.workforce.schedules.index')
             ->with('success', 'Schedule deleted successfully.');
     }
+
+    /**
+     * Assign employees to a schedule.
+     */
+    public function assignEmployees(Request $request, string $id)
+    {
+        $request->validate([
+            'employee_ids' => 'required|array|min:1',
+            'employee_ids.*' => 'integer|exists:employees,id',
+        ]);
+
+        // Mock: Process employee assignments
+        $assignedCount = count($request->input('employee_ids'));
+
+        return redirect()->route('hr.workforce.schedules.show', $id)
+            ->with('success', "{$assignedCount} employee(s) assigned to schedule successfully.");
+    }
+
+    /**
+     * Remove employees from a schedule.
+     */
+    public function unassignEmployees(Request $request, string $id)
+    {
+        $request->validate([
+            'employee_ids' => 'required|array|min:1',
+            'employee_ids.*' => 'integer|exists:employees,id',
+        ]);
+
+        // Mock: Process employee unassignments
+        $unassignedCount = count($request->input('employee_ids'));
+
+        return redirect()->route('hr.workforce.schedules.show', $id)
+            ->with('success', "{$unassignedCount} employee(s) removed from schedule successfully.");
+    }
+
+    /**
+     * Duplicate an existing schedule.
+     */
+    public function duplicate(string $id)
+    {
+        // Mock: Create a duplicate of the schedule
+        $newScheduleId = 9; // Mock ID for duplicated schedule
+
+        return redirect()->route('hr.workforce.schedules.edit', $newScheduleId)
+            ->with('success', 'Schedule duplicated successfully. Edit and save to create a new schedule.');
+    }
+
+    /**
+     * Clone a schedule template to create a new schedule.
+     */
+    public function cloneTemplate(Request $request)
+    {
+        $request->validate([
+            'template_id' => 'required|integer|exists:templates,id',
+            'name' => 'required|string|max:255',
+        ]);
+
+        // Mock: Create schedule from template
+        $newScheduleId = 9; // Mock ID for new schedule from template
+
+        return redirect()->route('hr.workforce.schedules.edit', $newScheduleId)
+            ->with('success', 'Schedule created from template successfully.');
+    }
+
+    /**
+     * Bulk update schedule status.
+     */
+    public function bulkUpdateStatus(Request $request)
+    {
+        $request->validate([
+            'schedule_ids' => 'required|array|min:1',
+            'schedule_ids.*' => 'integer|exists:schedules,id',
+            'status' => 'required|in:active,expired,draft',
+        ]);
+
+        // Mock: Update status for multiple schedules
+        $updatedCount = count($request->input('schedule_ids'));
+        $status = $request->input('status');
+
+        return redirect()->route('hr.workforce.schedules.index')
+            ->with('success', "{$updatedCount} schedule(s) status updated to '{$status}' successfully.");
+    }
+
+    /**
+     * Export schedules to CSV.
+     */
+    public function exportCsv(Request $request)
+    {
+        // Mock: Generate CSV export
+        $filename = 'schedules_' . date('Y-m-d_H-i-s') . '.csv';
+
+        return response()->download(storage_path("app/exports/{$filename}"))
+            ->header('Content-Type', 'text/csv');
+    }
+
+    /**
+     * Get schedule statistics and analytics.
+     */
+    public function getStatistics()
+    {
+        // Mock statistics data
+        $statistics = [
+            'total_schedules' => 8,
+            'active_schedules' => 5,
+            'expired_schedules' => 2,
+            'draft_schedules' => 1,
+            'total_employees_assigned' => 131,
+            'department_distribution' => [
+                ['department' => 'Rolling Mill 3', 'count' => 45],
+                ['department' => 'Wire Mill', 'count' => 32],
+                ['department' => 'Quality Assurance', 'count' => 18],
+                ['department' => 'Human Resources', 'count' => 12],
+                ['department' => 'Maintenance', 'count' => 24],
+            ],
+            'shift_distribution' => [
+                ['shift_type' => 'Morning (6AM-2PM)', 'count' => 45],
+                ['shift_type' => 'Afternoon (2PM-10PM)', 'count' => 32],
+                ['shift_type' => 'Night (10PM-6AM)', 'count' => 28],
+                ['shift_type' => 'Office Hours (8AM-5PM)', 'count' => 15],
+                ['shift_type' => 'Graveyard (11PM-7AM)', 'count' => 11],
+            ],
+        ];
+
+        return response()->json($statistics);
+    }
+
+    /**
+     * Get available employees for assignment to a schedule.
+     */
+    public function getAvailableEmployees(Request $request)
+    {
+        $departmentId = $request->input('department_id');
+
+        // Mock employees
+        $employees = [
+            ['id' => 1, 'employee_number' => 'EMP001', 'full_name' => 'Juan dela Cruz', 'department_id' => 3, 'position' => 'Operator'],
+            ['id' => 2, 'employee_number' => 'EMP002', 'full_name' => 'Maria Santos', 'department_id' => 3, 'position' => 'Operator'],
+            ['id' => 3, 'employee_number' => 'EMP003', 'full_name' => 'Pedro Reyes', 'department_id' => 4, 'position' => 'Technician'],
+            ['id' => 4, 'employee_number' => 'EMP004', 'full_name' => 'Anna Garcia', 'department_id' => 1, 'position' => 'HR Specialist'],
+        ];
+
+        // Filter by department if provided
+        if ($departmentId) {
+            $employees = array_filter($employees, function ($emp) use ($departmentId) {
+                return $emp['department_id'] == $departmentId;
+            });
+        }
+
+        return response()->json(array_values($employees));
+    }
+
+    /**
+     * Get employees assigned to a specific schedule.
+     */
+    public function getAssignedEmployees(string $id)
+    {
+        // Mock assigned employees for schedule
+        $assignedEmployees = [
+            ['id' => 1, 'employee_number' => 'EMP001', 'full_name' => 'Juan dela Cruz', 'department_id' => 3, 'department_name' => 'Rolling Mill 3', 'position' => 'Operator', 'assigned_date' => '2025-01-01'],
+            ['id' => 2, 'employee_number' => 'EMP002', 'full_name' => 'Maria Santos', 'department_id' => 3, 'department_name' => 'Rolling Mill 3', 'position' => 'Operator', 'assigned_date' => '2025-01-01'],
+            ['id' => 5, 'employee_number' => 'EMP005', 'full_name' => 'Carlos Mendoza', 'department_id' => 3, 'department_name' => 'Rolling Mill 3', 'position' => 'Lead Operator', 'assigned_date' => '2024-12-15'],
+        ];
+
+        return response()->json($assignedEmployees);
+    }
 }
