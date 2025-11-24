@@ -124,7 +124,7 @@ export default function AssignmentDetailModal({
                     </div>
 
                     {/* Conflict Information (if applicable) */}
-                    {assignment.has_conflict && assignment.conflict_reason && (
+                    {assignment.has_conflict && (
                         <Card className="border-red-200 bg-red-50">
                             <CardHeader className="pb-3">
                                 <CardTitle className="text-sm flex items-center gap-2 text-red-900">
@@ -132,8 +132,37 @@ export default function AssignmentDetailModal({
                                     Scheduling Conflict
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="text-sm text-red-800">
-                                {assignment.conflict_reason}
+                            <CardContent className="space-y-4 text-sm text-red-800">
+                                <div>
+                                    <p className="font-semibold mb-1">Issue:</p>
+                                    <p>{assignment.conflict_reason || 'This assignment overlaps with an existing shift.'}</p>
+                                </div>
+                                
+                                {assignment.conflicting_employee_name && (
+                                    <div className="border-t border-red-200 pt-4">
+                                        <p className="font-semibold mb-3">Conflicting Shift Details:</p>
+                                        <div className="space-y-2 text-red-700 bg-white rounded p-3">
+                                            <div className="flex justify-between">
+                                                <span>Employee:</span>
+                                                <span className="font-medium">{assignment.conflicting_employee_name}</span>
+                                            </div>
+                                            {assignment.conflicting_shift_date && (
+                                                <div className="flex justify-between">
+                                                    <span>Date:</span>
+                                                    <span className="font-medium">{assignment.conflicting_shift_date}</span>
+                                                </div>
+                                            )}
+                                            {assignment.conflicting_shift_start && assignment.conflicting_shift_end && (
+                                                <div className="flex justify-between">
+                                                    <span>Time:</span>
+                                                    <span className="font-medium">
+                                                        {formatTime(assignment.conflicting_shift_start)} - {formatTime(assignment.conflicting_shift_end)}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     )}

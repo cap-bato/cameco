@@ -34,27 +34,45 @@ class AssignmentController extends Controller
         $assignments = $this->shiftAssignmentService->getAssignments();
         
         // Transform assignments to include formatted data
-        $transformedAssignments = $assignments->map(fn ($assignment) => [
-            'id' => $assignment->id,
-            'employee_id' => $assignment->employee_id,
-            'employee_name' => "{$assignment->employee?->profile?->first_name} {$assignment->employee?->profile?->last_name}",
-            'employee_number' => $assignment->employee?->employee_number,
-            'schedule_id' => $assignment->schedule_id,
-            'schedule_name' => $assignment->schedule?->name,
-            'date' => $assignment->date?->format('Y-m-d'),
-            'shift_start' => $assignment->shift_start,
-            'shift_end' => $assignment->shift_end,
-            'shift_type' => $assignment->shift_type,
-            'location' => $assignment->location,
-            'department_id' => $assignment->department_id,
-            'department_name' => $assignment->department?->name,
-            'is_overtime' => $assignment->is_overtime,
-            'overtime_hours' => $assignment->overtime_hours,
-            'status' => $assignment->status,
-            'has_conflict' => $assignment->has_conflict,
-            'conflict_reason' => $assignment->conflict_reason,
-            'created_at' => $assignment->created_at?->format('Y-m-d H:i:s'),
-        ])->toArray();
+        $transformedAssignments = $assignments->map(function ($assignment) {
+            // Find conflicting shifts if has_conflict is true
+            $conflictingShift = null;
+            if ($assignment->has_conflict) {
+                $conflictingShift = ShiftAssignment::with('employee.profile')
+                    ->where('employee_id', $assignment->employee_id)
+                    ->where('date', $assignment->date)
+                    ->where('id', '!=', $assignment->id)
+                    ->where('deleted_at', null)
+                    ->first();
+            }
+            
+            return [
+                'id' => $assignment->id,
+                'employee_id' => $assignment->employee_id,
+                'employee_name' => "{$assignment->employee?->profile?->first_name} {$assignment->employee?->profile?->last_name}",
+                'employee_number' => $assignment->employee?->employee_number,
+                'schedule_id' => $assignment->schedule_id,
+                'schedule_name' => $assignment->schedule?->name,
+                'date' => $assignment->date?->format('Y-m-d'),
+                'shift_start' => $assignment->shift_start,
+                'shift_end' => $assignment->shift_end,
+                'shift_type' => $assignment->shift_type,
+                'location' => $assignment->location,
+                'department_id' => $assignment->department_id,
+                'department_name' => $assignment->department?->name,
+                'is_overtime' => $assignment->is_overtime,
+                'overtime_hours' => $assignment->overtime_hours,
+                'status' => $assignment->status,
+                'has_conflict' => $assignment->has_conflict,
+                'conflict_reason' => $assignment->conflict_reason,
+                'conflicting_assignment_id' => $conflictingShift?->id,
+                'conflicting_employee_name' => $conflictingShift ? "{$conflictingShift->employee?->profile?->first_name} {$conflictingShift->employee?->profile?->last_name}" : null,
+                'conflicting_shift_date' => $conflictingShift ? \Carbon\Carbon::parse($conflictingShift->date)->format('Y-m-d') : null,
+                'conflicting_shift_start' => $conflictingShift?->shift_start,
+                'conflicting_shift_end' => $conflictingShift?->shift_end,
+                'created_at' => $assignment->created_at?->format('Y-m-d H:i:s'),
+            ];
+        })->toArray();
 
         // Calculate summary stats
         $todayAssignments = $assignments->filter(fn ($a) => $a->date->isToday());
@@ -235,6 +253,48 @@ class AssignmentController extends Controller
             'departments' => $departments,
             'employees' => $employees,
             'schedules' => $schedules,
+        ]);
+    }
+
+    /**
+     * Check for conflicts in bulk assignment before creation.
+     */
+    public function checkBulkConflicts(Request $request)
+    {
+        $employeeIds = $request->input('employee_ids', []);
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+        $shiftStart = $request->input('shift_start');
+        $shiftEnd = $request->input('shift_end');
+
+        $conflicts = [];
+
+        // Check each employee for conflicts across the date range
+        foreach ($employeeIds as $employeeId) {
+            $conflictingAssignments = ShiftAssignment::where('employee_id', $employeeId)
+                ->whereBetween('date', [$dateFrom, $dateTo])
+                ->where('deleted_at', null)
+                ->get(['id', 'date', 'shift_start', 'shift_end']);
+
+            if ($conflictingAssignments->isNotEmpty()) {
+                $employee = \App\Models\Employee::with('profile:id,first_name,last_name')
+                    ->find($employeeId);
+
+                $conflictingDates = $conflictingAssignments->map(fn ($a) => $a->date->format('Y-m-d'))->unique()->toArray();
+
+                $conflicts[] = [
+                    'employee_id' => $employeeId,
+                    'employee_name' => "{$employee?->profile?->first_name} {$employee?->profile?->last_name}",
+                    'conflicting_dates' => $conflictingDates,
+                    'conflict_count' => count($conflictingDates),
+                ];
+            }
+        }
+
+        return response()->json([
+            'conflicts' => $conflicts,
+            'has_conflicts' => count($conflicts) > 0,
+            'total_conflicts' => count($conflicts),
         ]);
     }
 

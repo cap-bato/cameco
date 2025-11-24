@@ -334,25 +334,69 @@ export default function CreateEditAssignmentModal({
 
                     {/* Conflict Detection Component */}
                     {selectedEmployee && selectedSchedule && formData.date && (
-                        <AssignmentConflictIndicator
-                            conflict={
-                                hasConflict
-                                    ? {
-                                          type: 'overlap',
-                                          severity: 'warning',
-                                          message: 'Scheduling Conflict Detected',
-                                          details: conflictMessage,
-                                          resolution:
-                                              'Click "Confirm" to override and assign this shift anyway.',
-                                      }
-                                    : {
-                                          type: 'none',
-                                          severity: 'none',
-                                          message: 'No conflicts',
-                                      }
-                            }
-                            canOverride={true}
-                        />
+                        <div className="space-y-4">
+                            <AssignmentConflictIndicator
+                                conflict={
+                                    hasConflict
+                                        ? {
+                                              type: 'overlap',
+                                              severity: 'warning',
+                                              message: 'Scheduling Conflict Detected',
+                                              details: conflictMessage,
+                                              resolution:
+                                                  'Click "Confirm" to override and assign this shift anyway.',
+                                          }
+                                        : assignment?.has_conflict
+                                        ? {
+                                              type: 'overlap',
+                                              severity: 'warning',
+                                              message: 'Existing Scheduling Conflict',
+                                              details: assignment.conflict_reason || 'This assignment has a recorded conflict.',
+                                              resolution:
+                                                  'This conflict was detected when the assignment was created.',
+                                          }
+                                        : {
+                                              type: 'none',
+                                              severity: 'none',
+                                              message: 'No conflicts',
+                                          }
+                                }
+                                canOverride={true}
+                            />
+
+                            {/* Display conflicting shift details if available */}
+                            {(hasConflict || assignment?.has_conflict) && assignment?.conflicting_employee_name && (
+                                <Card className="border-red-200 bg-red-50">
+                                    <CardHeader className="pb-3">
+                                        <CardTitle className="text-sm text-red-900">
+                                            Conflicting Shift Details
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3 text-sm">
+                                        <div className="bg-white rounded p-3 space-y-2 text-red-700">
+                                            <div className="flex justify-between">
+                                                <span className="font-semibold">Employee:</span>
+                                                <span>{assignment.conflicting_employee_name}</span>
+                                            </div>
+                                            {assignment.conflicting_shift_date && (
+                                                <div className="flex justify-between">
+                                                    <span className="font-semibold">Date:</span>
+                                                    <span>{assignment.conflicting_shift_date}</span>
+                                                </div>
+                                            )}
+                                            {assignment.conflicting_shift_start && assignment.conflicting_shift_end && (
+                                                <div className="flex justify-between">
+                                                    <span className="font-semibold">Time:</span>
+                                                    <span>
+                                                        {formatTime(assignment.conflicting_shift_start)} - {formatTime(assignment.conflicting_shift_end)}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </div>
                     )}
 
                     {/* Preview Card */}

@@ -15,7 +15,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Search, Clock, MapPin } from 'lucide-react';
+import { ArrowLeft, Search, Clock, MapPin, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Department, EmployeeReference } from '@/types/workforce-pages';
 
 interface BulkAssignProps {
@@ -35,6 +35,14 @@ interface BulkAssignFormData {
     location: string;
     is_overtime: boolean;
     department_id: string;
+    allow_conflicts?: boolean;
+}
+
+interface ConflictInfo {
+    employee_id: number;
+    employee_name: string;
+    conflicting_dates: string[];
+    conflict_count: number;
 }
 
 export default function BulkAssignPage() {
@@ -51,6 +59,7 @@ export default function BulkAssignPage() {
         location: '',
         is_overtime: false,
         department_id: 'all',
+        allow_conflicts: false,
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -58,6 +67,8 @@ export default function BulkAssignPage() {
     const [selectAll, setSelectAll] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [detectedConflicts, setDetectedConflicts] = useState<ConflictInfo[]>([]);
+    const [hasCheckedConflicts, setHasCheckedConflicts] = useState(false);
 
     const breadcrumb = [
         { title: 'HR', href: '/hr' },
@@ -132,11 +143,64 @@ export default function BulkAssignPage() {
         return Object.keys(newErrors).length === 0;
     };
 
+    // Check for conflicts before submission
+    const checkForConflicts = async () => {
+        if (!validateForm()) {
+            return;
+        }
+
+        setIsLoading(true);
+        setSubmitError(null);
+
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            
+            const response = await fetch('/hr/workforce/assignments/check-bulk-conflicts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || '',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    employee_ids: formData.employee_ids,
+                    date_from: formData.date_from,
+                    date_to: formData.date_to,
+                    shift_start: formData.shift_start,
+                    shift_end: formData.shift_end,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            setDetectedConflicts(data.conflicts || []);
+            setHasCheckedConflicts(true);
+
+            if (data.conflicts && data.conflicts.length > 0) {
+                setFormData((prev) => ({ ...prev, allow_conflicts: false }));
+            }
+        } catch (error) {
+            setSubmitError(error instanceof Error ? error.message : 'An error occurred while checking conflicts');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitError(null);
 
         if (!validateForm()) {
+            return;
+        }
+
+        // If conflicts were detected and user hasn't confirmed override, check first
+        if (detectedConflicts.length > 0 && !formData.allow_conflicts) {
+            setSubmitError('Please review conflicts and confirm to proceed');
             return;
         }
 
@@ -160,6 +224,7 @@ export default function BulkAssignPage() {
                     location: formData.location || null,
                     is_overtime: formData.is_overtime,
                     department_id: formData.department_id !== 'all' ? parseInt(formData.department_id) : null,
+                    allow_conflicts: formData.allow_conflicts,
                 },
                 {
                     onError: (errors) => {
@@ -227,6 +292,84 @@ export default function BulkAssignPage() {
                         <Alert variant="destructive">
                             <AlertDescription>{submitError}</AlertDescription>
                         </Alert>
+                    )}
+
+                    {/* Conflict Detection Section */}
+                    {hasCheckedConflicts && detectedConflicts.length > 0 && (
+                        <Card className="border-yellow-200 bg-yellow-50">
+                            <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2 text-yellow-900">
+                                    <AlertTriangle className="h-5 w-5" />
+                                    Scheduling Conflicts Detected
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <p className="text-sm text-yellow-800">
+                                    {detectedConflicts.length} employee(s) have existing assignments that conflict with the requested dates:
+                                </p>
+                                
+                                <div className="space-y-3 max-h-64 overflow-y-auto">
+                                    {detectedConflicts.map((conflict) => (
+                                        <div key={conflict.employee_id} className="bg-white rounded border border-yellow-200 p-3">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <p className="font-semibold text-yellow-900">{conflict.employee_name}</p>
+                                                    <p className="text-xs text-yellow-700">{conflict.conflict_count} conflict(s) found</p>
+                                                </div>
+                                                <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                                                    {conflict.conflict_count}
+                                                </Badge>
+                                            </div>
+                                            <div className="text-xs text-yellow-700 space-y-1">
+                                                <p className="font-semibold mb-1">Conflicting dates:</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {conflict.conflicting_dates.slice(0, 5).map((date) => (
+                                                        <span key={date} className="bg-yellow-100 px-2 py-1 rounded">
+                                                            {date}
+                                                        </span>
+                                                    ))}
+                                                    {conflict.conflicting_dates.length > 5 && (
+                                                        <span className="bg-yellow-100 px-2 py-1 rounded">
+                                                            +{conflict.conflicting_dates.length - 5} more
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="border-t border-yellow-200 pt-4">
+                                    <label className="flex items-center gap-3 cursor-pointer p-3 rounded hover:bg-yellow-100 transition">
+                                        <Checkbox
+                                            checked={formData.allow_conflicts}
+                                            onCheckedChange={(checked) =>
+                                                setFormData((prev) => ({ ...prev, allow_conflicts: !!checked }))
+                                            }
+                                            disabled={isLoading}
+                                        />
+                                        <span className="text-sm font-medium text-yellow-900">
+                                            I confirm and take responsibility for overriding these conflicts
+                                        </span>
+                                    </label>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* No Conflicts Section */}
+                    {hasCheckedConflicts && detectedConflicts.length === 0 && (
+                        <Card className="border-green-200 bg-green-50">
+                            <CardContent className="pt-6">
+                                <div className="flex items-center gap-3">
+                                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                    <div>
+                                        <p className="font-semibold text-green-900">No Conflicts Detected</p>
+                                        <p className="text-sm text-green-800">All selected employees are available for the requested dates.</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
                     )}
 
                     <div className="grid grid-cols-3 gap-6">
@@ -534,12 +677,44 @@ export default function BulkAssignPage() {
                         >
                             Cancel
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={isLoading || formData.employee_ids.length === 0 || totalAssignments === 0}
-                        >
-                            {isLoading ? 'Creating...' : `Create ${totalAssignments} Assignment${totalAssignments !== 1 ? 's' : ''}`}
-                        </Button>
+                        {!hasCheckedConflicts ? (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={checkForConflicts}
+                                disabled={isLoading || formData.employee_ids.length === 0 || totalAssignments === 0}
+                                className="gap-2"
+                            >
+                                <AlertTriangle className="h-4 w-4" />
+                                Check for Conflicts
+                            </Button>
+                        ) : (
+                            <>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setHasCheckedConflicts(false);
+                                        setDetectedConflicts([]);
+                                        setFormData((prev) => ({ ...prev, allow_conflicts: false }));
+                                    }}
+                                    disabled={isLoading}
+                                >
+                                    Re-check
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={
+                                        isLoading ||
+                                        formData.employee_ids.length === 0 ||
+                                        totalAssignments === 0 ||
+                                        (detectedConflicts.length > 0 && !formData.allow_conflicts)
+                                    }
+                                >
+                                    {isLoading ? 'Creating...' : `Create ${totalAssignments} Assignment${totalAssignments !== 1 ? 's' : ''}`}
+                                </Button>
+                            </>
+                        )}
                     </div>
                 </form>
             </div>

@@ -381,6 +381,9 @@ Route::middleware(['auth', 'verified' , EnsureHRManager::class])
             Route::post('/assignments/bulk', [AssignmentController::class, 'bulkStore'])
                 ->middleware('permission:workforce.assignments.create')
                 ->name('assignments.bulk');
+            Route::post('/assignments/check-bulk-conflicts', [AssignmentController::class, 'checkBulkConflicts'])
+                ->middleware(['permission:workforce.assignments.view', 'throttle:60,1'])
+                ->name('assignments.check-bulk-conflicts');
             Route::get('/assignments/coverage', [AssignmentController::class, 'coverage'])
                 ->middleware('permission:workforce.assignments.view')
                 ->name('assignments.coverage');
