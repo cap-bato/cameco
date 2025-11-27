@@ -16,7 +16,6 @@ export default function SchedulesIndex() {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedSchedule, setSelectedSchedule] = useState<WorkSchedule | null>(null);
-    const [schedules, setSchedules] = useState<WorkSchedule[]>(initialSchedules as WorkSchedule[]);
     const [filters, setFilters] = useState({
         department_id: 0,
         status: 'all',
@@ -24,8 +23,16 @@ export default function SchedulesIndex() {
         date_range: 'all',
     });
 
+    const breadcrumb = [
+        { title: 'HR', href: '/hr' },
+        { title: 'Schedules', href: '/hr/workforce/schedules' },
+    ];
+
+    // Extract schedules array from paginated or array data
+    const schedulesArray = Array.isArray(initialSchedules) ? initialSchedules : initialSchedules.data || [];
+
     // Filter schedules based on filters
-    const filteredSchedules = schedules.filter((schedule) => {
+    const filteredSchedules = schedulesArray.filter((schedule) => {
         const matchesSearch =
             !filters.search ||
             schedule.name?.toLowerCase().includes(filters.search.toLowerCase()) ||
@@ -69,10 +76,13 @@ export default function SchedulesIndex() {
         });
     };
 
-    const handleSaveSchedule = (data: Partial<WorkSchedule> & { save_as_template?: boolean }) => {
+    const handleSaveSchedule = () => {
         // This is now handled by the modal's direct router.post calls
         // Just refresh the page after successful save
-        router.visit(window.location.href);
+    };
+
+    const getTotalSchedulesCount = () => {
+        return schedulesArray.length;
     };
 
     const getStatusColor = (status: string | undefined) => {
@@ -85,7 +95,7 @@ export default function SchedulesIndex() {
     };
 
     return (
-        <AppLayout>
+        <AppLayout breadcrumbs={breadcrumb}>
             <Head title="Work Schedules" />
 
             <div className="space-y-6 p-6">
@@ -151,36 +161,35 @@ export default function SchedulesIndex() {
                         filters={filters}
                         onFiltersChange={setFilters}
                     />
-                    <div className="flex gap-2">
-                        <Button
-                            variant={viewMode === 'card' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setViewMode('card')}
-                            className="gap-2"
-                        >
-                            <Grid className="h-4 w-4" />
-                            Card View
-                        </Button>
-                        <Button
-                            variant={viewMode === 'list' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setViewMode('list')}
-                            className="gap-2"
-                        >
-                            <List className="h-4 w-4" />
-                            List View
-                        </Button>
-                    </div>
+                <div className="flex gap-2">
+                    <Button
+                        variant={viewMode === 'card' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setViewMode('card')}
+                        className="gap-2"
+                    >
+                        <Grid className="h-4 w-4" />
+                        Card View
+                    </Button>
+                    <Button
+                        variant={viewMode === 'list' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setViewMode('list')}
+                        className="gap-2"
+                    >
+                        <List className="h-4 w-4" />
+                        List View
+                    </Button>
+                </div>
                 </div>
 
                 {/* Results Count */}
-                <p className="text-sm text-gray-600">Showing {filteredSchedules.length} of {schedules.length} schedules</p>
-
+                <p className="text-sm text-gray-600">Showing {filteredSchedules.length} of {getTotalSchedulesCount()} schedules</p>
                 {/* Schedules Grid/List */}
                 {filteredSchedules.length > 0 ? (
                     viewMode === 'card' ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {filteredSchedules.map((schedule) => (
+                            {filteredSchedules.map((schedule: WorkSchedule) => (
                             <ScheduleCard
                                 key={schedule.id}
                                 schedule={schedule}
@@ -210,7 +219,7 @@ export default function SchedulesIndex() {
                                             <tr key={schedule.id} className="border-b hover:bg-gray-50">
                                                 <td className="py-3 px-4 font-medium">{schedule.name}</td>
                                                 <td className="py-3 px-4">
-                                                    {schedule.department_name || (schedule.department as any)?.name || 'N/A'}
+                                                    {schedule.department_name || 'N/A'}
                                                 </td>
                                                 <td className="py-3 px-4">{new Date(schedule.effective_date).toLocaleDateString()}</td>
                                                 <td className="py-3 px-4">

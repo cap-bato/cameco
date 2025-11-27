@@ -7,6 +7,7 @@ use App\Http\Requests\HR\Workforce\StoreEmployeeRotationRequest;
 use App\Http\Requests\HR\Workforce\UpdateEmployeeRotationRequest;
 use App\Models\EmployeeRotation;
 use App\Services\HR\Workforce\EmployeeRotationService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -35,6 +36,15 @@ class RotationController extends Controller
 
         $departments = \App\Models\Department::all(['id', 'name', 'code'])->toArray();
 
+        $patternTemplates = [
+            ['pattern_type' => '4x2', 'name' => '4 Days Work / 2 Days Rest'],
+            ['pattern_type' => '5x2', 'name' => '5 Days Work / 2 Days Rest'],
+            ['pattern_type' => '6x1', 'name' => '6 Days Work / 1 Day Rest'],
+            ['pattern_type' => '3x3', 'name' => '3 Days Work / 3 Days Rest'],
+            ['pattern_type' => '2x2', 'name' => '2 Days Work / 2 Days Rest'],
+            ['pattern_type' => 'custom', 'name' => 'Custom Pattern'],
+        ];
+
         $filters = [
             'search' => $request->input('search', ''),
             'department_id' => $request->input('department_id'),
@@ -46,6 +56,7 @@ class RotationController extends Controller
             'rotations' => $rotations,
             'summary' => $summary,
             'departments' => $departments,
+            'pattern_templates' => $patternTemplates,
             'filters' => $filters,
         ]);
     }
@@ -83,7 +94,7 @@ class RotationController extends Controller
      */
     public function show(string $id): Response
     {
-        $rotation = EmployeeRotation::with(['department', 'createdBy', 'employeeRotationAssignments'])->findOrFail($id);
+        $rotation = EmployeeRotation::with(['department', 'createdBy', 'rotationAssignments'])->findOrFail($id);
 
         return Inertia::render('HR/Workforce/Rotations/Show', [
             'rotation' => $rotation,
@@ -136,13 +147,33 @@ class RotationController extends Controller
     public function assignEmployees(Request $request, string $id)
     {
         $rotation = EmployeeRotation::findOrFail($id);
-        $employeeIds = $request->input('employee_ids', []);
-        $effectiveDate = $request->input('effective_date', now());
+        
+        // Validate input
+        $validated = $request->validate([
+            'employee_ids' => 'required|array|min:1',
+            'employee_ids.*' => 'integer|exists:employees,id',
+            'effective_date' => 'nullable|date',
+        ]);
+        
+        $effectiveDate = $validated['effective_date'] 
+            ? Carbon::parse($validated['effective_date'])
+            : now();
 
-        $this->employeeRotationService->assignToMultipleEmployees($rotation, $employeeIds, $effectiveDate);
+        try {
+            $this->employeeRotationService->assignToMultipleEmployees(
+                $rotation, 
+                $validated['employee_ids'], 
+                $effectiveDate,
+                null,
+                auth()->user()
+            );
+        } catch (\Exception $e) {
+            return redirect()->route('hr.workforce.rotations.index')
+                ->with('error', 'Failed to assign employees: ' . $e->getMessage());
+        }
 
-        return redirect()->route('hr.workforce.rotations.show', $id)
-            ->with('success', count($employeeIds) . ' employee(s) assigned to rotation successfully.');
+        return redirect()->route('hr.workforce.rotations.index')
+            ->with('success', count($validated['employee_ids']) . ' employee(s) assigned to rotation successfully.');
     }
 
     /**
@@ -237,13 +268,29 @@ class RotationController extends Controller
     public function getAvailableEmployees(Request $request)
     {
         $departmentId = $request->input('department_id');
-        $query = \App\Models\Employee::all(['id', 'employee_number', 'first_name', 'last_name', 'department_id']);
+        
+        $query = \App\Models\Employee::with(['profile', 'department'])
+            ->where('status', 'active');
 
         if ($departmentId) {
             $query = $query->where('department_id', $departmentId);
         }
 
-        return response()->json($query->values());
+        $employees = $query->get();
+
+        // Format response with department names
+        $employees = $employees->map(function ($emp) {
+            return [
+                'id' => $emp->id,
+                'employee_number' => $emp->employee_number,
+                'first_name' => $emp->profile?->first_name ?? '',
+                'last_name' => $emp->profile?->last_name ?? '',
+                'department_id' => $emp->department_id,
+                'department_name' => $emp->department?->name ?? 'Unknown',
+            ];
+        });
+
+        return response()->json($employees->values());
     }
 
     /**
@@ -252,10 +299,22 @@ class RotationController extends Controller
     public function getAssignedEmployees(string $id)
     {
         $rotation = EmployeeRotation::findOrFail($id);
-        $assignedEmployees = $rotation->employeeRotationAssignments()
-            ->with(['employee', 'rotation'])
+        $assignments = $rotation->rotationAssignments()
+            ->with(['employee.profile', 'employee.department'])
             ->get();
 
-        return response()->json($assignedEmployees);
+        // Format response with employee details
+        $assignedEmployees = $assignments->map(function ($assignment) {
+            return [
+                'id' => $assignment->employee->id,
+                'employee_number' => $assignment->employee->employee_number,
+                'first_name' => $assignment->employee->profile?->first_name ?? '',
+                'last_name' => $assignment->employee->profile?->last_name ?? '',
+                'department_name' => $assignment->employee->department?->name ?? 'Unknown',
+                'effective_date' => $assignment->start_date,
+            ];
+        });
+
+        return response()->json($assignedEmployees->values());
     }
 }

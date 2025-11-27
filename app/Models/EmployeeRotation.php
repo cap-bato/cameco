@@ -217,7 +217,7 @@ class EmployeeRotation extends Model
     /**
      * Get count of employees assigned to this rotation.
      */
-    public function getAssignedEmployeeCountAttribute(): int
+    public function getAssignedEmployeesCountAttribute(): int
     {
         return $this->rotationAssignments()
             ->where('is_active', true)

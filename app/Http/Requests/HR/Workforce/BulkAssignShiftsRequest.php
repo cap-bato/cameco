@@ -35,6 +35,7 @@ class BulkAssignShiftsRequest extends FormRequest
             'location' => ['nullable', 'string', 'max:255'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            'allow_conflicts' => ['nullable', 'boolean'],
         ];
     }
 

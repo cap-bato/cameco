@@ -47,6 +47,11 @@ interface AssignmentsIndexProps {
 export default function AssignmentsIndex() {
     const { assignments: initialAssignments, summary, departments, employees, schedules } = usePage().props as unknown as AssignmentsIndexProps;
 
+    const breadcrumb = [
+        { title: 'HR', href: '/hr' },
+        { title: 'Assignments', href: '/hr/workforce/assignments' },
+    ];
+
     const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'analytics'>('list');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -169,7 +174,7 @@ export default function AssignmentsIndex() {
     };
 
     return (
-        <AppLayout>
+        <AppLayout breadcrumbs={breadcrumb}>
             <Head title="Shift Assignments" />
 
             <div className="space-y-6 p-6">

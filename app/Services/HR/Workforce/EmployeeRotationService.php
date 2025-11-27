@@ -302,7 +302,7 @@ class EmployeeRotationService
             $query->where('department_id', $departmentId);
         }
 
-        return $query->with(['department', 'createdBy'])->get();
+        return $query->with(['department', 'createdBy', 'rotationAssignments'])->get();
     }
 
     /**

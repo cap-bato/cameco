@@ -324,6 +324,10 @@ Route::middleware(['auth', 'verified' , EnsureHRManager::class])
             Route::post('/rotations', [RotationController::class, 'store'])
                 ->middleware('permission:workforce.rotations.create')
                 ->name('rotations.store');
+            // Rotation custom actions (must come before {id} routes)
+            Route::get('/rotations/available-employees', [RotationController::class, 'getAvailableEmployees'])
+                ->middleware('permission:workforce.rotations.view')
+                ->name('rotations.available-employees');
             Route::get('/rotations/{id}', [RotationController::class, 'show'])
                 ->middleware('permission:workforce.rotations.view')
                 ->name('rotations.show');
@@ -336,7 +340,6 @@ Route::middleware(['auth', 'verified' , EnsureHRManager::class])
             Route::delete('/rotations/{id}', [RotationController::class, 'destroy'])
                 ->middleware('permission:workforce.rotations.delete')
                 ->name('rotations.destroy');
-            // Rotation custom actions
             Route::post('/rotations/{id}/assign-employees', [RotationController::class, 'assignEmployees'])
                 ->middleware('permission:workforce.rotations.update')
                 ->name('rotations.assign-employees');
@@ -358,9 +361,6 @@ Route::middleware(['auth', 'verified' , EnsureHRManager::class])
             Route::get('/rotations/api/statistics', [RotationController::class, 'getStatistics'])
                 ->middleware('permission:workforce.rotations.view')
                 ->name('rotations.statistics');
-            Route::get('/rotations/api/available-employees', [RotationController::class, 'getAvailableEmployees'])
-                ->middleware('permission:workforce.rotations.view')
-                ->name('rotations.available-employees');
             Route::get('/rotations/{id}/api/assigned-employees', [RotationController::class, 'getAssignedEmployees'])
                 ->middleware('permission:workforce.rotations.view')
                 ->name('rotations.assigned-employees');

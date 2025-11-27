@@ -153,14 +153,19 @@ export default function BulkAssignPage() {
         setSubmitError(null);
 
         try {
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-            
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+            if (!csrfToken) {
+                throw new Error('CSRF token not found in page');
+            }
+
             const response = await fetch('/hr/workforce/assignments/check-bulk-conflicts', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken || '',
+                    'X-CSRF-TOKEN': csrfToken,
                 },
                 credentials: 'same-origin',
                 body: JSON.stringify({
@@ -173,14 +178,30 @@ export default function BulkAssignPage() {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorData = await response.text();
+                console.error('Conflict check error:', {
+                    status: response.status,
+                    body: errorData,
+                });
+                throw new Error(`HTTP ${response.status}: Unable to check conflicts`);
             }
 
             const data = await response.json();
-            setDetectedConflicts(data.conflicts || []);
+            
+            // Ensure conflicts data is properly structured
+            const conflicts = Array.isArray(data.conflicts)
+                ? data.conflicts.map((conflict) => ({
+                    ...conflict,
+                    conflicting_dates: Array.isArray(conflict.conflicting_dates)
+                        ? conflict.conflicting_dates
+                        : [],
+                }))
+                : [];
+
+            setDetectedConflicts(conflicts);
             setHasCheckedConflicts(true);
 
-            if (data.conflicts && data.conflicts.length > 0) {
+            if (conflicts.length > 0) {
                 setFormData((prev) => ({ ...prev, allow_conflicts: false }));
             }
         } catch (error) {

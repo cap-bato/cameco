@@ -280,13 +280,21 @@ class AssignmentController extends Controller
                 $employee = \App\Models\Employee::with('profile:id,first_name,last_name')
                     ->find($employeeId);
 
-                $conflictingDates = $conflictingAssignments->map(fn ($a) => $a->date->format('Y-m-d'))->unique()->toArray();
+                // Ensure dates are properly formatted as array
+                $conflictingDates = $conflictingAssignments
+                    ->map(function ($a) {
+                        $date = is_string($a->date) ? \Carbon\Carbon::parse($a->date) : $a->date;
+                        return $date->format('Y-m-d');
+                    })
+                    ->unique()
+                    ->values()
+                    ->toArray();
 
                 $conflicts[] = [
-                    'employee_id' => $employeeId,
+                    'employee_id' => (int) $employeeId,
                     'employee_name' => "{$employee?->profile?->first_name} {$employee?->profile?->last_name}",
                     'conflicting_dates' => $conflictingDates,
-                    'conflict_count' => count($conflictingDates),
+                    'conflict_count' => (int) count($conflictingDates),
                 ];
             }
         }
@@ -309,6 +317,7 @@ class AssignmentController extends Controller
         $scheduleId = $request->input('schedule_id');
         $shiftStart = $request->input('shift_start');
         $shiftEnd = $request->input('shift_end');
+        $allowConflicts = (bool) $request->input('allow_conflicts', false);
 
         // Build assignments array for each employee and date in range
         $assignmentsData = [];
@@ -333,13 +342,20 @@ class AssignmentController extends Controller
             $currentDate->addDay();
         }
 
-        $created = $this->shiftAssignmentService->bulkCreateAssignments(
-            $assignmentsData,
-            auth()->user()
-        );
+        try {
+            $created = $this->shiftAssignmentService->bulkCreateAssignments(
+                $assignmentsData,
+                auth()->user()
+            );
 
-        return redirect()->route('hr.workforce.assignments.index')
-            ->with('success', "{$created->count()} shift assignment(s) created successfully.");
+            return redirect()->route('hr.workforce.assignments.index')
+                ->with('success', "{$created->count()} shift assignment(s) created successfully.");
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            // Handle duplicate assignments
+            return redirect()->back()
+                ->with('error', 'Some assignments could not be created because they already exist. Please review and try again.')
+                ->withInput();
+        }
     }
 
     /**

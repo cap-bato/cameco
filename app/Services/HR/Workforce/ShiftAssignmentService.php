@@ -76,11 +76,12 @@ class ShiftAssignmentService
      */
     public function bulkCreateAssignments(array $assignmentsData, User $createdBy): Collection
     {
-        $createdBy = $createdBy->id;
+        $createdById = $createdBy->id;
         $created = [];
+        $updated = [];
 
         foreach ($assignmentsData as $data) {
-            $data['created_by'] = $createdBy;
+            $data['created_by'] = $createdById;
             $data['status'] = $data['status'] ?? 'scheduled';
 
             // Check for conflicts
@@ -94,13 +95,42 @@ class ShiftAssignmentService
             $data['has_conflict'] = !empty($conflicts);
             $data['conflict_reason'] = $data['has_conflict'] ? 'Shift overlaps with existing assignments' : null;
 
-            $created[] = $data;
+            // Check if assignment already exists for this employee on this date
+            $existingAssignment = ShiftAssignment::where('employee_id', $data['employee_id'])
+                ->where('date', $data['date'])
+                ->where('shift_start', $data['shift_start'])
+                ->where('shift_end', $data['shift_end'])
+                ->whereNull('deleted_at')
+                ->first();
+
+            if ($existingAssignment) {
+                // Update existing assignment instead of creating duplicate
+                $updated[] = [
+                    'id' => $existingAssignment->id,
+                    'data' => $data
+                ];
+            } else {
+                $created[] = $data;
+            }
         }
 
-        ShiftAssignment::insert($created);
+        // Insert new assignments
+        if (!empty($created)) {
+            ShiftAssignment::insert($created);
+        }
 
-        return ShiftAssignment::where('created_by', $createdBy)
+        // Update existing assignments
+        foreach ($updated as $item) {
+            ShiftAssignment::where('id', $item['id'])->update($item['data']);
+        }
+
+        // Return the assignments created/updated within the last minute
+        return ShiftAssignment::where('created_by', $createdById)
             ->where('created_at', '>=', now()->subMinutes(1))
+            ->orWhere(function ($q) use ($createdById) {
+                $q->where('updated_at', '>=', now()->subMinutes(1))
+                  ->where('created_by', $createdById);
+            })
             ->get();
     }
 

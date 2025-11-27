@@ -7,12 +7,18 @@ import AppLayout from '@/layouts/app-layout';
 import { RotationCard } from '@/components/workforce/rotation-card';
 import { RotationFilters } from '@/components/workforce/rotation-filters';
 import { CreateEditRotationModal } from './CreateEditRotationModal';
+import { AssignEmployeesModal } from './AssignEmployeesModal';
+import { RotationDetailsModal } from './RotationDetailsModal';
 import { EmployeeRotation, RotationsIndexProps } from '@/types/workforce-pages';
 import { Plus, Filter } from 'lucide-react';
 
 export default function RotationsIndex({ rotations, summary, departments, pattern_templates }: RotationsIndexProps) {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [editingRotation, setEditingRotation] = useState<EmployeeRotation | null>(null);
+    const [selectedRotationForAssignment, setSelectedRotationForAssignment] = useState<EmployeeRotation | null>(null);
+    const [selectedRotationForDetails, setSelectedRotationForDetails] = useState<EmployeeRotation | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({
         pattern_type: 'all',
@@ -21,6 +27,11 @@ export default function RotationsIndex({ rotations, summary, departments, patter
     });
 
     const [showFilters, setShowFilters] = useState(false);
+
+    const breadcrumb = [
+        { title: 'HR', href: '/hr' },
+        { title: 'Rotations', href: '/hr/workforce/rotations' },
+    ];
 
     // Filter rotations based on search and filters
     const filteredRotations = (Array.isArray(rotations) ? rotations : rotations.data || []).filter((rotation) => {
@@ -62,13 +73,23 @@ export default function RotationsIndex({ rotations, summary, departments, patter
     };
 
     const handleAssignEmployees = (rotation: EmployeeRotation) => {
-        // This would open an employee assignment modal (Phase 4.6)
-        console.log('Assign employees to rotation:', rotation.id);
+        setSelectedRotationForAssignment(rotation);
+        setIsAssignModalOpen(true);
+    };
+
+    const handleViewDetails = (rotation: EmployeeRotation) => {
+        setSelectedRotationForDetails(rotation);
+        setIsDetailsModalOpen(true);
     };
 
     const handleCloseModal = () => {
         setIsCreateModalOpen(false);
         setEditingRotation(null);
+    };
+
+    const handleCloseDetailsModal = () => {
+        setIsDetailsModalOpen(false);
+        setSelectedRotationForDetails(null);
     };
 
     const handleSaveRotation = (data: Record<string, unknown>) => {
@@ -91,7 +112,7 @@ export default function RotationsIndex({ rotations, summary, departments, patter
     };
 
     return (
-        <AppLayout>
+        <AppLayout breadcrumbs={breadcrumb}>
             <Head title="Employee Rotations" />
 
             <div className="space-y-6 p-6">
@@ -192,6 +213,7 @@ export default function RotationsIndex({ rotations, summary, departments, patter
                                 onDelete={handleDelete}
                                 onDuplicate={handleDuplicate}
                                 onAssignEmployees={handleAssignEmployees}
+                                onViewDetails={handleViewDetails}
                             />
                         ))
                     ) : (
@@ -224,6 +246,27 @@ export default function RotationsIndex({ rotations, summary, departments, patter
                 departments={departments}
                 pattern_templates={pattern_templates}
                 onSave={handleSaveRotation}
+            />
+
+            {/* Assign Employees Modal */}
+            <AssignEmployeesModal
+                isOpen={isAssignModalOpen}
+                onClose={() => {
+                    setIsAssignModalOpen(false);
+                    setSelectedRotationForAssignment(null);
+                }}
+                rotation={selectedRotationForAssignment}
+            />
+
+            {/* Rotation Details Modal */}
+            <RotationDetailsModal
+                isOpen={isDetailsModalOpen}
+                onClose={handleCloseDetailsModal}
+                rotation={selectedRotationForDetails}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onDuplicate={handleDuplicate}
+                onAssignEmployees={handleAssignEmployees}
             />
         </AppLayout>
     );
