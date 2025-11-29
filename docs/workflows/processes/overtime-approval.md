@@ -13,42 +13,43 @@ Workflow for requesting, validating, approving, and recording overtime (OT) befo
 
 ```mermaid
 graph TD
-    Start([Supervisor Submits OT Form]) --> HRStaffIntake[HR Staff Encodes<br/>Overtime Request]
-    HRStaffIntake --> ValidateInputs[Validate Details<br/>Date, Time, Reason]
-    ValidateInputs --> CheckSchedule[Check Assigned Schedule<br/>& Conflicts]
+    Start([Supervisor Submits OT Form]) --> HRStaffIntake[HR Staff Encodes\nOvertime Request]
+    HRStaffIntake --> ValidateInputs[Validate Details\nDate, Time, Reason]
+    ValidateInputs --> CheckSchedule[Check Assigned Schedule\nand Conflicts]
     CheckSchedule --> Conflict{Conflict or Rule Violation?}
-    Conflict -->|Yes| ResolveConflict[Adjust Request<br/>or Reject]
+    Conflict -->|Yes| ResolveConflict[Adjust Request\nor Reject]
     ResolveConflict --> ValidateInputs
-    Conflict -->|No| DetermineApproval[Determine Approval Path<br/>Based on Duration/Config]
-    
+    Conflict -->|No| DetermineApproval[Determine Approval Path\nBased on Duration or Config]
+
     DetermineApproval --> ShortOT{Planned Hours ≤ Threshold?}
     ShortOT -->|Yes| HRManagerQueue[Queue for HR Manager Approval]
-    ShortOT -->|No| EscalateOfficeAdmin[Send to Office Admin<br/>after HR Manager]
-    
-    HRManagerQueue --> HRManagerReview[HR Manager Reviews<br/>Reason & Coverage]
+    ShortOT -->|No| EscalateOfficeAdmin[Send to Office Admin\nafter HR Manager]
+
+    HRManagerQueue --> HRManagerReview[HR Manager Reviews\nReason and Coverage]
     HRManagerReview --> ManagerDecision{HR Manager Decision}
-    ManagerDecision -->|Rejected| NotifyReject[Notify Supervisor<br/>& Log]
+    ManagerDecision -->|Rejected| NotifyReject[Notify Supervisor\nand Log]
     ManagerDecision -->|Approved| AwaitNextStep
-    
+
     AwaitNextStep --> EscalationNeeded{Escalation Required?}
-    EscalationNeeded -->|Yes| OfficeAdminReview[Office Admin Reviews<br/>High OT or Special Cases]
+    EscalationNeeded -->|Yes| OfficeAdminReview[Office Admin Reviews\nHigh OT or Special Cases]
     EscalationNeeded -->|No| ApprovedOT
     OfficeAdminReview --> OAdecision{Office Admin Decision}
     OAdecision -->|Rejected| NotifyReject
     OAdecision -->|Approved| ApprovedOT[Mark Request Approved]
-    
-    ApprovedOT --> NotifyTimekeeping[Notify Timekeeping<br/>& Update Schedule]
-    NotifyTimekeeping --> LockPlanned[Lock Planned OT<br/>(# hours, cost center)]
-    LockPlanned --> ActualWork[Capture Actual Time<br/>via RFID + Manual]
+
+    ApprovedOT --> NotifyTimekeeping[Notify Timekeeping\nand Update Schedule]
+    NotifyTimekeeping --> LockPlanned[Lock Planned OT\nHours and Cost Center]
+    LockPlanned --> ActualWork[Capture Actual Time\nRFID plus Manual]
     ActualWork --> CompareActual[Compare Actual vs Planned]
     CompareActual --> Variance{Variance Detected?}
-    Variance -->|Yes| AdjustRecord[Adjust OT Record<br/>Log Reason]
+    Variance -->|Yes| AdjustRecord[Adjust OT Record\nLog Reason]
     Variance -->|No| FinalizeRecord
     AdjustRecord --> FinalizeRecord[Finalize OT Record]
-    
-    FinalizeRecord --> NotifyPayroll[Notify Payroll<br/>Include OT Hours]
-    NotifyPayroll --> ArchiveDocs[Archive OT Form<br/>and Approval Trail]
+
+    FinalizeRecord --> NotifyPayroll[Notify Payroll\nInclude OT Hours]
+    NotifyPayroll --> ArchiveDocs[Archive OT Form\nand Approval Trail]
     ArchiveDocs --> End([Process Complete])
+
 ```
 
 ---
@@ -127,3 +128,4 @@ graph TD
 **Last Updated**: November 29, 2025  
 **Process Owner**: HR Department  
 **Thresholds & Rates**: Configurable per company policy
+
