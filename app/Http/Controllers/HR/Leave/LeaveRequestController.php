@@ -319,9 +319,9 @@ class LeaveRequestController extends Controller
             }
         }
 
-        // NOTE: leave balance validation is a future enhancement once LeaveBalance model
-        // and table are implemented. For now we skip balance checks and allow HR staff
-        // to submit the request — HR will process/deduct balances during processing.
+        // NOTE: Leave balance validation is now implemented above (lines 282-323).
+        // HR staff will still process/deduct balances during approval, but initial validation
+        // is performed at request submission to prevent requests exceeding entitlement or balance.
 
         // STEP 4: Create leave request record in database
         // Status starts as "Pending" - awaiting supervisor approval
