@@ -301,6 +301,9 @@ Route::middleware(['auth', 'verified' , EnsureHRManager::class])
             Route::post('/schedules/bulk-update-status', [ScheduleController::class, 'bulkUpdateStatus'])
                 ->middleware('permission:workforce.schedules.update')
                 ->name('schedules.bulk-update-status');
+            Route::get('/schedules/api/list', [ScheduleController::class, 'list'])
+                ->middleware('permission:workforce.schedules.view')
+                ->name('schedules.api.list');
             Route::get('/schedules/export/csv', [ScheduleController::class, 'exportCsv'])
                 ->middleware('permission:workforce.schedules.view')
                 ->name('schedules.export');

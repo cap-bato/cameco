@@ -74,7 +74,13 @@ class RolesAndPermissionsSeeder extends Seeder
             'timekeeping.analytics.view',
         ];
 
-        $perms = array_values(array_unique(array_merge($basePerms, $hrPermissions, $timekeepingPermissions)));
+        $atsPermissions = ATSPermissionsSeeder::PERMISSIONS;
+
+        $perms = array_values(
+            array_unique(
+                array_merge($basePerms, $hrPermissions, $timekeepingPermissions, $atsPermissions)
+            )
+        );
 
         foreach ($perms as $p) {
             Permission::firstOrCreate(['name' => $p, 'guard_name' => 'web']);
@@ -85,7 +91,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $superadmin->givePermissionTo(Permission::all()); // Always retains all permissions
 
         $hrManager = Role::firstOrCreate(['name' => 'HR Manager', 'guard_name' => 'web']);
-        // Grant HR Manager all HR permissions (do not revoke existing)
-        $hrManager->givePermissionTo(array_merge($hrPermissions, $timekeepingPermissions));
+        // Grant HR Manager all HR-aligned permissions (do not revoke existing)
+        $hrManager->givePermissionTo(array_merge($hrPermissions, $timekeepingPermissions, $atsPermissions));
     }
 }

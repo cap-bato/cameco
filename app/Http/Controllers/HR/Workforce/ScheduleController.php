@@ -8,6 +8,7 @@ use App\Http\Requests\HR\Workforce\UpdateWorkScheduleRequest;
 use App\Models\WorkSchedule;
 use App\Services\HR\Workforce\WorkScheduleService;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -300,5 +301,29 @@ class ScheduleController extends Controller
             ->get();
 
         return response()->json($assignedEmployees);
+    }
+
+    /**
+     * Lightweight JSON list of schedules for modal dropdowns.
+     */
+    public function list(Request $request): JsonResponse
+    {
+        $query = WorkSchedule::query()
+            ->select(['id', 'name', 'status', 'department_id', 'is_template'])
+            ->orderBy('name');
+
+        if ($request->boolean('active_only', true)) {
+            $query->where('status', 'active');
+        }
+
+        if (!$request->boolean('include_templates', false)) {
+            $query->where('is_template', false);
+        }
+
+        if ($departmentId = $request->input('department_id')) {
+            $query->where('department_id', $departmentId);
+        }
+
+        return response()->json($query->get());
     }
 }

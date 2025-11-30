@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,7 +17,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { EmployeeRotation } from '@/types/workforce-pages';
+import { EmployeeRotation, WorkSchedule as WorkScheduleType } from '@/types/workforce-pages';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Search, AlertTriangle, CheckCircle } from 'lucide-react';
 import { router } from '@inertiajs/react';
@@ -35,11 +35,6 @@ interface Employee {
     last_name: string;
     department_id: number;
     department_name?: string;
-}
-
-interface WorkSchedule {
-    id: number;
-    name: string;
 }
 
 interface Conflict {
@@ -81,9 +76,9 @@ enum Step {
 
 export function AssignEmployeesModal({ isOpen, onClose, rotation }: AssignEmployeesModalProps) {
     const [employees, setEmployees] = useState<Employee[]>([]);
-    const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
+    const [schedules, setSchedules] = useState<WorkScheduleType[]>([]);
     const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
-    const [selectedSchedule, setSelectedSchedule] = useState<string>('');
+    const [selectedScheduleId, setSelectedScheduleId] = useState<number | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [departmentFilter, setDepartmentFilter] = useState('all');
     const [isLoading, setIsLoading] = useState(false);
@@ -96,17 +91,8 @@ export function AssignEmployeesModal({ isOpen, onClose, rotation }: AssignEmploy
     const [currentStep, setCurrentStep] = useState<Step>(Step.SELECT_EMPLOYEES);
     const [conflictData, setConflictData] = useState<ConflictCheckResponse | null>(null);
     const [expandedEmployee, setExpandedEmployee] = useState<number | null>(null);
-    const [showConflictDetails, setShowConflictDetails] = useState(false);
 
-    // Load available employees and schedules when modal opens
-    useEffect(() => {
-        if (isOpen && rotation) {
-            loadEmployees();
-            loadSchedules();
-        }
-    }, [isOpen, rotation]);
-
-    const loadEmployees = async () => {
+    const loadEmployees = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         try {
@@ -132,24 +118,47 @@ export function AssignEmployeesModal({ isOpen, onClose, rotation }: AssignEmploy
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
-    const loadSchedules = async () => {
+    const loadSchedules = useCallback(async () => {
         try {
-            const response = await fetch('/hr/workforce/schedules');
+            const params = new URLSearchParams({ active_only: '1', include_templates: '0' });
+            if (rotation?.department_id) {
+                params.append('department_id', rotation.department_id.toString());
+            }
+
+            const response = await fetch(`/hr/workforce/schedules/api/list?${params.toString()}`);
             if (!response.ok) {
                 throw new Error('Failed to load schedules');
             }
-            const data = await response.json();
-            setSchedules(data);
+            const data: WorkScheduleType[] = await response.json();
+
+            const uniqueSchedules = new Map<string, WorkScheduleType>();
+            data.forEach((schedule) => {
+                const key = `${schedule.name.toLowerCase()}-${schedule.department_id ?? 'none'}`;
+                if (!uniqueSchedules.has(key)) {
+                    uniqueSchedules.set(key, schedule);
+                }
+            });
+
+            setSchedules(Array.from(uniqueSchedules.values()).sort((a, b) => a.name.localeCompare(b.name)));
         } catch (err) {
             console.error('Error loading schedules:', err);
+            setSchedules([]);
         }
-    };
+    }, [rotation]);
+
+    // Load employees and schedules when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            loadEmployees();
+            loadSchedules();
+        }
+    }, [isOpen, loadEmployees, loadSchedules]);
 
     // Check for conflicts when schedule is selected
     const checkConflicts = async () => {
-        if (!rotation || selectedEmployees.length === 0 || !selectedSchedule) {
+        if (!rotation || selectedEmployees.length === 0 || !selectedScheduleId) {
             setError('Please select employees and a schedule');
             return;
         }
@@ -165,7 +174,7 @@ export function AssignEmployeesModal({ isOpen, onClose, rotation }: AssignEmploy
                 },
                 body: JSON.stringify({
                     employee_ids: selectedEmployees,
-                    work_schedule_id: selectedSchedule,
+                    work_schedule_id: selectedScheduleId,
                     effective_date: effectiveDate,
                     duration_days: durationDays,
                 }),
@@ -236,7 +245,7 @@ export function AssignEmployeesModal({ isOpen, onClose, rotation }: AssignEmploy
                     // Reset modal state
                     setCurrentStep(Step.SELECT_EMPLOYEES);
                     setSelectedEmployees([]);
-                    setSelectedSchedule('');
+                    setSelectedScheduleId(null);
                     setConflictData(null);
                     setIsLoading(false);
                 },
@@ -265,7 +274,6 @@ export function AssignEmployeesModal({ isOpen, onClose, rotation }: AssignEmploy
 
     const allSelected = filteredEmployees.length > 0 && selectedEmployees.length === filteredEmployees.length;
     const someSelected = selectedEmployees.length > 0 && !allSelected;
-    const selectedScheduleName = schedules.find(s => s.id.toString() === selectedSchedule)?.name;
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -390,7 +398,14 @@ export function AssignEmployeesModal({ isOpen, onClose, rotation }: AssignEmploy
                             {/* Schedule Selection */}
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Work Schedule</label>
-                                <Select value={selectedSchedule} onValueChange={setSelectedSchedule} disabled={isLoading}>
+                                <Select
+                                    value={selectedScheduleId?.toString() ?? ''}
+                                    onValueChange={(value) => {
+                                        const parsed = Number(value);
+                                        setSelectedScheduleId(Number.isNaN(parsed) ? null : parsed);
+                                    }}
+                                    disabled={isLoading}
+                                >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select a work schedule..." />
                                     </SelectTrigger>
@@ -547,7 +562,7 @@ export function AssignEmployeesModal({ isOpen, onClose, rotation }: AssignEmploy
                             </Button>
                             <Button
                                 onClick={checkConflicts}
-                                disabled={isLoading || !selectedSchedule}
+                                disabled={isLoading || !selectedScheduleId}
                             >
                                 {isLoading ? 'Checking...' : 'Check for Conflicts'}
                             </Button>

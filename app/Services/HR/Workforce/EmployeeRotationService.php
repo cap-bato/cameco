@@ -159,6 +159,12 @@ class EmployeeRotationService
     public function isWorkDay(EmployeeRotation $rotation, Carbon $date, Carbon $startDate): bool
     {
         $pattern = $rotation->pattern_json;
+        
+        // Ensure pattern is decoded if it's still a string
+        if (is_string($pattern)) {
+            $pattern = json_decode($pattern, true);
+        }
+        
         $daysSinceStart = $startDate->diffInDays($date);
         $cycleLength = $this->calculateCycleLength($pattern);
 

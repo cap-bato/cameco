@@ -395,6 +395,7 @@ class RotationController extends Controller
                 // Get the employee's current rotation assignment
                 $rotationAssignment = \App\Models\RotationAssignment::where('employee_id', $employeeId)
                     ->where('is_active', true)
+                    ->with('rotation')
                     ->first();
 
                 if (!$rotationAssignment) {

@@ -3,10 +3,14 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use App\Models\WorkSchedule;
-use App\Models\EmployeeSchedule;
+use App\Models\Department;
+use App\Models\Employee;
 use App\Models\EmployeeRotation;
+use App\Models\EmployeeSchedule;
+use App\Models\RotationAssignment;
 use App\Models\RotationScheduleConfig;
+use App\Models\ShiftAssignment;
+use App\Models\WorkSchedule;
 use Carbon\Carbon;
 
 class WorkforceSeeder extends Seeder
@@ -506,19 +510,23 @@ class WorkforceSeeder extends Seeder
                 $endColumn = $dayName . '_end';
 
                 if ($schedule->$startColumn && $schedule->$endColumn) {
-                    ShiftAssignment::create([
-                        'employee_id' => $employeeId,
-                        'schedule_id' => $schedule->id,
-                        'date' => $date,
-                        'shift_start' => $schedule->$startColumn,
-                        'shift_end' => $schedule->$endColumn,
-                        'shift_type' => $this->getShiftType($schedule->$startColumn),
-                        'status' => 'scheduled',
-                        'is_overtime' => false,
-                        'overtime_hours' => 0,
-                        'location' => 'Production Floor',
-                        'created_by' => 1,
-                    ]);
+                    ShiftAssignment::updateOrCreate(
+                        [
+                            'employee_id' => $employeeId,
+                            'date' => $date->toDateString(),
+                            'shift_start' => $schedule->$startColumn,
+                        ],
+                        [
+                            'schedule_id' => $schedule->id,
+                            'shift_end' => $schedule->$endColumn,
+                            'shift_type' => $this->getShiftType($schedule->$startColumn),
+                            'status' => 'scheduled',
+                            'is_overtime' => false,
+                            'overtime_hours' => 0,
+                            'location' => 'Production Floor',
+                            'created_by' => 1,
+                        ]
+                    );
                 }
             }
         }
