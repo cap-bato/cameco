@@ -259,10 +259,7 @@ class LeaveRequestController extends Controller
         $employee = Employee::with(['profile', 'department'])->findOrFail($validated['employee_id']);
 
         // STEP 2: Validate employee has sufficient leave balance
-        // Normalize leave_policy_id for legacy leave_type_id usage
-        if (empty($validated['leave_policy_id']) && !empty($validated['leave_type_id'])) {
-            $validated['leave_policy_id'] = $validated['leave_type_id'];
-        }
+        // Leave policy id normalization is handled in StoreLeaveRequestRequest::prepareForValidation()
 
         // NOTE: leave balance validation is a future enhancement once LeaveBalance model
         // and table are fully implemented. For now ensure policy exists.
