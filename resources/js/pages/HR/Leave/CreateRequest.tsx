@@ -16,8 +16,8 @@ interface CreateRequestProps {
 
 export default function CreateRequest({ employees = [], leaveTypes = [] }: CreateRequestProps) {
     const form = useForm({
-        employee_id: employees[0]?.id ?? '',
-        leave_policy_id: leaveTypes[0]?.id ?? '',
+        employee_id: employees.length > 0 ? employees[0].id : '',
+        leave_policy_id: leaveTypes.length > 0 ? leaveTypes[0].id : '',
         start_date: new Date().toISOString().split('T')[0],
         end_date: new Date().toISOString().split('T')[0],
         reason: '',
