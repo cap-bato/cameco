@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Carbon\Carbon;
 
 class RotationAssignment extends Model
 {
@@ -57,6 +59,31 @@ class RotationAssignment extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Get the schedule configuration for this rotation assignment.
+     * 
+     * Phase 2: Configuration Layer
+     * This relationship links rotation assignment to its work schedule configuration.
+     * An assignment can have multiple configs over time (schedule change after 90 days, etc).
+     * Use the scope methods to find the active config for a specific date.
+     */
+    public function scheduleConfigs(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(RotationScheduleConfig::class, 'rotation_assignment_id');
+    }
+
+    /**
+     * Get the most recently created schedule configuration.
+     * 
+     * This is a convenience accessor when you need "the current schedule config"
+     * but should be validated with isValidForDate() before use.
+     */
+    public function scheduleConfig(): HasOne
+    {
+        return $this->hasOne(RotationScheduleConfig::class, 'rotation_assignment_id')
+            ->latest('created_at');
     }
 
     /**
@@ -137,5 +164,32 @@ class RotationAssignment extends Model
         }
 
         return $this->rotation->calculateWorkDay($this->start_date, $date->diffInDays($this->start_date));
+    }
+
+    /**
+     * Get the active schedule configuration for a specific date.
+     * 
+     * Phase 2 Method: Returns the work schedule that applies to this rotation assignment
+     * on a specific date.
+     * 
+     * Usage:
+     *   $config = $assignment->getCurrentSchedule(Carbon::parse('2025-12-01'));
+     *   if ($config) {
+     *       $schedule = $config->workSchedule;
+     *   }
+     * 
+     * @param Carbon|string $date The date to check schedule for
+     * @return RotationScheduleConfig|null The active schedule config, or null if none found
+     */
+    public function getCurrentSchedule($date): ?RotationScheduleConfig
+    {
+        if (is_string($date)) {
+            $date = Carbon::parse($date);
+        }
+
+        return $this->scheduleConfigs()
+            ->active()
+            ->forDate($date)
+            ->first();
     }
 }

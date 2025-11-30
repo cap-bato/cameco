@@ -6,10 +6,7 @@ use Illuminate\Database\Seeder;
 use App\Models\WorkSchedule;
 use App\Models\EmployeeSchedule;
 use App\Models\EmployeeRotation;
-use App\Models\RotationAssignment;
-use App\Models\ShiftAssignment;
-use App\Models\Employee;
-use App\Models\Department;
+use App\Models\RotationScheduleConfig;
 use Carbon\Carbon;
 
 class WorkforceSeeder extends Seeder
@@ -397,14 +394,33 @@ class WorkforceSeeder extends Seeder
     /**
      * Seed rotation assignments
      */
+    /**
+     * Seed rotation assignments with schedule configurations.
+     *
+     * Phase 2 & 4 Enhancement: This method now creates both RotationAssignment and
+     * RotationScheduleConfig to explicitly link which schedule applies to each rotation.
+     *
+     * Pairing Strategy:
+     * - 4x2 rotation pairs with Mon-Fri day/night schedules (typical manufacturing)
+     * - 5x2 rotation pairs with Mon-Fri schedules (typical office)
+     * - 6x1 rotation pairs with extended coverage schedules (production peaks)
+     * - Custom patterns pair with matching coverage schedules
+     *
+     * Expected Results After Seeding:
+     * - 40 employees assigned to random rotations
+     * - Each gets explicit schedule config for 3 months
+     * - Patterns tested: 4x2+MonFri, 5x2+MonFri, 6x1+MonSat, etc.
+     */
     private function seedRotationAssignments(array $rotations, array $employees): void
     {
         $employeesToAssign = array_slice($employees, 0, min(40, count($employees)));
+        $schedules = WorkSchedule::all();
 
         foreach ($employeesToAssign as $employeeId) {
             $rotation = $rotations[array_rand($rotations)];
 
-            RotationAssignment::create([
+            // Create rotation assignment
+            $assignment = RotationAssignment::create([
                 'employee_id' => $employeeId,
                 'rotation_id' => $rotation->id,
                 'start_date' => Carbon::now()->startOfDay(),
@@ -412,7 +428,51 @@ class WorkforceSeeder extends Seeder
                 'is_active' => true,
                 'created_by' => 1,
             ]);
+
+            // Phase 2: Create schedule configuration
+            // Assign a schedule that pairs well with the rotation pattern
+            // For realistic data, we match rotation type with compatible schedules
+            $schedule = $this->getCompatibleSchedule($rotation, $schedules);
+
+            if ($schedule) {
+                RotationScheduleConfig::create([
+                    'rotation_assignment_id' => $assignment->id,
+                    'work_schedule_id' => $schedule->id,
+                    'effective_date' => $assignment->start_date,
+                    'end_date' => $assignment->end_date,
+                    'is_active' => true,
+                ]);
+            }
         }
+
+        $this->command->info("Created rotation assignments with schedule configs for " . count($employeesToAssign) . " employees");
+    }
+
+    /**
+     * Get a compatible work schedule for a rotation pattern.
+     *
+     * Matching Logic:
+     * - 4x2 & 5x2 (work patterns ending on weekdays) → Mon-Fri schedules
+     * - 6x1 (extended work) → Mon-Sat schedules
+     * - Custom patterns → Default to first available schedule
+     *
+     * This ensures realistic pairings that don't cause conflicts.
+     */
+    private function getCompatibleSchedule(EmployeeRotation $rotation, $schedules)
+    {
+        if ($schedules->isEmpty()) {
+            return null;
+        }
+
+        $patternType = $rotation->pattern_type;
+
+        // Match schedule based on rotation type
+        return match ($patternType) {
+            '4x2', '5x2' => $schedules->firstWhere('name', 'like', '%Day Shift%') ?? $schedules->first(),
+            '6x1' => $schedules->firstWhere('name', 'like', '%Manufacturing%') ?? $schedules->first(),
+            '3x3', '2x2' => $schedules->whereNotNull('saturday_start')->first() ?? $schedules->first(),
+            default => $schedules->first(),
+        };
     }
 
     /**

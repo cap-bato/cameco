@@ -333,4 +333,127 @@ class RotationController extends Controller
 
         return response()->json($assignedEmployees->values());
     }
+
+    /**
+     * Check for schedule-rotation conflicts before assigning shifts.
+     *
+     * Phase 3: Conflict Detection
+     * Validates that a work schedule is compatible with employee rotation patterns.
+     *
+     * Route: POST /hr/workforce/rotations/{id}/check-conflicts
+     * Request body:
+     *   - employee_ids: array of employee IDs to check
+     *   - work_schedule_id: ID of the proposed work schedule
+     *   - effective_date: Date when schedule takes effect (YYYY-MM-DD)
+     *   - duration_days: Number of days to analyze (recommended: 60)
+     *
+     * Response:
+     *   {
+     *       "has_errors": true,
+     *       "has_warnings": true,
+     *       "total_conflicts": 5,
+     *       "error_count": 2,
+     *       "warning_count": 3,
+     *       "employees": [
+     *           {
+     *               "employee_id": 1,
+     *               "name": "John Doe",
+     *               "rotation_name": "4x2 Manufacturing",
+     *               "conflict_count": 3,
+     *               "error_count": 1,
+     *               "warning_count": 2,
+     *               "conflicts": [...]
+     *           }
+     *       ]
+     *   }
+     */
+    public function checkScheduleConflicts(Request $request, string $id)
+    {
+        $validated = $request->validate([
+            'employee_ids' => 'required|array|min:1',
+            'employee_ids.*' => 'required|exists:employees,id',
+            'work_schedule_id' => 'required|exists:work_schedules,id',
+            'effective_date' => 'required|date_format:Y-m-d',
+            'duration_days' => 'required|integer|min:1|max:365',
+        ]);
+
+        try {
+            $workSchedule = \App\Models\WorkSchedule::findOrFail($validated['work_schedule_id']);
+            $fromDate = Carbon::parse($validated['effective_date']);
+            $toDate = $fromDate->clone()->addDays($validated['duration_days'] - 1);
+
+            $allConflicts = [];
+            $totalConflicts = 0;
+            $totalErrors = 0;
+            $totalWarnings = 0;
+            $employeeResults = [];
+
+            // Check conflicts for each employee
+            foreach ($validated['employee_ids'] as $employeeId) {
+                $employee = \App\Models\Employee::findOrFail($employeeId);
+                
+                // Get the employee's current rotation assignment
+                $rotationAssignment = \App\Models\RotationAssignment::where('employee_id', $employeeId)
+                    ->where('is_active', true)
+                    ->first();
+
+                if (!$rotationAssignment) {
+                    // Employee has no active rotation, no conflicts
+                    $employeeResults[] = [
+                        'employee_id' => $employeeId,
+                        'name' => $employee->profile?->full_name ?? $employee->employee_number,
+                        'rotation_name' => null,
+                        'has_rotation' => false,
+                        'conflict_count' => 0,
+                        'error_count' => 0,
+                        'warning_count' => 0,
+                        'conflicts' => [],
+                    ];
+                    continue;
+                }
+
+                // Detect conflicts
+                $conflicts = $this->employeeRotationService->detectScheduleRotationConflicts(
+                    $rotationAssignment,
+                    $workSchedule,
+                    $fromDate,
+                    $toDate
+                );
+
+                // Count error vs warning conflicts
+                $errorConflicts = collect($conflicts)->where('severity', 'error')->count();
+                $warningConflicts = collect($conflicts)->where('severity', 'warning')->count();
+
+                $totalConflicts += count($conflicts);
+                $totalErrors += $errorConflicts;
+                $totalWarnings += $warningConflicts;
+
+                $employeeResults[] = [
+                    'employee_id' => $employeeId,
+                    'name' => $employee->profile?->full_name ?? $employee->employee_number,
+                    'rotation_name' => $rotationAssignment->rotation->name,
+                    'has_rotation' => true,
+                    'conflict_count' => count($conflicts),
+                    'error_count' => $errorConflicts,
+                    'warning_count' => $warningConflicts,
+                    'conflicts' => $conflicts,
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'has_errors' => $totalErrors > 0,
+                'has_warnings' => $totalWarnings > 0,
+                'total_conflicts' => $totalConflicts,
+                'error_count' => $totalErrors,
+                'warning_count' => $totalWarnings,
+                'employees' => $employeeResults,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error checking conflicts: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }

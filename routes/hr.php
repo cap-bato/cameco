@@ -343,6 +343,9 @@ Route::middleware(['auth', 'verified' , EnsureHRManager::class])
             Route::post('/rotations/{id}/assign-employees', [RotationController::class, 'assignEmployees'])
                 ->middleware('permission:workforce.rotations.update')
                 ->name('rotations.assign-employees');
+            Route::post('/rotations/{id}/check-conflicts', [RotationController::class, 'checkScheduleConflicts'])
+                ->middleware('permission:workforce.rotations.view')
+                ->name('rotations.check-conflicts');
             Route::post('/rotations/{id}/unassign-employees', [RotationController::class, 'unassignEmployees'])
                 ->middleware('permission:workforce.rotations.update')
                 ->name('rotations.unassign-employees');

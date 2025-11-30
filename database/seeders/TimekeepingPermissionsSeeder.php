@@ -32,6 +32,7 @@ class TimekeepingPermissionsSeeder extends Seeder
 
             // Import Permissions
             'timekeeping.import.view',
+            'timekeeping.import.create',
             'timekeeping.import.upload',
             'timekeeping.import.process',
             'timekeeping.import.delete',

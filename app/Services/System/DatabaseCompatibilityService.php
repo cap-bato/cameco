@@ -5,6 +5,9 @@ namespace App\Services\System;
 use Illuminate\Support\Facades\DB;
 
 /**
+ * Refactor reminder:
+ * Relocate to App\\Support\\Database\\Compatibility (or a trait) so it doesn’t inflate the “service” layer.
+ * 
  * DatabaseCompatibilityService
  * 
  * Provides database-agnostic SQL functions that work across SQLite, MySQL, and PostgreSQL.

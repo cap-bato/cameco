@@ -233,6 +233,16 @@ class EmployeeRotationService
 
     /**
      * Generate shift assignments for a rotation assignment
+     * 
+     * PHASE 1 FIX: Rotation pattern takes precedence over schedule day-of-week
+     * Logic flow:
+     *   1. Loop through date range
+     *   2. Check if rotation says it's a work day (FIRST - rotation pattern precedence)
+     *   3. Then check if schedule has a shift on that day-of-week (SECOND - schedule applies)
+     *   4. Create shift only if BOTH conditions pass
+     * 
+     * This prevents shifts being created on rotation rest days, even if the schedule
+     * would normally have a shift on that day-of-week.
      */
     public function generateShiftAssignments(
         RotationAssignment $assignment,
@@ -241,49 +251,77 @@ class EmployeeRotationService
         WorkSchedule $schedule,
         ?User $createdBy = null
     ): Collection {
+        // Validate parameters
+        if (!$assignment || !$assignment->rotation) {
+            throw new \Exception('Invalid rotation assignment');
+        }
+
+        if (!$schedule) {
+            throw new \Exception('Work schedule is required');
+        }
+
+        if ($fromDate > $toDate) {
+            throw new \Exception('From date must be before or equal to to date');
+        }
+
         $createdBy = $createdBy?->id ?? auth()->id();
         $assignments = [];
         $rotation = $assignment->rotation;
-
         $currentDate = $fromDate->copy();
 
         while ($currentDate <= $toDate) {
-            // Check if it's a work day
-            if ($this->isWorkDay($rotation, $currentDate, $assignment->start_date)) {
-                // Get shift times from schedule
-                $day = strtolower($currentDate->format('l'));
-                $startField = $day . '_start';
-                $endField = $day . '_end';
-
-                if ($schedule->{$startField} && $schedule->{$endField}) {
-                    $assignments[] = [
-                        'employee_id' => $assignment->employee_id,
-                        'schedule_id' => $schedule->id,
-                        'date' => $currentDate->toDateString(),
-                        'shift_start' => $schedule->{$startField},
-                        'shift_end' => $schedule->{$endField},
-                        'shift_type' => 'regular',
-                        'department_id' => $schedule->department_id,
-                        'status' => 'scheduled',
-                        'has_conflict' => false,
-                        'is_overtime' => false,
-                        'created_by' => $createdBy,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-                }
+            // STEP 1: Check rotation pattern FIRST (rotation pattern takes precedence)
+            // Skip if rotation says this is a rest day
+            if (!$this->isWorkDay($rotation, $currentDate, Carbon::parse($assignment->start_date))) {
+                $currentDate->addDay();
+                continue; // Skip rest days - no shift created
             }
+
+            // STEP 2: Then check schedule day-of-week (schedule applies to work days)
+            // Get day name and check if schedule has shift times for this day
+            $day = strtolower($currentDate->format('l'));
+            $startField = $day . '_start';
+            $endField = $day . '_end';
+
+            // Only create shift if schedule has times defined for this day of week
+            if ($schedule->{$startField} && $schedule->{$endField}) {
+                $assignments[] = [
+                    'employee_id' => $assignment->employee_id,
+                    'schedule_id' => $schedule->id,
+                    'rotation_assignment_id' => $assignment->id, // NEW: Track rotation source
+                    'date' => $currentDate->toDateString(),
+                    'shift_start' => $schedule->{$startField},
+                    'shift_end' => $schedule->{$endField},
+                    'shift_type' => 'regular',
+                    'assignment_source' => 'rotation', // NEW: Source tracking
+                    'source_details' => json_encode([ // NEW: Additional context
+                        'rotation_id' => $rotation->id,
+                        'rotation_name' => $rotation->name,
+                        'schedule_name' => $schedule->name,
+                    ]),
+                    'department_id' => $schedule->department_id,
+                    'status' => 'scheduled',
+                    'has_conflict' => false,
+                    'is_overtime' => false,
+                    'created_by' => $createdBy,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+            // If schedule doesn't have shift on that day, skip (don't create shift)
 
             $currentDate->addDay();
         }
 
+        // Bulk insert all shift assignments
         if (!empty($assignments)) {
             ShiftAssignment::insert($assignments);
         }
 
+        // Return the created shifts for this employee and date range
         return ShiftAssignment::where('employee_id', $assignment->employee_id)
-            ->whereDate('date', '>=', $fromDate)
-            ->whereDate('date', '<=', $toDate)
+            ->where('date', '>=', $fromDate->toDateString())
+            ->where('date', '<=', $toDate->toDateString())
             ->get();
     }
 
@@ -363,5 +401,96 @@ class EmployeeRotationService
             'employee_count' => $rotation->rotationAssignments()->where('is_active', true)->count(),
             'active_assignments' => $rotation->rotationAssignments()->where('is_active', true)->count(),
         ];
+    }
+
+    /**
+     * Detect schedule-rotation conflicts for a given assignment.
+     *
+     * Phase 3: Conflict Detection
+     * This method identifies incompatibilities between a rotation pattern and a work schedule.
+     *
+     * Severity rules:
+     *   - "warning": Rotation expects work day but schedule has no shift
+     *     (Low priority: employee simply won't work that day)
+     *   - "error": Rotation expects rest day but schedule expects work
+     *     (High priority: double-booking, must be resolved)
+     *
+     * @param RotationAssignment $assignment The employee's rotation assignment
+     * @param WorkSchedule $schedule The proposed work schedule
+     * @param Carbon $fromDate Start date for conflict detection
+     * @param Carbon $toDate End date for conflict detection (inclusive)
+     * @return array Array of conflicts, each with date, type, severity, and details
+     *
+     * @example
+     *   $conflicts = $service->detectScheduleRotationConflicts($assignment, $schedule, $from, $to);
+     *   // Returns:
+     *   // [
+     *   //     [
+     *   //         'date' => '2025-12-01',
+     *   //         'type' => 'rotation_work_no_schedule',
+     *   //         'severity' => 'warning',
+     *   //         'message' => 'Rotation expects work day but schedule has no shift',
+     *   //         'rotation_says' => 'work',
+     *   //         'schedule_says' => 'rest',
+     *   //     ],
+     *   //     [
+     *   //         'date' => '2025-12-05',
+     *   //         'type' => 'rotation_rest_schedule_work',
+     *   //         'severity' => 'error',
+     *   //         'message' => 'Rotation expects rest day but schedule expects work (conflict)',
+     *   //         'rotation_says' => 'rest',
+     *   //         'schedule_says' => 'work',
+     *   //     ],
+     *   // ]
+     */
+    public function detectScheduleRotationConflicts(
+        RotationAssignment $assignment,
+        WorkSchedule $schedule,
+        Carbon $fromDate,
+        Carbon $toDate
+    ): array {
+        $conflicts = [];
+        $rotation = $assignment->rotation;
+        $currentDate = $fromDate->clone();
+
+        while ($currentDate->lte($toDate)) {
+            // Get the day of week (lowercase for schedule field names)
+            $dayOfWeek = strtolower($currentDate->format('l'));
+
+            // Check if rotation considers this a work day
+            $isRotationWorkDay = $this->isWorkDay($rotation, $currentDate, $assignment->start_date);
+
+            // Check if schedule has shift times for this day of week
+            $scheduleStartField = $dayOfWeek . '_start';
+            $scheduleEndField = $dayOfWeek . '_end';
+            $isScheduleWorkDay = !empty($schedule->{$scheduleStartField}) && !empty($schedule->{$scheduleEndField});
+
+            // Detect conflicts
+            if ($isRotationWorkDay && !$isScheduleWorkDay) {
+                // Rotation says work, but schedule says rest
+                $conflicts[] = [
+                    'date' => $currentDate->format('Y-m-d'),
+                    'type' => 'rotation_work_no_schedule',
+                    'severity' => 'warning',
+                    'message' => 'Rotation expects work day but schedule has no shift',
+                    'rotation_says' => 'work',
+                    'schedule_says' => 'rest',
+                ];
+            } elseif (!$isRotationWorkDay && $isScheduleWorkDay) {
+                // Rotation says rest, but schedule says work
+                $conflicts[] = [
+                    'date' => $currentDate->format('Y-m-d'),
+                    'type' => 'rotation_rest_schedule_work',
+                    'severity' => 'error',
+                    'message' => 'Rotation expects rest day but schedule expects work (conflict)',
+                    'rotation_says' => 'rest',
+                    'schedule_says' => 'work',
+                ];
+            }
+
+            $currentDate->addDay();
+        }
+
+        return $conflicts;
     }
 }
