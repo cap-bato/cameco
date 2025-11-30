@@ -160,21 +160,21 @@ export default function LeaveRequests({ requests, meta }: LeaveRequestsProps) {
                             />
                         </div>
                     </div>
-                <div className="flex gap-2 border-b mb-4">
-                    {statusTabs.map(tab => (
-                        <button
-                            key={tab.key}
-                            className={`px-4 py-2 -mb-px border-b-2 font-medium focus:outline-none transition-colors ${
-                                selectedStatus === tab.key
-                                    ? 'border-primary text-primary'
-                                    : 'border-transparent text-muted-foreground hover:text-primary'
-                            }`}
-                            onClick={() => setSelectedStatus(tab.key as 'pending' | 'approved' | 'rejected')}
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
+                    <div className="flex gap-2 border-b mb-4">
+                        {statusTabs.map(tab => (
+                            <button
+                                key={tab.key}
+                                className={`px-4 py-2 -mb-px border-b-2 font-medium focus:outline-none transition-colors ${
+                                    selectedStatus === tab.key
+                                        ? 'border-primary text-primary'
+                                        : 'border-transparent text-muted-foreground hover:text-primary'
+                                }`}
+                                onClick={() => setSelectedStatus(tab.key as 'pending' | 'approved' | 'rejected')}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
 
