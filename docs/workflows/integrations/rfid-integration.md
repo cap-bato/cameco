@@ -3,6 +3,9 @@
 ## Overview
 The RFID integration enables automated employee attendance tracking through card taps on edge devices, with events routed through an event bus to multiple modules.
 
+### [Patentable Proposal: RFID Replayable Event-Log Verification Layer](./patentable-proposal/rfid-replayable-event-log-proposal.md)
+
+
 **Architecture Pattern**: Event-Driven Architecture (Event Bus Pattern)
 
 ---
@@ -30,38 +33,6 @@ graph LR
     style Notifications fill:#00bcd4,color:#fff
 ```
 
-### Tamper-Resistant, Replayable Event-Log Extension
-
-To ensure auditability and deterministic payroll validation, the event bus fan-out is extended with a Replayable Event-Log Verification Layer that writes every RFID tap to an immutable ledger before downstream processing.
-
-```mermaid
-graph LR
-  Employee([Employee]) -->|Tap| Edge
-  Edge -->|Signed Event| EventBus
-  EventBus -->|Fan-out| VerificationCore[Replayable Event-Log<br/>Verification Layer]
-  VerificationCore -->|Append-only Entry| ImmutableLog[(PostgreSQL Ledger<br/>Hash-Chained Store)]
-  VerificationCore --> AttendanceService
-  VerificationCore --> PayrollService
-  VerificationCore --> NotificationService
-  MDTR[Manual Daily Time Record<br/>(Paper Submission)] -->|Cross-check| VerificationCore
-
-  style VerificationCore fill:#673ab7,color:#fff
-  style ImmutableLog fill:#455a64,color:#fff
-```
-
-Key capabilities:
-- Assigns a monotonically increasing sequence ID to every RFID event as it arrives.
-- Computes a cryptographic hash-chain link (current hash = hash(previous hash + payload)).
-- Persists the event to an append-only, tamper-resistant PostgreSQL ledger (hash-chained rows, native row-level checksums).
-- Cross-references Manual Daily Time Records (MDTR) with the immutable log to flag discrepancies before payroll finalization.
-- Supports deterministic replay of historical sequences for investigations or audit requests.
-
-**PostgreSQL Ledger Configuration**
-- Dedicated schema `rfid_ledger` with append-only tables (`rfid_events_ledger`, `replay_jobs`).
-- Hash chaining persisted via `prev_hash` + `curr_hash` columns backed by `pgcrypto`.
-- Row-level security denies `UPDATE`/`DELETE`; compaction jobs archive via `INSERT ... SELECT` into cold storage only.
-- Daily checksums exported to an on-prem WORM/object-lock target (e.g., MinIO Object Lock, NetApp SnapLock, Dell ECS) to evidence ledger integrity.
-
 ---
 
 ## Event Flow
@@ -72,7 +43,6 @@ Key capabilities:
 sequenceDiagram
     participant Employee
     participant EdgeDevice as RFID Edge Device
-
     participant EventBus as Event Bus
     participant Timekeeping as Timekeeping Module
     participant Payroll as Payroll Module
@@ -419,20 +389,6 @@ graph TD
 - Subscriber offline → Alert Superadmin
 - Failed event delivery > 5% → Alert Superadmin
 
-### Replay Layer Alerting & Metrics
-
-**Monitored Metrics:**
-- Ledger commit latency (target < 1s from tap to PostgreSQL write)
-- Sequence gap detector (missing/duplicate sequence IDs)
-- Hash verification failures per hour
-- Replay backlog size and duration of outstanding MDTR investigations
-
-**Alerts Triggered:**
-- Ledger commit latency > 3s for 5 mins → Alert Superadmin & DBA
-- Sequence gap detected or hash mismatch → Critical alert to HR Manager + Security
-- Replay backlog older than 2 payroll periods → Alert Payroll Officer for manual intervention
-- Ledger checksum export failure → Alert Infrastructure
-
 ---
 
 ## Troubleshooting
@@ -524,3 +480,5 @@ graph TD
 **Last Updated**: November 29, 2025  
 **Integration Owner**: Superadmin  
 **Technology**: RFID (125 kHz or 13.56 MHz) + Event Bus (Redis Pub/Sub or RabbitMQ)
+
+

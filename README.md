@@ -1,272 +1,131 @@
+# SyncingSteel System - Workflow Documentation
 
-# SyncingSteel System
+## Overview
+This directory contains comprehensive workflow documentation for all user roles in the SyncingSteel HRIS system.
 
-**Internal HRIS & Workforce Management for Cathay Metal Corporation**
+## 📚 Documentation Structure
 
-This HRIS system is used internally by office staff to manage HR core processes, payroll, timekeeping, workforce management, recruitment (ATS), onboarding, and appraisals. It supports role-based access for HR-related roles and a superadmin for system-level management.
+### **Main Document**
+- **[System Overview](./00-system-overview.md)** - High-level system architecture and role responsibilities
 
-**Employee Access Policy:**
-> **Currently, employees (non-HR) have no direct access to the system.** All requests, updates, and information must go through HR staff, who act as the sole interface between employees and the HRIS. Employees do not log in, view, or update their own records. 
+### **Role-Based Workflows**
+1. **[Superadmin Workflow](./01-superadmin-workflow.md)** - System monitoring, server management, and emergency access
+2. **[Office Admin Workflow](./02-office-admin-workflow.md)** - Company setup and business rules configuration
+3. **[HR Manager Workflow](./03-hr-manager-workflow.md)** - Approval workflows and oversight
+4. **[HR Staff Workflow](./04-hr-staff-workflow.md)** - Day-to-day HR operations and data entry
+5. **[Payroll Officer Workflow](./05-payroll-officer-workflow.md)** - Payroll processing and government compliance
 
-> **Future Option:** The system is designed to allow for an employee self-service portal in the future, enabling employees to view payslips, request leave, and update personal information directly if enabled by management.
+- **[Hiring & Interview](./processes/hiring-interview-process.md)** - ATS pipeline from posting to job offer
+- **[Employee Onboarding](./processes/employee-onboarding.md)** - From hire to active employee and probation monitoring
+- **[Leave Request Approval](./processes/leave-request-approval.md)** - Multi-level leave approval process
+- **[Attendance Corrections](./processes/attendance-corrections.md)** - Paper correction intake, validation, audit trail
+- **[Overtime Approval](./processes/overtime-approval.md)** - Request, routing, and actual vs planned tracking
+- **[Workforce Scheduling](./processes/workforce-scheduling.md)** - Schedule templates, rotations, conflict resolution
+- **[Payroll Processing](./processes/payroll-processing.md)** - Complete payroll cycle
+- **[Cash Salary Distribution](./processes/cash-salary-distribution.md)** - Envelope preparation, release, and reconciliation
+- **[Digital Salary Distribution](./processes/digital-salary-distribution.md)** - Bank transfer & e-wallet payouts (future-ready)
+- **[Government Remittances](./processes/government-remittances.md)** - SSS, PhilHealth, Pag-IBIG, BIR filings and payments
+- **[Performance Appraisal](./processes/performance-appraisal.md)** - Review cycles and decision workflow
 
-Future expansion may allow manufacturing supervisors to input workforce data directly instead of submitting paper records.
+### **Integration Guides**
+- **[RFID Integration](./integrations/rfid-integration.md)** - Timekeeping event bus architecture
+- **[ATS Integration](./integrations/ats-integration.md)** - Applicant tracking and hiring pipeline
 
----
+## 🎯 Quick Navigation
 
-## 🏗️ Architecture: MVCSR (Model–View–Controller–Service–Repository)
+### By User Role
+- **I am a Superadmin** → [View my workflows](./01-superadmin-workflow.md)
+- **I am an Office Admin** → [View my workflows](./02-office-admin-workflow.md)
+- **I am an HR Manager** → [View my workflows](./03-hr-manager-workflow.md)
+- **I am HR Staff** → [View my workflows](./04-hr-staff-workflow.md)
+- **I am a Payroll Officer** → [View my workflows](./05-payroll-officer-workflow.md)
 
-**Current Architecture:**
-- **Controllers:** Coordinate incoming requests, call services, and return responses.
-- **Requests:** Handle validation of user input.
-- **Services:** Contain core business logic and orchestrate repository calls.
-- **Repositories:** Handle all persistence and query operations.
-- **Models:** Represent database tables and relationships using Eloquent ORM.
-- **Views (Inertia.js + React):** Render the front-end interface for users.
+### By Task
+- **Setting up the system** → [Office Admin Workflow](./02-office-admin-workflow.md)
+- **Hiring employees** → [HR Staff Workflow](./04-hr-staff-workflow.md#ats-module) | [Hiring & Interview Process](./processes/hiring-interview-process.md)
+- **Onboarding new hires** → [HR Staff Workflow](./04-hr-staff-workflow.md#onboarding) | [Employee Onboarding Process](./processes/employee-onboarding.md)
+- **Approving leave requests** → [HR Manager Workflow](./03-hr-manager-workflow.md) | [Leave Approval Process](./processes/leave-request-approval.md)
+- **Correcting attendance issues** → [HR Staff Workflow](./04-hr-staff-workflow.md#timekeeping) | [Attendance Corrections](./processes/attendance-corrections.md)
+- **Handling overtime** → [HR Manager Workflow](./03-hr-manager-workflow.md#timekeeping) | [Overtime Approval](./processes/overtime-approval.md)
+- **Managing schedules** → [HR Staff Workflow](./04-hr-staff-workflow.md#workforce-management) | [Workforce Scheduling Process](./processes/workforce-scheduling.md)
+- **Processing payroll** → [Payroll Officer Workflow](./05-payroll-officer-workflow.md) | [Payroll Process](./processes/payroll-processing.md)
+- **Distributing cash salaries** → [Payroll Officer Workflow](./05-payroll-officer-workflow.md#payments) | [Cash Salary Distribution](./processes/cash-salary-distribution.md)
+- **Running bank/e-wallet payouts** → [Payroll Officer Workflow](./05-payroll-officer-workflow.md#payments) | [Digital Salary Distribution](./processes/digital-salary-distribution.md)
+- **Filing government remittances** → [Payroll Officer Workflow](./05-payroll-officer-workflow.md#government-compliance) | [Government Remittances Process](./processes/government-remittances.md)
 
-This structure ensures clean separation of concerns while staying within Laravel conventions for rapid development.
+## 📊 Viewing Diagrams
 
-**Planned Refactor:**
-Once the system is stable, it will be refactored into **MVCSR + Domain**, adding a dedicated domain layer for business rules, constants, and invariants (e.g., employee state transitions, termination rules, attendance-based appraisals, rehire criteria).
+### Option 1: Mermaid Live Editor (Recommended)
+1. Copy any Mermaid diagram from the documentation
+2. Go to https://mermaid.live/
+3. Paste and view the rendered diagram
 
----
+### Option 2: VS Code (Local Development)
+1. Install **Markdown Preview Mermaid Support** extension
+2. Open any markdown file
+3. Press `Ctrl+Shift+V` to preview with diagrams
 
-## 🏗️ Architecture
+### Option 3: Generate Static Images
+```powershell
+# Install Mermaid CLI
+npm install -g @mermaid-js/mermaid-cli
 
-
-**Technology Stack:**
-- **Backend:** Laravel 11 + Jetstream (MVCSR Pattern)
-- **Frontend:** React + Inertia.js (No API Mode)
-- **Database:** PostgreSQL/SQLite
-- **Authentication:** Role-based access control with admin approval workflow
-
-
-**📋 Complete Documentation:**
-
-- **[System Architecture](docs/SYNCINGSTEEL_ARCHITECTURE_PLAN.md)** — Complete system overview and implementation strategy
-- **[Database Schema](docs/DATABASE_SCHEMA.md)** — All tables, relationships, and cross-module references
-- **[System Workflow Flowchart](docs/SYSTEM_WORKFLOW_FLOWCHART.md)** — Visual flow of all modules and data
-- **[User Management](docs/USER_MANAGEMENT.md)** — User CRUD, invitations, role assignment, audit logging
-- **[RBAC Matrix](docs/RBAC_MATRIX.md)** — Role-based access control, permission matrix, and safeguards
-- **[HR Module Architecture](docs/HR_MODULE_ARCHITECTURE.md)** — Employee management, onboarding, and HR core
-- **[Payroll Module Architecture](docs/PAYROLL_MODULE_ARCHITECTURE.md)** — Philippine payroll, tax compliance, payslips, government reports
-- **[HR & Payroll Config](docs/HR_PAYROLL_CONFIG.md)** — Salary components, pay bands, deduction management, approval flows
-- **[Timekeeping Module Architecture](docs/TIMEKEEPING_MODULE_ARCHITECTURE.md)** — Attendance, schedules, overtime, device integration
-- **[Workforce Management Module](docs/WORKFORCE_MANAGEMENT_MODULE.md)** — Shift scheduling, rotations, and daily assignments
-- **[Applicant Tracking (ATS) Module](docs/ATS_MODULE.md)** — Recruitment, job postings, applications, interviews
-- **[Onboarding Module](docs/ONBOARDING_MODULE.md)** — Post-hire checklists, document collection, account provisioning
-- **[Onboarding Workflow](docs/ONBOARDING_WORKFLOW.md)** — Organization onboarding, admin/HR setup, domain config
-- **[Appraisal Module](docs/APPRAISAL_MODULE.md)** — Performance reviews, scoring, rehire recommendations
-
----
-
-
----
-
-
-## System Overview & Modules
-
-### Core Modules
-- **HR Core Module**: Central repository for employee master data and lifecycle.
-- **Payroll Module**: Payroll calculation, payslips, statutory reports.
-- **Timekeeping Module**: Attendance, imports, summaries and integrations with payroll.
-- **Workforce Management Module**: Shift scheduling, rotations, and daily assignments.
-- **Applicant Tracking System (ATS)**: Candidate pipelines, interviews, and offers.
-- **Onboarding Module**: Post-hire checklists, document collection, and account provisioning.
-- **Appraisal & Rehire Module**: Performance reviews, scoring, and rehire recommendations.
-- **System Management Module**: System-level settings, logs, and metrics (Superadmin only).
-
----
-
-### Module Docs
-- **[HR Module Architecture](docs/HR_MODULE_ARCHITECTURE.md)**
-- **[Timekeeping Module Architecture](docs/TIMEKEEPING_MODULE_ARCHITECTURE.md)**
-- **[Payroll Module Architecture](docs/PAYROLL_MODULE_ARCHITECTURE.md)**
-- **[Workforce Management Module](docs/WORKFORCE_MANAGEMENT_MODULE.md)**
-- **[Applicant Tracking (ATS) Module](docs/ATS_MODULE.md)**
-- **[Onboarding Module](docs/ONBOARDING_MODULE.md)**
-- **[Appraisal Module](docs/APPRAISAL_MODULE.md)**
-
----
-
-### Roles and Access Levels
-
-| Role                         | HR Core | Payroll | Timekeeping | Workforce Mgmt | ATS | Appraisal | System Mgmt |
-|-----------------------------:|:-------:|:-------:|:-----------:|:--------------:|:---:|:---------:|:-----------:|
-| **Superadmin**               |   ✔️    |   ✔️    |     ✔️      |      ✔️        | ✔️  |    ✔️     |     ✔️      |
-| **Admin Officer**            |   ✔️    |   ✔️    |     ✔️      |      ✔️        | ✔️  |    ✔️     |     ❌      |
-| **HR Manager**               |   ✔️    |   ✔️    |     ✔️      |      ✔️        | ✔️  |    ✔️     |     ❌      |
-| **HR Staff**                 |   ✔️    |   ✔️    |     ✔️      |  Input Only     | ✔️  |    ✔️     |     ❌      |
-| **Payroll Officer/Accountant**|   ✔️    |   ✔️    |     ✔️      |      ❌        | ❌  |    ❌     |     ❌      |
-
----
-## Roles that would be implemented in the future (not in MVP):
-- **Employee:** _Currently, employees do not have direct access to the system. All requests and information go through HR staff. In the future, an employee portal may be enabled to allow employees to view payslips, request leave, and update personal information themselves._
-- **Supervisors:** _Supervisors of manufacturing employees may also be given access in the future to input workforce data directly instead of submitting paper records._
-
-
-## 🚀 Quick Start
-
-### Prerequisites
-- **PHP 8.3+**
-- **Composer**
-- **Node.js & npm**
-- **SQLite** (default) or **PostgreSQL**
-
-### Installation
-```bash
-# 1. Clone and install dependencies
-git clone [repository-url] cameco
-cd cameco
-composer install
-npm install --legacy-peer-deps
-
-# 2. Environment setup
-cp .env.example .env
-php artisan key:generate
-
-# 3. Database setup
-php artisan migrate
-php artisan db:seed
-
-# 4. Build frontend assets
-npm run build
-
-# 5. Start development servers
-php artisan serve     # Laravel: http://127.0.0.1:8000
-npm run dev          # Vite: http://localhost:5174 (hot reload)
+# Generate images from markdown
+mmdc -i 01-superadmin-workflow.md -o superadmin-workflow.png
 ```
 
+## 🏗️ System Architecture
 
-### Default Admin Access
-- **Username:** `admin`
-- **Email:** `admin@cameco.com`
-- **Password:** `password`
+### Deployment
+- **Type**: On-premise HRIS
+- **Server**: Company server (internal use only)
+- **Access**: Office staff with role-based permissions
 
+### User Access
+- **Office Staff**: Direct system access via web interface
+- **Supervisors**: Submit paper records to HR Staff (no system access currently)
+- **Employees**: Submit requests via paper/email to HR Staff (no system access currently)
 
-### � System Startup & User-Employee Relationship
+### Integration Points
+- **RFID Timekeeping**: Card tap → Edge device → Event bus → Timekeeping/Payroll/Notifications
+- **ATS Sources**: Facebook, in-person applications, future: public job board
+- **Payment Methods**: Current: Cash only | Future: Bank transfer, e-wallet
 
-**Empty System Setup (First Time):**
-1. **Admin registers/seeds** (no employee record needed)
-2. **Admin accesses HR module** (creates employee master data)
-3. **Employees do not have system access** (all requests and updates are handled by HR staff)
-4. **Admin approves users** and optionally links to employee records (for HR/admin roles only)
-5. **Employee self-service features are disabled by default** (can be enabled in the future)
+## 📋 Access Control Matrix
 
-**Supported Scenarios:**
-- System admins who aren't employees (contractors, IT staff)
-- Employee records without system access (most common; all requests go through HR staff)
-- Employee self-service portal is not enabled by default (future option)
-- Flexible user-employee relationships
+| Module | Superadmin | Office Admin | HR Manager | HR Staff | Payroll Officer |
+|--------|------------|--------------|------------|----------|-----------------|
+| System Management | Full | ❌ | ❌ | ❌ | ❌ |
+| Company Setup | Emergency | Full | ❌ | ❌ | ❌ |
+| Business Rules | Emergency | Full | ❌ | ❌ | ❌ |
+| Employee Mgmt | Emergency | View | View | Full | View |
+| ATS/Recruitment | Emergency | View | Approve | Full | ❌ |
+| Onboarding | Emergency | View | Approve | Full | ❌ |
+| Workforce Mgmt | Emergency | View | Review | Full | ❌ |
+| Timekeeping | Emergency | View | View | Full | View |
+| Appraisal | Emergency | View | Approve | Full | ❌ |
+| Leave Mgmt | Emergency | Final Approval | Approve | Input | ❌ |
+| Payroll | Emergency | View | View | ❌ | Full |
+| Govt Compliance | Emergency | View | ❌ | ❌ | Full |
+| Payments | Emergency | View | ❌ | ❌ | Full |
 
-## 🧪 Testing
+**Legend**: Full = Full Access | View = View Only | Approve = Approval Rights | Emergency = Emergency Access Only
 
-**📖 Complete Testing Guide:** [`tests/TESTING.md`](tests/TESTING.md)
+## Immutable Ledger & Replay Monitoring
 
-Includes:
-- User approval workflow testing
-- Pre-configured test users (approved, rejected, pending)
-- Registration and authentication flows
-- Database seeding instructions
+- RFID/timekeeping signals referenced across these workflows live in the PostgreSQL ledger (`rfid_ledger`) enforced by the Replayable Event-Log Verification Layer.
+- That layer emits its own alerting/metrics (ledger commit latency, sequence gaps, hash mismatches, replay backlog) and every role doc in this directory inherits the expectation to monitor/respond before executing dependent tasks.
 
-## 🛠️ Development
-
-
----
-
-## Current Architecture: MVCSR
-
-### Layers
-- **Controllers:** Coordinate incoming requests, call services, and return responses.
-- **Requests:** Handle validation of user input.
-- **Services:** Contain core business logic and orchestrate repository calls.
-- **Repositories:** Handle all persistence and query operations.
-- **Models:** Represent database tables and relationships using Eloquent ORM.
-- **Views (Inertia.js + React):** Render the front-end interface for users.
-
-This structure ensures clean separation of concerns while staying within Laravel conventions for rapid development.
-
-### Future Refactor: MVCSR + Domain
-When the base system is fully functional and stable, introduce a **Domain layer** to encapsulate business rules, constants, and invariants. The domain layer will formalize logic such as employee state transitions, termination rules, attendance-based appraisals, and rehire criteria.
-
+## 🔗 Related Documentation
+- [System Architecture Plan](../SYNCINGSTEEL_ARCHITECTURE_PLAN.md)
+- [Database Schema](../DATABASE_SCHEMA.md)
+- [RBAC Matrix](../RBAC_MATRIX.md)
+- [HR Module Architecture](../HR_MODULE_ARCHITECTURE.md)
+- [Payroll Module Architecture](../PAYROLL_MODULE_ARCHITECTURE.md)
+- [Workforce Management Module](../WORKFORCE_MANAGEMENT_MODULE.md)
 
 ---
 
-## Implementation Phases
-
-### Phase 1: Build core features using MVCSR for clarity and speed
-**Status:** Foundation Complete
-- Laravel 11 + Jetstream + Inertia.js + React setup
-- User authentication with admin approval workflow
-- Role-based access control foundation
-- Landing page, login, registration pages
-- MVCSR pattern structure
-
-### Phase 2: Once stable, refactor into MVCSR + Domain
-- Extract domain logic (status transitions, appraisal rules, etc.) into domain layer
-- Add unit tests around business rules
-
----
-
-
-### Project Structure
-```
-app/
-├── Models/              # Eloquent models
-├── Repositories/        # Data access layer
-│   ├── Interfaces/      # Repository contracts
-│   └── Eloquent/        # Eloquent implementations
-├── Services/            # Business logic layer
-├── Http/Controllers/    # Request handling
-├── Providers/           # Service bindings
-
-resources/js/
-├── Pages/               # Inertia.js pages
-├── Components/          # Reusable React components
-└── Layouts/             # Page layouts
-
-docs/
-├── SYNCINGSTEEL_ARCHITECTURE_PLAN.md  # System overview
-├── DATABASE_SCHEMA.md                  # Complete schema (45 tables)
-├── HR_MODULE_ARCHITECTURE.md           # HR implementation plan
-├── TIMEKEEPING_MODULE_ARCHITECTURE.md  # Timekeeping plan
-└── PAYROLL_MODULE_ARCHITECTURE.md      # Payroll plan
-```
-
-
----
-
-
-## 🔧 Configuration
-
-### Database
-Configure your database in `.env`:
-```env
-DB_CONNECTION=pgsql  # or sqlite
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_DATABASE=cameco
-DB_USERNAME=your_username
-DB_PASSWORD=your_password
-```
-
-### Additional Packages (To Install)
-```bash
-# Role-based permissions
-composer require spatie/laravel-permission
-
-# PDF generation  
-composer require barryvdh/laravel-dompdf
-
-# Excel imports/exports
-composer require maatwebsite/excel
-
-# Activity logging
-composer require spatie/laravel-activitylog
-```
-
----
-
-**🏢 Cathay Metal Corporation - Internal HRIS System**  
-**📅 Last Updated:** October 23, 2025
-
+**Version**: 2.0  
+**Last Updated**: November 29, 2025  
+**Maintained By**: Development Team
