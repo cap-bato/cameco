@@ -1,5 +1,14 @@
 <?php
 
+/*
+ * Heavy workflow: wraps repositories, storage, dependents,
+ * number generation, metrics.
+ * Clearly crosses HR subdomains.
+ * 
+ * This should be brokendown more, keep as an orchestration service. later
+ * 
+*/ 
+
 namespace App\Services\HR;
 
 use App\Models\Employee;

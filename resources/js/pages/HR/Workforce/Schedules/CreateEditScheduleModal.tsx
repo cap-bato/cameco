@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -73,7 +74,13 @@ export default function CreateEditScheduleModal({
     const [errors, setErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
-        if (schedule && isOpen) {
+        if (!isOpen) {
+            // Reset form when modal closes
+            return;
+        }
+
+        if (schedule && isEditing) {
+            // Load existing schedule data for editing
             const shiftPattern: Record<string, { start_time: string; end_time: string }> = {};
             DAYS_OF_WEEK.forEach((day) => {
                 const dayKey = day.toLowerCase();
@@ -87,11 +94,22 @@ export default function CreateEditScheduleModal({
                 };
             });
 
+            // Parse effective_date - handle ISO format from database
+            let effectiveDate = new Date().toISOString().split('T')[0];
+            if (schedule.effective_date) {
+                try {
+                    const date = new Date(schedule.effective_date);
+                    effectiveDate = date.toISOString().split('T')[0];
+                } catch (e) {
+                    effectiveDate = schedule.effective_date as string;
+                }
+            }
+
             setFormData({
                 name: schedule.name || '',
                 description: schedule.description || '',
                 department_id: schedule.department_id || 0,
-                effective_date: schedule.effective_date || new Date().toISOString().split('T')[0],
+                effective_date: effectiveDate,
                 status: (schedule.status as 'active' | 'draft' | 'expired') || 'active',
                 shift_pattern: shiftPattern,
                 work_days: DAYS_OF_WEEK.filter(day => {
@@ -103,8 +121,29 @@ export default function CreateEditScheduleModal({
                     return !schedule[startKey];
                 }),
             });
+        } else if (!isEditing) {
+            // Reset form for creating new schedule
+            setFormData({
+                name: '',
+                description: '',
+                department_id: 0,
+                effective_date: '',
+                status: 'active',
+                shift_pattern: {
+                    Monday: { start_time: '08:00', end_time: '17:00' },
+                    Tuesday: { start_time: '08:00', end_time: '17:00' },
+                    Wednesday: { start_time: '08:00', end_time: '17:00' },
+                    Thursday: { start_time: '08:00', end_time: '17:00' },
+                    Friday: { start_time: '08:00', end_time: '17:00' },
+                    Saturday: { start_time: '', end_time: '' },
+                    Sunday: { start_time: '', end_time: '' },
+                },
+                work_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+                rest_days: ['Saturday', 'Sunday'],
+            });
+            setErrors({});
         }
-    }, [schedule, isOpen]);
+    }, [isOpen, schedule, isEditing]);
 
     const validateForm = () => {
         const newErrors: Record<string, string> = {};
@@ -154,18 +193,29 @@ export default function CreateEditScheduleModal({
     const handleWorkDayToggle = (day: string) => {
         const workDays = formData.work_days || [];
         const restDays = formData.rest_days || [];
+        const shiftPattern = formData.shift_pattern || {};
 
         if (workDays.includes(day)) {
+            // Removing as work day - clear times
             setFormData({
                 ...formData,
                 work_days: workDays.filter((d: string) => d !== day),
                 rest_days: [...restDays, day],
+                shift_pattern: {
+                    ...shiftPattern,
+                    [day]: { start_time: '', end_time: '' },
+                },
             });
         } else {
+            // Adding as work day - set default times
             setFormData({
                 ...formData,
                 work_days: [...workDays, day],
                 rest_days: restDays.filter((d: string) => d !== day),
+                shift_pattern: {
+                    ...shiftPattern,
+                    [day]: { start_time: '08:00', end_time: '17:00' },
+                },
             });
         }
     };
@@ -177,26 +227,62 @@ export default function CreateEditScheduleModal({
 
         setIsLoading(true);
         try {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            const submitData: Partial<WorkSchedule> & { save_as_template?: boolean; [key: string]: string | number | boolean | undefined } = {
+            const submitData: Record<string, any> = {
                 name: formData.name,
                 description: formData.description,
                 effective_date: formData.effective_date,
-                department_id: formData.department_id,
+                department_id: formData.department_id || null,
                 status: formData.status,
-                save_as_template: saveAsTemplate,
             };
 
-            // Map shift_pattern to individual day fields
-            Object.entries(formData.shift_pattern).forEach(([day, times]) => {
+            // Map all days - set times for work days, clear for rest days
+            const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            DAYS.forEach((day) => {
                 const dayKey = day.toLowerCase();
-                if (times.start_time) {
-                    submitData[`${dayKey}_start`] = times.start_time;
-                    submitData[`${dayKey}_end`] = times.end_time;
+                const times = formData.shift_pattern[day];
+                
+                if (times && times.start_time && times.end_time) {
+                    // Format time - add :00 only if not present
+                    const formatTime = (timeStr: string) => {
+                        if (timeStr.split(':').length === 3) {
+                            return timeStr; // Already has seconds
+                        }
+                        return timeStr + ':00'; // Add seconds
+                    };
+                    submitData[`${dayKey}_start`] = formatTime(times.start_time);
+                    submitData[`${dayKey}_end`] = formatTime(times.end_time);
+                } else {
+                    // Clear times for rest days or days without times set
+                    submitData[`${dayKey}_start`] = null;
+                    submitData[`${dayKey}_end`] = null;
                 }
             });
 
-            onSave(submitData);
+            if (isEditing && schedule?.id) {
+                // Update existing schedule - use PUT method
+                router.put(`/hr/workforce/schedules/${schedule.id}`, submitData, {
+                    onSuccess: () => {
+                        onClose();
+                        // Refresh the page to get fresh data from server
+                        window.location.reload();
+                    },
+                    onError: (errors) => {
+                        setErrors(errors as Record<string, string>);
+                    },
+                });
+            } else {
+                // Create new schedule - use POST method
+                router.post('/hr/workforce/schedules', submitData, {
+                    onSuccess: () => {
+                        onClose();
+                        // Refresh the page to get fresh data from server
+                        window.location.reload();
+                    },
+                    onError: (errors) => {
+                        setErrors(errors as Record<string, string>);
+                    },
+                });
+            }
         } finally {
             setIsLoading(false);
         }

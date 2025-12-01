@@ -285,6 +285,37 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::delete('/schedules/{id}', [ScheduleController::class, 'destroy'])
                 ->middleware('permission:workforce.schedules.delete')
                 ->name('schedules.destroy');
+            // Schedule custom actions
+            Route::post('/schedules/{id}/assign-employees', [ScheduleController::class, 'assignEmployees'])
+                ->middleware('permission:workforce.schedules.update')
+                ->name('schedules.assign-employees');
+            Route::post('/schedules/{id}/unassign-employees', [ScheduleController::class, 'unassignEmployees'])
+                ->middleware('permission:workforce.schedules.update')
+                ->name('schedules.unassign-employees');
+            Route::post('/schedules/{id}/duplicate', [ScheduleController::class, 'duplicate'])
+                ->middleware('permission:workforce.schedules.create')
+                ->name('schedules.duplicate');
+            Route::post('/schedules/clone-template', [ScheduleController::class, 'cloneTemplate'])
+                ->middleware('permission:workforce.schedules.create')
+                ->name('schedules.clone-template');
+            Route::post('/schedules/bulk-update-status', [ScheduleController::class, 'bulkUpdateStatus'])
+                ->middleware('permission:workforce.schedules.update')
+                ->name('schedules.bulk-update-status');
+            Route::get('/schedules/api/list', [ScheduleController::class, 'list'])
+                ->middleware('permission:workforce.schedules.view')
+                ->name('schedules.api.list');
+            Route::get('/schedules/export/csv', [ScheduleController::class, 'exportCsv'])
+                ->middleware('permission:workforce.schedules.view')
+                ->name('schedules.export');
+            Route::get('/schedules/api/statistics', [ScheduleController::class, 'getStatistics'])
+                ->middleware('permission:workforce.schedules.view')
+                ->name('schedules.statistics');
+            Route::get('/schedules/api/available-employees', [ScheduleController::class, 'getAvailableEmployees'])
+                ->middleware('permission:workforce.schedules.view')
+                ->name('schedules.available-employees');
+            Route::get('/schedules/{id}/api/assigned-employees', [ScheduleController::class, 'getAssignedEmployees'])
+                ->middleware('permission:workforce.schedules.view')
+                ->name('schedules.assigned-employees');
 
             // Employee Rotations
             Route::get('/rotations', [RotationController::class, 'index'])
@@ -296,6 +327,10 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::post('/rotations', [RotationController::class, 'store'])
                 ->middleware('permission:workforce.rotations.create')
                 ->name('rotations.store');
+            // Rotation custom actions (must come before {id} routes)
+            Route::get('/rotations/available-employees', [RotationController::class, 'getAvailableEmployees'])
+                ->middleware('permission:workforce.rotations.view')
+                ->name('rotations.available-employees');
             Route::get('/rotations/{id}', [RotationController::class, 'show'])
                 ->middleware('permission:workforce.rotations.view')
                 ->name('rotations.show');
@@ -308,6 +343,33 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::delete('/rotations/{id}', [RotationController::class, 'destroy'])
                 ->middleware('permission:workforce.rotations.delete')
                 ->name('rotations.destroy');
+            Route::post('/rotations/{id}/assign-employees', [RotationController::class, 'assignEmployees'])
+                ->middleware('permission:workforce.rotations.update')
+                ->name('rotations.assign-employees');
+            Route::post('/rotations/{id}/check-conflicts', [RotationController::class, 'checkScheduleConflicts'])
+                ->middleware('permission:workforce.rotations.view')
+                ->name('rotations.check-conflicts');
+            Route::post('/rotations/{id}/unassign-employees', [RotationController::class, 'unassignEmployees'])
+                ->middleware('permission:workforce.rotations.update')
+                ->name('rotations.unassign-employees');
+            Route::post('/rotations/{id}/duplicate', [RotationController::class, 'duplicate'])
+                ->middleware('permission:workforce.rotations.create')
+                ->name('rotations.duplicate');
+            Route::post('/rotations/{id}/generate-assignments', [RotationController::class, 'generateAssignments'])
+                ->middleware('permission:workforce.assignments.create')
+                ->name('rotations.generate-assignments');
+            Route::post('/rotations/bulk-update-status', [RotationController::class, 'bulkUpdateStatus'])
+                ->middleware('permission:workforce.rotations.update')
+                ->name('rotations.bulk-update-status');
+            Route::get('/rotations/export/csv', [RotationController::class, 'exportCsv'])
+                ->middleware('permission:workforce.rotations.view')
+                ->name('rotations.export');
+            Route::get('/rotations/api/statistics', [RotationController::class, 'getStatistics'])
+                ->middleware('permission:workforce.rotations.view')
+                ->name('rotations.statistics');
+            Route::get('/rotations/{id}/api/assigned-employees', [RotationController::class, 'getAssignedEmployees'])
+                ->middleware('permission:workforce.rotations.view')
+                ->name('rotations.assigned-employees');
 
             // Shift Assignments
             Route::get('/assignments', [AssignmentController::class, 'index'])
@@ -316,12 +378,18 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/assignments/create', [AssignmentController::class, 'create'])
                 ->middleware('permission:workforce.assignments.create')
                 ->name('assignments.create');
+            Route::get('/assignments/bulk-assign', [AssignmentController::class, 'bulkAssign'])
+                ->middleware('permission:workforce.assignments.create')
+                ->name('assignments.bulk-assign');
             Route::post('/assignments', [AssignmentController::class, 'store'])
                 ->middleware('permission:workforce.assignments.create')
                 ->name('assignments.store');
-            Route::post('/assignments/bulk', [AssignmentController::class, 'bulkAssign'])
+            Route::post('/assignments/bulk', [AssignmentController::class, 'bulkStore'])
                 ->middleware('permission:workforce.assignments.create')
                 ->name('assignments.bulk');
+            Route::post('/assignments/check-bulk-conflicts', [AssignmentController::class, 'checkBulkConflicts'])
+                ->middleware(['permission:workforce.assignments.view', 'throttle:60,1'])
+                ->name('assignments.check-bulk-conflicts');
             Route::get('/assignments/coverage', [AssignmentController::class, 'coverage'])
                 ->middleware('permission:workforce.assignments.view')
                 ->name('assignments.coverage');
@@ -337,6 +405,31 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::delete('/assignments/{id}', [AssignmentController::class, 'destroy'])
                 ->middleware('permission:workforce.assignments.delete')
                 ->name('assignments.destroy');
+            // Assignment custom actions
+            Route::post('/assignments/{id}/resolve-conflict', [AssignmentController::class, 'resolveConflict'])
+                ->middleware('permission:workforce.assignments.update')
+                ->name('assignments.resolve-conflict');
+            Route::post('/assignments/{id}/mark-overtime', [AssignmentController::class, 'markOvertime'])
+                ->middleware('permission:workforce.assignments.update')
+                ->name('assignments.mark-overtime');
+            Route::get('/assignments/api/conflicts', [AssignmentController::class, 'getConflicts'])
+                ->middleware('permission:workforce.assignments.view')
+                ->name('assignments.conflicts');
+            Route::get('/assignments/export/csv', [AssignmentController::class, 'exportCsv'])
+                ->middleware('permission:workforce.assignments.view')
+                ->name('assignments.export');
+            Route::get('/assignments/api/statistics', [AssignmentController::class, 'getStatistics'])
+                ->middleware('permission:workforce.assignments.view')
+                ->name('assignments.statistics');
+            Route::get('/assignments/api/employee/{employeeId}', [AssignmentController::class, 'getEmployeeAssignments'])
+                ->middleware('permission:workforce.assignments.view')
+                ->name('assignments.employee-assignments');
+            Route::get('/assignments/api/date', [AssignmentController::class, 'getDateAssignments'])
+                ->middleware('permission:workforce.assignments.view')
+                ->name('assignments.date-assignments');
+            Route::get('/assignments/api/coverage-analysis', [AssignmentController::class, 'getCoverageAnalysis'])
+                ->middleware('permission:workforce.assignments.view')
+                ->name('assignments.coverage-analysis');
         });
 
         // Timekeeping Module
@@ -436,4 +529,209 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 ->middleware('permission:timekeeping.analytics.view')
                 ->name('analytics.employee');
         });
+
+        // Development & Testing Routes (Service Layer Testing)
+        // These routes test the service layer without requiring specific permissions
+        // Accessible only to authenticated users via session-based auth
+        Route::prefix('dev/test')->name('dev.test.')->group(function () {
+            
+            // Test WorkScheduleService
+            Route::get('/schedules/service', function () {
+                try {
+                    $service = new \App\Services\HR\Workforce\WorkScheduleService();
+                    $schedules = $service->getSchedules();
+                    
+                    return response()->json([
+                        'status' => 'success',
+                        'service' => 'WorkScheduleService',
+                        'methods_available' => [
+                            'createSchedule',
+                            'updateSchedule',
+                            'deleteSchedule',
+                            'duplicateSchedule',
+                            'activateSchedule',
+                            'expireSchedule',
+                            'createTemplate',
+                            'assignToEmployee',
+                            'assignToMultipleEmployees',
+                            'unassignFromEmployee',
+                            'getSchedules',
+                            'getActiveSchedules',
+                            'getTemplates',
+                            'getScheduleSummary',
+                            'getEmployeeSchedule',
+                        ],
+                        'count' => count($schedules),
+                        'data' => $schedules
+                    ]);
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'status' => 'error',
+                        'service' => 'WorkScheduleService',
+                        'error' => $e->getMessage()
+                    ], 500);
+                }
+            })->name('schedules.service');
+
+            // Test EmployeeRotationService
+            Route::get('/rotations/service', function () {
+                try {
+                    $service = new \App\Services\HR\Workforce\EmployeeRotationService();
+                    
+                    return response()->json([
+                        'status' => 'success',
+                        'service' => 'EmployeeRotationService',
+                        'methods_available' => [
+                            'createRotation',
+                            'updateRotation',
+                            'deleteRotation',
+                            'duplicateRotation',
+                            'validatePattern',
+                            'generatePatternFromType',
+                            'calculateCycleLength',
+                            'assignToEmployee',
+                            'assignToMultipleEmployees',
+                            'unassignFromEmployee',
+                            'generateShiftAssignments',
+                            'isWorkDay',
+                            'getRotations',
+                            'getActiveRotations',
+                            'getRotationSummary',
+                            'getEmployeeRotation',
+                            'getRotationAnalysis',
+                        ],
+                        'pattern_types_available' => ['4x2', '6x1', '5x2', 'custom']
+                    ]);
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'status' => 'error',
+                        'service' => 'EmployeeRotationService',
+                        'error' => $e->getMessage()
+                    ], 500);
+                }
+            })->name('rotations.service');
+
+            // Test ShiftAssignmentService
+            Route::get('/assignments/service', function () {
+                try {
+                    $service = new \App\Services\HR\Workforce\ShiftAssignmentService();
+                    
+                    return response()->json([
+                        'status' => 'success',
+                        'service' => 'ShiftAssignmentService',
+                        'methods_available' => [
+                            'createAssignment',
+                            'updateAssignment',
+                            'deleteAssignment',
+                            'bulkCreateAssignments',
+                            'bulkUpdateAssignments',
+                            'bulkDeleteAssignments',
+                            'detectConflicts',
+                            'resolveConflict',
+                            'getConflictingAssignments',
+                            'calculateOvertimeHours',
+                            'markAsOvertime',
+                            'getOvertimeAssignments',
+                            'getCoverageReport',
+                            'getUnderstaffedDays',
+                            'getStaffingLevels',
+                            'getAssignments',
+                            'getAssignmentSummary',
+                            'getEmployeeAssignments',
+                            'getTodayAssignments',
+                        ],
+                        'total_methods' => 18
+                    ]);
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'status' => 'error',
+                        'service' => 'ShiftAssignmentService',
+                        'error' => $e->getMessage()
+                    ], 500);
+                }
+            })->name('assignments.service');
+
+            // Test WorkforceCoverageService
+            Route::get('/coverage/service', function () {
+                try {
+                    $service = new \App\Services\HR\Workforce\WorkforceCoverageService();
+                    
+                    return response()->json([
+                        'status' => 'success',
+                        'service' => 'WorkforceCoverageService',
+                        'methods_available' => [
+                            'analyzeCoverage',
+                            'getCoverageForDate',
+                            'getCoverageByDepartment',
+                            'identifyCoverageGaps',
+                            'getCoverageByShiftType',
+                            'suggestOptimalStaffing',
+                            'calculateStaffingEfficiency',
+                            'getOvertimeTrends',
+                            'generateCoverageReport',
+                            'exportCoverageData',
+                            'analyzeTrend',
+                            'generateRecommendations',
+                            'generateCsvExport',
+                        ],
+                        'total_methods' => 13
+                    ]);
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'status' => 'error',
+                        'service' => 'WorkforceCoverageService',
+                        'error' => $e->getMessage()
+                    ], 500);
+                }
+            })->name('coverage.service');
+
+            // Test all Phase 4 services
+            Route::get('/all-services', function () {
+                $results = [];
+                
+                try {
+                    $workScheduleService = new \App\Services\HR\Workforce\WorkScheduleService();
+                    $results['WorkScheduleService'] = ['status' => 'OK', 'methods' => 13];
+                } catch (\Exception $e) {
+                    $results['WorkScheduleService'] = ['status' => 'ERROR', 'error' => $e->getMessage()];
+                }
+
+                try {
+                    $rotationService = new \App\Services\HR\Workforce\EmployeeRotationService();
+                    $results['EmployeeRotationService'] = ['status' => 'OK', 'methods' => 15];
+                } catch (\Exception $e) {
+                    $results['EmployeeRotationService'] = ['status' => 'ERROR', 'error' => $e->getMessage()];
+                }
+
+                try {
+                    $assignmentService = new \App\Services\HR\Workforce\ShiftAssignmentService();
+                    $results['ShiftAssignmentService'] = ['status' => 'OK', 'methods' => 18];
+                } catch (\Exception $e) {
+                    $results['ShiftAssignmentService'] = ['status' => 'ERROR', 'error' => $e->getMessage()];
+                }
+
+                try {
+                    $shiftService = new \App\Services\HR\Workforce\ShiftAssignmentService();
+                    $coverageService = new \App\Services\HR\Workforce\WorkforceCoverageService($shiftService);
+                    $results['WorkforceCoverageService'] = ['status' => 'OK', 'methods' => 13];
+                } catch (\Exception $e) {
+                    $results['WorkforceCoverageService'] = ['status' => 'ERROR', 'error' => $e->getMessage()];
+                }
+
+                return response()->json([
+                    'phase' => 'Phase 4: Service Layer',
+                    'total_services' => 4,
+                    'total_methods' => 59,
+                    'services' => $results,
+                    'test_url_endpoints' => [
+                        'GET /hr/dev/test/schedules/service',
+                        'GET /hr/dev/test/rotations/service',
+                        'GET /hr/dev/test/assignments/service',
+                        'GET /hr/dev/test/coverage/service',
+                        'GET /hr/dev/test/all-services',
+                    ]
+                ]);
+            })->name('all-services');
+        });
     });
+

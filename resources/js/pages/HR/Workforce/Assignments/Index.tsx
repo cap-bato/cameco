@@ -16,7 +16,6 @@ import { Input } from '@/components/ui/input';
 import { Plus, Clock, AlertTriangle, Filter, Calendar, Download, BarChart3 } from 'lucide-react';
 import AssignmentFilters, { AssignmentFiltersState } from '@/components/workforce/assignment-filters';
 import AssignmentCalendar from '@/components/workforce/assignment-calendar';
-import BulkAssignmentModal from '@/components/workforce/bulk-assignment-modal';
 import CoverageAnalytics from '@/components/workforce/coverage-analytics';
 import CreateEditAssignmentModal from './CreateEditAssignmentModal';
 import AssignmentActionsMenu from '@/components/workforce/assignment-actions-menu';
@@ -48,9 +47,13 @@ interface AssignmentsIndexProps {
 export default function AssignmentsIndex() {
     const { assignments: initialAssignments, summary, departments, employees, schedules } = usePage().props as unknown as AssignmentsIndexProps;
 
+    const breadcrumb = [
+        { title: 'HR', href: '/hr' },
+        { title: 'Assignments', href: '/hr/workforce/assignments' },
+    ];
+
     const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'analytics'>('list');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [selectedAssignment, setSelectedAssignment] = useState<ShiftAssignment | null>(null);
     const [editingAssignment, setEditingAssignment] = useState<ShiftAssignment | null>(null);
@@ -171,7 +174,7 @@ export default function AssignmentsIndex() {
     };
 
     return (
-        <AppLayout>
+        <AppLayout breadcrumbs={breadcrumb}>
             <Head title="Shift Assignments" />
 
             <div className="space-y-6 p-6">
@@ -188,7 +191,7 @@ export default function AssignmentsIndex() {
                         </Button>
                         <Button 
                             variant="outline"
-                            onClick={() => setIsBulkModalOpen(true)}
+                            onClick={() => router.get('/hr/workforce/assignments/bulk-assign')}
                             className="gap-2"
                         >
                             <Plus className="h-4 w-4" />
@@ -435,20 +438,6 @@ export default function AssignmentsIndex() {
                     departments={departments}
                     schedules={schedules}
                     onConfirm={handleSaveAssignment}
-                />
-
-                {/* Bulk Assignment Modal */}
-                <BulkAssignmentModal
-                    isOpen={isBulkModalOpen}
-                    onClose={() => setIsBulkModalOpen(false)}
-                    onConfirm={async (assignments) => {
-                        // Handle bulk assignment confirmation
-                        // This would typically send a request to the server
-                        console.log('Bulk assignments:', assignments);
-                    }}
-                    employees={employees}
-                    departments={departments}
-                    schedules={schedules}
                 />
 
                 {/* Assignment Detail Modal */}

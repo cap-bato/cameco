@@ -3,541 +3,172 @@
 namespace App\Http\Controllers\HR\Workforce;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\HR\Workforce\StoreShiftAssignmentRequest;
+use App\Http\Requests\HR\Workforce\UpdateShiftAssignmentRequest;
+use App\Http\Requests\HR\Workforce\BulkAssignShiftsRequest;
+use App\Models\ShiftAssignment;
+use App\Services\HR\Workforce\ShiftAssignmentService;
+use App\Services\HR\Workforce\WorkforceCoverageService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class AssignmentController extends Controller
 {
+    protected ShiftAssignmentService $shiftAssignmentService;
+    protected WorkforceCoverageService $workforceCoverageService;
+
+    public function __construct(
+        ShiftAssignmentService $shiftAssignmentService,
+        WorkforceCoverageService $workforceCoverageService
+    ) {
+        $this->shiftAssignmentService = $shiftAssignmentService;
+        $this->workforceCoverageService = $workforceCoverageService;
+    }
+
     /**
-     * Display a listing of shift assignments with mock data.
+     * Display a listing of shift assignments.
      */
     public function index(Request $request): Response
     {
-        // Mock data: 15 shift assignments (various statuses)
-        $assignments = [
-            [
-                'id' => 1,
-                'employee_id' => 1,
-                'employee_name' => 'Juan dela Cruz',
-                'employee_number' => 'EMP001',
-                'schedule_id' => 1,
-                'schedule_name' => 'Standard Day Shift - Production',
-                'date' => '2025-11-13',
-                'shift_start' => '06:00:00',
-                'shift_end' => '14:00:00',
-                'shift_type' => 'morning',
-                'location' => 'Rolling Mill 3 - Production Floor',
-                'department_id' => 3,
-                'department_name' => 'Rolling Mill 3',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'scheduled',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 2,
-                'employee_id' => 2,
-                'employee_name' => 'Maria Santos',
-                'employee_number' => 'EMP002',
-                'schedule_id' => 1,
-                'schedule_name' => 'Standard Day Shift - Production',
-                'date' => '2025-11-13',
-                'shift_start' => '06:00:00',
-                'shift_end' => '14:00:00',
-                'shift_type' => 'morning',
-                'location' => 'Rolling Mill 3 - Production Floor',
-                'department_id' => 3,
-                'department_name' => 'Rolling Mill 3',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'in_progress',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-13 06:00:00',
-            ],
-            [
-                'id' => 3,
-                'employee_id' => 3,
-                'employee_name' => 'Pedro Reyes',
-                'employee_number' => 'EMP003',
-                'schedule_id' => 2,
-                'schedule_name' => 'Night Shift - Wire Mill',
-                'date' => '2025-11-13',
-                'shift_start' => '22:00:00',
-                'shift_end' => '06:00:00',
-                'shift_type' => 'night',
-                'location' => 'Wire Mill - Building 2',
-                'department_id' => 4,
-                'department_name' => 'Wire Mill',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'scheduled',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 4,
-                'employee_id' => 4,
-                'employee_name' => 'Ana Garcia',
-                'employee_number' => 'EMP004',
-                'schedule_id' => 3,
-                'schedule_name' => 'Afternoon Shift - Quality Control',
-                'date' => '2025-11-13',
-                'shift_start' => '14:00:00',
-                'shift_end' => '22:00:00',
-                'shift_type' => 'afternoon',
-                'location' => 'QA Lab - Building 1',
-                'department_id' => 5,
-                'department_name' => 'Quality Assurance',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'scheduled',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 5,
-                'employee_id' => 5,
-                'employee_name' => 'Carlos Mendoza',
-                'employee_number' => 'EMP005',
-                'schedule_id' => 1,
-                'schedule_name' => 'Standard Day Shift - Production',
-                'date' => '2025-11-13',
-                'shift_start' => '06:00:00',
-                'shift_end' => '16:00:00',
-                'shift_type' => 'morning',
-                'location' => 'Rolling Mill 3 - Production Floor',
-                'department_id' => 3,
-                'department_name' => 'Rolling Mill 3',
-                'is_overtime' => true,
-                'overtime_hours' => 2,
-                'status' => 'scheduled',
-                'notes' => 'Overtime approved for urgent production deadline',
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 6,
-                'employee_id' => 1,
-                'employee_name' => 'Juan dela Cruz',
-                'employee_number' => 'EMP001',
-                'schedule_id' => 1,
-                'schedule_name' => 'Standard Day Shift - Production',
-                'date' => '2025-11-12',
-                'shift_start' => '06:00:00',
-                'shift_end' => '14:00:00',
-                'shift_type' => 'morning',
-                'location' => 'Rolling Mill 3 - Production Floor',
-                'department_id' => 3,
-                'department_name' => 'Rolling Mill 3',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'completed',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-09 10:00:00',
-                'updated_at' => '2025-11-12 14:05:00',
-            ],
-            [
-                'id' => 7,
-                'employee_id' => 6,
-                'employee_name' => 'Rosa Villanueva',
-                'employee_number' => 'EMP006',
-                'schedule_id' => 4,
-                'schedule_name' => 'Office Hours - Admin',
-                'date' => '2025-11-13',
-                'shift_start' => '08:00:00',
-                'shift_end' => '17:00:00',
-                'shift_type' => 'custom',
-                'location' => 'Admin Building',
-                'department_id' => 1,
-                'department_name' => 'Human Resources',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'scheduled',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 8,
-                'employee_id' => 7,
-                'employee_name' => 'Miguel Torres',
-                'employee_number' => 'EMP007',
-                'schedule_id' => 5,
-                'schedule_name' => '6-Day Work Week - Maintenance',
-                'date' => '2025-11-13',
-                'shift_start' => '06:00:00',
-                'shift_end' => '14:00:00',
-                'shift_type' => 'morning',
-                'location' => 'Maintenance Shop',
-                'department_id' => 6,
-                'department_name' => 'Maintenance',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'scheduled',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 9,
-                'employee_id' => 8,
-                'employee_name' => 'Elena Cruz',
-                'employee_number' => 'EMP008',
-                'schedule_id' => 1,
-                'schedule_name' => 'Standard Day Shift - Production',
-                'date' => '2025-11-14',
-                'shift_start' => '06:00:00',
-                'shift_end' => '14:00:00',
-                'shift_type' => 'morning',
-                'location' => 'Rolling Mill 3 - Production Floor',
-                'department_id' => 3,
-                'department_name' => 'Rolling Mill 3',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'scheduled',
-                'notes' => null,
-                'has_conflict' => true,
-                'conflict_reason' => 'Employee is already assigned to another shift on this date',
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 10,
-                'employee_id' => 9,
-                'employee_name' => 'Roberto Silva',
-                'employee_number' => 'EMP009',
-                'schedule_id' => 2,
-                'schedule_name' => 'Night Shift - Wire Mill',
-                'date' => '2025-11-14',
-                'shift_start' => '22:00:00',
-                'shift_end' => '06:00:00',
-                'shift_type' => 'night',
-                'location' => 'Wire Mill - Building 2',
-                'department_id' => 4,
-                'department_name' => 'Wire Mill',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'scheduled',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 11,
-                'employee_id' => 10,
-                'employee_name' => 'Liza Aquino',
-                'employee_number' => 'EMP010',
-                'schedule_id' => 1,
-                'schedule_name' => 'Standard Day Shift - Production',
-                'date' => '2025-11-11',
-                'shift_start' => '06:00:00',
-                'shift_end' => '14:00:00',
-                'shift_type' => 'morning',
-                'location' => 'Rolling Mill 3 - Production Floor',
-                'department_id' => 3,
-                'department_name' => 'Rolling Mill 3',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'cancelled',
-                'notes' => 'Cancelled due to employee sick leave',
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-08 10:00:00',
-                'updated_at' => '2025-11-11 07:00:00',
-            ],
-            [
-                'id' => 12,
-                'employee_id' => 11,
-                'employee_name' => 'Fernando Ramos',
-                'employee_number' => 'EMP011',
-                'schedule_id' => 3,
-                'schedule_name' => 'Afternoon Shift - Quality Control',
-                'date' => '2025-11-15',
-                'shift_start' => '14:00:00',
-                'shift_end' => '22:00:00',
-                'shift_type' => 'afternoon',
-                'location' => 'QA Lab - Building 1',
-                'department_id' => 5,
-                'department_name' => 'Quality Assurance',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'scheduled',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 13,
-                'employee_id' => 12,
-                'employee_name' => 'Sofia Morales',
-                'employee_number' => 'EMP012',
-                'schedule_id' => 5,
-                'schedule_name' => '6-Day Work Week - Maintenance',
-                'date' => '2025-11-16',
-                'shift_start' => '06:00:00',
-                'shift_end' => '14:00:00',
-                'shift_type' => 'morning',
-                'location' => 'Maintenance Shop',
-                'department_id' => 6,
-                'department_name' => 'Maintenance',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'scheduled',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 14,
-                'employee_id' => 13,
-                'employee_name' => 'Diego Fernandez',
-                'employee_number' => 'EMP013',
-                'schedule_id' => 2,
-                'schedule_name' => 'Night Shift - Wire Mill',
-                'date' => '2025-11-14',
-                'shift_start' => '22:00:00',
-                'shift_end' => '08:00:00',
-                'shift_type' => 'graveyard',
-                'location' => 'Wire Mill - Building 2',
-                'department_id' => 4,
-                'department_name' => 'Wire Mill',
-                'is_overtime' => true,
-                'overtime_hours' => 2,
-                'status' => 'scheduled',
-                'notes' => 'Extended shift for equipment maintenance',
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-            [
-                'id' => 15,
-                'employee_id' => 14,
-                'employee_name' => 'Carmen Lopez',
-                'employee_number' => 'EMP014',
-                'schedule_id' => 4,
-                'schedule_name' => 'Office Hours - Admin',
-                'date' => '2025-11-13',
-                'shift_start' => '08:00:00',
-                'shift_end' => '17:00:00',
-                'shift_type' => 'custom',
-                'location' => 'Admin Building',
-                'department_id' => 1,
-                'department_name' => 'Human Resources',
-                'is_overtime' => false,
-                'overtime_hours' => 0,
-                'status' => 'scheduled',
-                'notes' => null,
-                'has_conflict' => false,
-                'conflict_reason' => null,
-                'created_by' => 1,
-                'created_by_name' => 'Admin User',
-                'created_at' => '2025-11-10 10:00:00',
-                'updated_at' => '2025-11-10 10:00:00',
-            ],
-        ];
+        $assignments = $this->shiftAssignmentService->getAssignments();
+        
+        // Transform assignments to include formatted data
+        $transformedAssignments = $assignments->map(function ($assignment) {
+            // Find conflicting shifts if has_conflict is true
+            $conflictingShift = null;
+            if ($assignment->has_conflict) {
+                $conflictingShift = ShiftAssignment::with('employee.profile')
+                    ->where('employee_id', $assignment->employee_id)
+                    ->where('date', $assignment->date)
+                    ->where('id', '!=', $assignment->id)
+                    ->where('deleted_at', null)
+                    ->first();
+            }
+            
+            return [
+                'id' => $assignment->id,
+                'employee_id' => $assignment->employee_id,
+                'employee_name' => "{$assignment->employee?->profile?->first_name} {$assignment->employee?->profile?->last_name}",
+                'employee_number' => $assignment->employee?->employee_number,
+                'schedule_id' => $assignment->schedule_id,
+                'schedule_name' => $assignment->schedule?->name,
+                'date' => $assignment->date?->format('Y-m-d'),
+                'shift_start' => $assignment->shift_start,
+                'shift_end' => $assignment->shift_end,
+                'shift_type' => $assignment->shift_type,
+                'location' => $assignment->location,
+                'department_id' => $assignment->department_id,
+                'department_name' => $assignment->department?->name,
+                'is_overtime' => $assignment->is_overtime,
+                'overtime_hours' => $assignment->overtime_hours,
+                'status' => $assignment->status,
+                'has_conflict' => $assignment->has_conflict,
+                'conflict_reason' => $assignment->conflict_reason,
+                'conflicting_assignment_id' => $conflictingShift?->id,
+                'conflicting_employee_name' => $conflictingShift ? "{$conflictingShift->employee?->profile?->first_name} {$conflictingShift->employee?->profile?->last_name}" : null,
+                'conflicting_shift_date' => $conflictingShift ? \Carbon\Carbon::parse($conflictingShift->date)->format('Y-m-d') : null,
+                'conflicting_shift_start' => $conflictingShift?->shift_start,
+                'conflicting_shift_end' => $conflictingShift?->shift_end,
+                'created_at' => $assignment->created_at?->format('Y-m-d H:i:s'),
+            ];
+        })->toArray();
 
-        // Mock summary statistics
+        // Calculate summary stats
+        $todayAssignments = $assignments->filter(fn ($a) => $a->date->isToday());
         $summary = [
-            'total_assignments' => 15,
-            'todays_shifts' => 7,
-            'coverage_percentage' => 88.5,
-            'overtime_hours' => 4,
-            'conflicts_count' => 1,
-            'understaffed_days' => 2,
+            'total_assignments' => $assignments->count(),
+            'todays_shifts' => $todayAssignments->count(),
+            'coverage_percentage' => $assignments->count() > 0 ? round(($todayAssignments->count() / 5) * 100) : 0, // Assuming 5 is required staff
+            'overtime_hours' => $assignments->sum('overtime_hours'),
+            'conflicts_count' => $assignments->where('has_conflict', true)->count(),
+            'understaffed_days' => 0, // Calculate if needed
         ];
 
-        // Mock departments
-        $departments = [
-            ['id' => 1, 'name' => 'Human Resources', 'code' => 'HR'],
-            ['id' => 3, 'name' => 'Rolling Mill 3', 'code' => 'RM3'],
-            ['id' => 4, 'name' => 'Wire Mill', 'code' => 'WM'],
-            ['id' => 5, 'name' => 'Quality Assurance', 'code' => 'QA'],
-            ['id' => 6, 'name' => 'Maintenance', 'code' => 'MNT'],
-        ];
-
-        // Mock employees
-        $employees = [
-            ['id' => 1, 'employee_number' => 'EMP001', 'full_name' => 'Juan dela Cruz', 'department_id' => 3, 'department_name' => 'Rolling Mill 3'],
-            ['id' => 2, 'employee_number' => 'EMP002', 'full_name' => 'Maria Santos', 'department_id' => 3, 'department_name' => 'Rolling Mill 3'],
-            ['id' => 3, 'employee_number' => 'EMP003', 'full_name' => 'Pedro Reyes', 'department_id' => 4, 'department_name' => 'Wire Mill'],
-            ['id' => 4, 'employee_number' => 'EMP004', 'full_name' => 'Ana Garcia', 'department_id' => 5, 'department_name' => 'Quality Assurance'],
-            ['id' => 5, 'employee_number' => 'EMP005', 'full_name' => 'Carlos Mendoza', 'department_id' => 3, 'department_name' => 'Rolling Mill 3'],
-        ];
-
-        // Mock schedules
-        $schedules = [
-            ['id' => 1, 'name' => 'Standard Day Shift - Production', 'shift_start' => '06:00:00', 'shift_end' => '14:00:00'],
-            ['id' => 2, 'name' => 'Night Shift - Wire Mill', 'shift_start' => '22:00:00', 'shift_end' => '06:00:00'],
-            ['id' => 3, 'name' => 'Afternoon Shift - Quality Control', 'shift_start' => '14:00:00', 'shift_end' => '22:00:00'],
-            ['id' => 4, 'name' => 'Office Hours - Admin', 'shift_start' => '08:00:00', 'shift_end' => '17:00:00'],
-            ['id' => 5, 'name' => '6-Day Work Week - Maintenance', 'shift_start' => '06:00:00', 'shift_end' => '14:00:00'],
-        ];
+        $departments = \App\Models\Department::all(['id', 'name', 'code'])->toArray();
+        $employees = \App\Models\Employee::with('profile:id,first_name,last_name', 'department:id,name')
+            ->select('id', 'employee_number', 'department_id', 'profile_id')
+            ->get()
+            ->map(fn ($emp) => [
+                'id' => $emp->id,
+                'employee_number' => $emp->employee_number,
+                'full_name' => "{$emp->profile?->first_name} {$emp->profile?->last_name}",
+                'department_id' => $emp->department_id,
+                'department_name' => $emp->department?->name,
+            ])
+            ->toArray();
+        $schedules = \App\Models\WorkSchedule::where('status', 'active')->get(['id', 'name', 'monday_start', 'monday_end'])->toArray();
 
         $filters = [
             'search' => $request->input('search', ''),
-            'employee_id' => $request->input('employee_id'),
             'department_id' => $request->input('department_id'),
+            'status' => $request->input('status'),
             'date_from' => $request->input('date_from'),
             'date_to' => $request->input('date_to'),
-            'shift_type' => $request->input('shift_type'),
-            'status' => $request->input('status'),
-            'is_overtime' => $request->input('is_overtime'),
             'has_conflict' => $request->input('has_conflict'),
         ];
 
         return Inertia::render('HR/Workforce/Assignments/Index', [
-            'assignments' => $assignments,
+            'assignments' => $transformedAssignments,
             'summary' => $summary,
             'departments' => $departments,
             'employees' => $employees,
             'schedules' => $schedules,
             'filters' => $filters,
-            'view_mode' => $request->input('view_mode', 'list'),
         ]);
     }
 
     /**
-     * Show the form for creating a new assignment.
+     * Show the form for creating a new shift assignment.
      */
     public function create(): Response
     {
-        $employees = [
-            ['id' => 1, 'employee_number' => 'EMP001', 'full_name' => 'Juan dela Cruz', 'department_id' => 3, 'department_name' => 'Rolling Mill 3'],
-            ['id' => 2, 'employee_number' => 'EMP002', 'full_name' => 'Maria Santos', 'department_id' => 3, 'department_name' => 'Rolling Mill 3'],
-        ];
-
-        $schedules = [
-            ['id' => 1, 'name' => 'Standard Day Shift - Production', 'shift_start' => '06:00:00', 'shift_end' => '14:00:00'],
-            ['id' => 2, 'name' => 'Night Shift - Wire Mill', 'shift_start' => '22:00:00', 'shift_end' => '06:00:00'],
-        ];
-
-        $departments = [
-            ['id' => 3, 'name' => 'Rolling Mill 3'],
-            ['id' => 4, 'name' => 'Wire Mill'],
-        ];
-
-        $shiftTemplates = [
-            ['id' => 1, 'name' => 'Morning Shift (6AM-2PM)', 'shift_type' => 'morning', 'shift_start' => '06:00:00', 'shift_end' => '14:00:00'],
-            ['id' => 2, 'name' => 'Afternoon Shift (2PM-10PM)', 'shift_type' => 'afternoon', 'shift_start' => '14:00:00', 'shift_end' => '22:00:00'],
-        ];
+        $departments = \App\Models\Department::all(['id', 'name', 'code'])->toArray();
+        $employees = \App\Models\Employee::with('profile:id,first_name,last_name', 'department:id,name')
+            ->select('id', 'employee_number', 'department_id', 'profile_id')
+            ->get()
+            ->map(fn ($emp) => [
+                'id' => $emp->id,
+                'employee_number' => $emp->employee_number,
+                'full_name' => "{$emp->profile?->first_name} {$emp->profile?->last_name}",
+                'department_id' => $emp->department_id,
+                'department_name' => $emp->department?->name,
+            ])
+            ->toArray();
+        $schedules = \App\Models\WorkSchedule::where('status', 'active')->get(['id', 'name'])->map(fn ($s) => [
+            'id' => $s->id,
+            'name' => $s->name,
+        ])->toArray();
+        $shiftTypes = ['morning', 'afternoon', 'evening', 'night', 'custom'];
 
         return Inertia::render('HR/Workforce/Assignments/Create', [
+            'departments' => $departments,
             'employees' => $employees,
             'schedules' => $schedules,
-            'departments' => $departments,
-            'shift_templates' => $shiftTemplates,
+            'shiftTypes' => $shiftTypes,
         ]);
     }
 
     /**
-     * Store a newly created assignment in storage.
+     * Store a newly created shift assignment in storage.
      */
-    public function store(Request $request)
+    public function store(StoreShiftAssignmentRequest $request)
     {
-        $request->validate([
-            'employee_id' => 'required|integer',
-            'schedule_id' => 'required|integer',
-            'date' => 'required|date',
-            'shift_start' => 'required',
-            'shift_end' => 'required',
-        ]);
+        $this->shiftAssignmentService->createAssignment(
+            $request->validated(),
+            auth()->user()
+        );
 
         return redirect()->route('hr.workforce.assignments.index')
             ->with('success', 'Shift assignment created successfully.');
     }
 
     /**
-     * Bulk assign shifts to multiple employees.
-     */
-    public function bulkAssign(Request $request)
-    {
-        $request->validate([
-            'employee_ids' => 'required|array',
-            'schedule_id' => 'required|integer',
-            'date_from' => 'required|date',
-            'date_to' => 'required|date',
-        ]);
-
-        return redirect()->route('hr.workforce.assignments.index')
-            ->with('success', 'Bulk shift assignments created successfully.');
-    }
-
-    /**
-     * Display the specified assignment.
+     * Display the specified shift assignment.
      */
     public function show(string $id): Response
     {
-        $assignment = [
-            'id' => 1,
-            'employee_name' => 'Juan dela Cruz',
-            'employee_number' => 'EMP001',
-            'schedule_name' => 'Standard Day Shift - Production',
-            'date' => '2025-11-13',
-            'shift_start' => '06:00:00',
-            'shift_end' => '14:00:00',
-            'shift_type' => 'morning',
-            'location' => 'Rolling Mill 3 - Production Floor',
-            'department_name' => 'Rolling Mill 3',
-            'is_overtime' => false,
-            'status' => 'scheduled',
-        ];
+        $assignment = ShiftAssignment::with(['employee', 'schedule', 'createdBy'])->findOrFail($id);
 
         return Inertia::render('HR/Workforce/Assignments/Show', [
             'assignment' => $assignment,
@@ -545,145 +176,377 @@ class AssignmentController extends Controller
     }
 
     /**
-     * Show the form for editing the specified assignment.
+     * Show the form for editing the specified shift assignment.
      */
     public function edit(string $id): Response
     {
-        $assignment = [
-            'id' => 1,
-            'employee_id' => 1,
-            'schedule_id' => 1,
-            'date' => '2025-11-13',
-            'shift_start' => '06:00:00',
-            'shift_end' => '14:00:00',
-            'shift_type' => 'morning',
-            'location' => 'Rolling Mill 3 - Production Floor',
-            'is_overtime' => false,
-            'notes' => null,
-        ];
-
-        $employees = [
-            ['id' => 1, 'employee_number' => 'EMP001', 'full_name' => 'Juan dela Cruz'],
-        ];
-
-        $schedules = [
-            ['id' => 1, 'name' => 'Standard Day Shift - Production'],
-        ];
-
-        $departments = [
-            ['id' => 3, 'name' => 'Rolling Mill 3'],
-        ];
-
-        $shiftTemplates = [
-            ['id' => 1, 'name' => 'Morning Shift (6AM-2PM)', 'shift_type' => 'morning'],
-        ];
+        $assignment = ShiftAssignment::findOrFail($id);
+        $employees = \App\Models\Employee::with('profile:id,first_name,last_name', 'department:id,name')
+            ->select('id', 'employee_number', 'department_id', 'profile_id')
+            ->get()
+            ->map(fn ($emp) => [
+                'id' => $emp->id,
+                'employee_number' => $emp->employee_number,
+                'full_name' => "{$emp->profile?->first_name} {$emp->profile?->last_name}",
+                'department_id' => $emp->department_id,
+                'department_name' => $emp->department?->name,
+            ])
+            ->toArray();
+        $schedules = \App\Models\WorkSchedule::where('status', 'active')->get(['id', 'name'])->map(fn ($s) => [
+            'id' => $s->id,
+            'name' => $s->name,
+        ])->toArray();
+        $shiftTypes = ['morning', 'afternoon', 'evening', 'night', 'custom'];
 
         return Inertia::render('HR/Workforce/Assignments/Edit', [
             'assignment' => $assignment,
             'employees' => $employees,
             'schedules' => $schedules,
-            'departments' => $departments,
-            'shift_templates' => $shiftTemplates,
+            'shiftTypes' => $shiftTypes,
         ]);
     }
 
     /**
-     * Update the specified assignment in storage.
+     * Update the specified shift assignment in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(UpdateShiftAssignmentRequest $request, string $id)
     {
-        $request->validate([
-            'employee_id' => 'required|integer',
-            'schedule_id' => 'required|integer',
-            'date' => 'required|date',
-            'shift_start' => 'required',
-            'shift_end' => 'required',
-        ]);
+        $assignment = ShiftAssignment::findOrFail($id);
+        $this->shiftAssignmentService->updateAssignment($assignment, $request->validated());
 
         return redirect()->route('hr.workforce.assignments.index')
             ->with('success', 'Shift assignment updated successfully.');
     }
 
     /**
-     * Remove the specified assignment from storage.
+     * Remove the specified shift assignment from storage.
      */
     public function destroy(string $id)
     {
+        $assignment = ShiftAssignment::findOrFail($id);
+        $this->shiftAssignmentService->deleteAssignment($assignment);
+
         return redirect()->route('hr.workforce.assignments.index')
             ->with('success', 'Shift assignment deleted successfully.');
     }
 
     /**
-     * Get coverage analytics for a date range.
+     * Show the bulk assignment page.
      */
-    public function coverage(Request $request): Response
+    public function bulkAssign(): Response
     {
-        // Mock coverage report data
-        $coverageReport = [
-            [
-                'date' => '2025-11-13',
-                'total_shifts' => 50,
-                'assigned_shifts' => 45,
-                'unassigned_shifts' => 5,
-                'coverage_percentage' => 90,
-                'coverage_level' => 'optimal',
-                'department_breakdown' => [
-                    ['department_id' => 3, 'department_name' => 'Rolling Mill 3', 'total_shifts' => 20, 'assigned_shifts' => 18, 'coverage_percentage' => 90],
-                    ['department_id' => 4, 'department_name' => 'Wire Mill', 'total_shifts' => 15, 'assigned_shifts' => 14, 'coverage_percentage' => 93],
-                    ['department_id' => 5, 'department_name' => 'Quality Assurance', 'total_shifts' => 15, 'assigned_shifts' => 13, 'coverage_percentage' => 87],
-                ],
-            ],
-            [
-                'date' => '2025-11-14',
-                'total_shifts' => 50,
-                'assigned_shifts' => 38,
-                'unassigned_shifts' => 12,
-                'coverage_percentage' => 76,
-                'coverage_level' => 'adequate',
-                'department_breakdown' => [
-                    ['department_id' => 3, 'department_name' => 'Rolling Mill 3', 'total_shifts' => 20, 'assigned_shifts' => 15, 'coverage_percentage' => 75],
-                    ['department_id' => 4, 'department_name' => 'Wire Mill', 'total_shifts' => 15, 'assigned_shifts' => 12, 'coverage_percentage' => 80],
-                    ['department_id' => 5, 'department_name' => 'Quality Assurance', 'total_shifts' => 15, 'assigned_shifts' => 11, 'coverage_percentage' => 73],
-                ],
-            ],
-            [
-                'date' => '2025-11-15',
-                'total_shifts' => 50,
-                'assigned_shifts' => 30,
-                'unassigned_shifts' => 20,
-                'coverage_percentage' => 60,
-                'coverage_level' => 'low',
-                'department_breakdown' => [
-                    ['department_id' => 3, 'department_name' => 'Rolling Mill 3', 'total_shifts' => 20, 'assigned_shifts' => 12, 'coverage_percentage' => 60],
-                    ['department_id' => 4, 'department_name' => 'Wire Mill', 'total_shifts' => 15, 'assigned_shifts' => 9, 'coverage_percentage' => 60],
-                    ['department_id' => 5, 'department_name' => 'Quality Assurance', 'total_shifts' => 15, 'assigned_shifts' => 9, 'coverage_percentage' => 60],
-                ],
-            ],
-        ];
+        $departments = \App\Models\Department::all(['id', 'name', 'code'])->toArray();
+        $employees = \App\Models\Employee::with('profile:id,first_name,last_name', 'department:id,name')
+            ->select('id', 'employee_number', 'department_id', 'profile_id')
+            ->get()
+            ->map(fn ($emp) => [
+                'id' => $emp->id,
+                'employee_number' => $emp->employee_number,
+                'full_name' => "{$emp->profile?->first_name} {$emp->profile?->last_name}",
+                'department_id' => $emp->department_id,
+                'department_name' => $emp->department?->name,
+            ])
+            ->toArray();
+        $schedules = \App\Models\WorkSchedule::where('status', 'active')->get(['id', 'name'])->toArray();
 
-        $departments = [
-            ['id' => 3, 'name' => 'Rolling Mill 3'],
-            ['id' => 4, 'name' => 'Wire Mill'],
-            ['id' => 5, 'name' => 'Quality Assurance'],
-        ];
-
-        $summary = [
-            'total_assignments' => 113,
-            'todays_shifts' => 45,
-            'coverage_percentage' => 75.3,
-            'overtime_hours' => 8,
-            'conflicts_count' => 2,
-            'understaffed_days' => 1,
-        ];
-
-        return Inertia::render('HR/Workforce/Assignments/Coverage', [
-            'coverage_report' => $coverageReport,
+        return Inertia::render('HR/Workforce/Assignments/BulkAssign', [
             'departments' => $departments,
-            'summary' => $summary,
-            'date_range' => [
-                'start' => $request->input('date_from', '2025-11-13'),
-                'end' => $request->input('date_to', '2025-11-20'),
-            ],
+            'employees' => $employees,
+            'schedules' => $schedules,
         ]);
+    }
+
+    /**
+     * Check for conflicts in bulk assignment before creation.
+     */
+    public function checkBulkConflicts(Request $request)
+    {
+        $employeeIds = $request->input('employee_ids', []);
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+        $shiftStart = $request->input('shift_start');
+        $shiftEnd = $request->input('shift_end');
+
+        $conflicts = [];
+
+        // Check each employee for conflicts across the date range
+        foreach ($employeeIds as $employeeId) {
+            $conflictingAssignments = ShiftAssignment::where('employee_id', $employeeId)
+                ->whereBetween('date', [$dateFrom, $dateTo])
+                ->where('deleted_at', null)
+                ->get(['id', 'date', 'shift_start', 'shift_end']);
+
+            if ($conflictingAssignments->isNotEmpty()) {
+                $employee = \App\Models\Employee::with('profile:id,first_name,last_name')
+                    ->find($employeeId);
+
+                // Ensure dates are properly formatted as array
+                $conflictingDates = $conflictingAssignments
+                    ->map(function ($a) {
+                        $date = is_string($a->date) ? \Carbon\Carbon::parse($a->date) : $a->date;
+                        return $date->format('Y-m-d');
+                    })
+                    ->unique()
+                    ->values()
+                    ->toArray();
+
+                $conflicts[] = [
+                    'employee_id' => (int) $employeeId,
+                    'employee_name' => "{$employee?->profile?->first_name} {$employee?->profile?->last_name}",
+                    'conflicting_dates' => $conflictingDates,
+                    'conflict_count' => (int) count($conflictingDates),
+                ];
+            }
+        }
+
+        return response()->json([
+            'conflicts' => $conflicts,
+            'has_conflicts' => count($conflicts) > 0,
+            'total_conflicts' => count($conflicts),
+        ]);
+    }
+
+    /**
+     * Bulk create shift assignments.
+     */
+    public function bulkStore(BulkAssignShiftsRequest $request)
+    {
+        $employeeIds = $request->input('employee_ids', []);
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+        $scheduleId = $request->input('schedule_id');
+        $shiftStart = $request->input('shift_start');
+        $shiftEnd = $request->input('shift_end');
+        $allowConflicts = (bool) $request->input('allow_conflicts', false);
+
+        // Build assignments array for each employee and date in range
+        $assignmentsData = [];
+        $currentDate = \Carbon\Carbon::parse($dateFrom);
+        $endDate = \Carbon\Carbon::parse($dateTo);
+
+        while ($currentDate <= $endDate) {
+            foreach ($employeeIds as $employeeId) {
+                $assignmentsData[] = [
+                    'employee_id' => $employeeId,
+                    'schedule_id' => $scheduleId,
+                    'date' => $currentDate->format('Y-m-d'),
+                    'shift_start' => $shiftStart,
+                    'shift_end' => $shiftEnd,
+                    'shift_type' => $request->input('shift_type', 'standard'),
+                    'status' => 'scheduled',
+                    'is_overtime' => $request->input('is_overtime', false),
+                    'department_id' => $request->input('department_id'),
+                    'location' => $request->input('location'),
+                ];
+            }
+            $currentDate->addDay();
+        }
+
+        try {
+            $created = $this->shiftAssignmentService->bulkCreateAssignments(
+                $assignmentsData,
+                auth()->user()
+            );
+
+            return redirect()->route('hr.workforce.assignments.index')
+                ->with('success', "{$created->count()} shift assignment(s) created successfully.");
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            // Handle duplicate assignments
+            return redirect()->back()
+                ->with('error', 'Some assignments could not be created because they already exist. Please review and try again.')
+                ->withInput();
+        }
+    }
+
+    /**
+     * Detect conflicts for a shift assignment.
+     */
+    public function detectConflicts(Request $request, string $id)
+    {
+        $assignment = ShiftAssignment::findOrFail($id);
+        $conflicts = $this->shiftAssignmentService->detectConflicts($assignment);
+
+        return response()->json([
+            'has_conflicts' => count($conflicts) > 0,
+            'conflicts' => $conflicts,
+        ]);
+    }
+
+    /**
+     * Get all conflicts in the system.
+     */
+    public function getConflicts(Request $request)
+    {
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+
+        $conflictingAssignments = ShiftAssignment::where('has_conflict', true)
+            ->whereBetween('date', [$dateFrom, $dateTo])
+            ->with(['employee', 'schedule'])
+            ->get();
+
+        return response()->json($conflictingAssignments);
+    }
+
+    /**
+     * Calculate overtime hours for an assignment.
+     */
+    public function calculateOvertime(Request $request, string $id)
+    {
+        $assignment = ShiftAssignment::findOrFail($id);
+        $overtimeHours = $this->shiftAssignmentService->calculateOvertimeHours($assignment);
+
+        return response()->json([
+            'overtime_hours' => $overtimeHours,
+            'is_overtime' => $overtimeHours > 0,
+        ]);
+    }
+
+    /**
+     * Get workforce coverage report.
+     */
+    public function getCoverageReport(Request $request)
+    {
+        $dateFrom = $request->input('date_from', now()->startOfMonth());
+        $dateTo = $request->input('date_to', now()->endOfMonth());
+        $departmentId = $request->input('department_id');
+
+        $report = $this->shiftAssignmentService->getCoverageReport(
+            $dateFrom,
+            $dateTo,
+            $departmentId
+        );
+
+        return response()->json($report);
+    }
+
+    /**
+     * Analyze coverage by department.
+     */
+    public function analyzeCoverage(Request $request)
+    {
+        $dateFrom = $request->input('date_from', now()->startOfMonth());
+        $dateTo = $request->input('date_to', now()->endOfMonth());
+
+        $coverage = $this->workforceCoverageService->analyzeCoverage($dateFrom, $dateTo);
+
+        return response()->json($coverage);
+    }
+
+    /**
+     * Get coverage by department.
+     */
+    public function getCoverageByDepartment(Request $request)
+    {
+        $dateFrom = $request->input('date_from', now()->startOfMonth());
+        $dateTo = $request->input('date_to', now()->endOfMonth());
+
+        $departmentCoverage = $this->workforceCoverageService->getCoverageByDepartment($dateFrom, $dateTo);
+
+        return response()->json($departmentCoverage);
+    }
+
+    /**
+     * Export coverage data.
+     */
+    public function exportCoverage(Request $request)
+    {
+        $dateFrom = $request->input('date_from', now()->startOfMonth());
+        $dateTo = $request->input('date_to', now()->endOfMonth());
+
+        $filename = 'coverage_' . date('Y-m-d_H-i-s') . '.csv';
+        $path = storage_path("app/exports/{$filename}");
+
+        if (!is_dir(dirname($path))) {
+            mkdir(dirname($path), 0755, true);
+        }
+
+        $file = fopen($path, 'w');
+        fputcsv($file, ['Department', 'Date', 'Total Employees', 'Assigned', 'Coverage %', 'Gaps']);
+
+        $coverage = $this->workforceCoverageService->getCoverageByDepartment($dateFrom, $dateTo);
+
+        foreach ($coverage as $dept) {
+            fputcsv($file, [
+                $dept['department_name'],
+                $dept['date'],
+                $dept['total_employees'],
+                $dept['assigned'],
+                $dept['coverage_percentage'],
+                $dept['gaps'],
+            ]);
+        }
+
+        fclose($file);
+
+        return response()->download($path)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Identify coverage gaps.
+     */
+    public function identifyGaps(Request $request)
+    {
+        $dateFrom = $request->input('date_from', now()->startOfMonth());
+        $dateTo = $request->input('date_to', now()->endOfMonth());
+
+        $gaps = $this->workforceCoverageService->identifyCoverageGaps($dateFrom, $dateTo);
+
+        return response()->json($gaps);
+    }
+
+    /**
+     * Get assignment statistics and analytics.
+     */
+    public function getStatistics()
+    {
+        $assignments = $this->shiftAssignmentService->getAssignments();
+
+        $statistics = [
+            'total_assignments' => $assignments->count(),
+            'scheduled_assignments' => $assignments->where('status', 'scheduled')->count(),
+            'completed_assignments' => $assignments->where('status', 'completed')->count(),
+            'cancelled_assignments' => $assignments->where('status', 'cancelled')->count(),
+            'assignments_with_conflicts' => $assignments->where('has_conflict', true)->count(),
+            'overtime_assignments' => $assignments->where('is_overtime', true)->count(),
+        ];
+
+        return response()->json($statistics);
+    }
+
+    /**
+     * Get available employees for assignment.
+     */
+    public function getAvailableEmployees(Request $request)
+    {
+        $departmentId = $request->input('department_id');
+        $date = $request->input('date', now()->format('Y-m-d'));
+
+        $query = \App\Models\Employee::all(['id', 'employee_number', 'first_name', 'last_name', 'department_id']);
+
+        if ($departmentId) {
+            $query = $query->where('department_id', $departmentId);
+        }
+
+        return response()->json($query->values());
+    }
+
+    /**
+     * Bulk update assignment status.
+     */
+    public function bulkUpdateStatus(Request $request)
+    {
+        $assignmentIds = $request->input('assignment_ids', []);
+        $status = $request->input('status');
+
+        foreach ($assignmentIds as $assignmentId) {
+            $assignment = ShiftAssignment::find($assignmentId);
+            if ($assignment) {
+                $assignment->update(['status' => $status]);
+            }
+        }
+
+        return redirect()->route('hr.workforce.assignments.index')
+            ->with('success', count($assignmentIds) . " assignment(s) status updated to '{$status}' successfully.");
     }
 }

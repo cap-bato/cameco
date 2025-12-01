@@ -97,7 +97,35 @@ class RolesAndPermissionsSeeder extends Seeder
             'hr.reports.export',
         ];
 
-        $perms = array_values(array_unique(array_merge($basePerms, $hrPermissions)));
+        $timekeepingPermissions = [
+            // Attendance
+            'timekeeping.attendance.view',
+            'timekeeping.attendance.create',
+            'timekeeping.attendance.update',
+            'timekeeping.attendance.delete',
+            'timekeeping.attendance.correct',
+
+            // Overtime
+            'timekeeping.overtime.view',
+            'timekeeping.overtime.create',
+            'timekeeping.overtime.update',
+            'timekeeping.overtime.delete',
+
+            // Import
+            'timekeeping.import.view',
+            'timekeeping.import.create',
+
+            // Analytics
+            'timekeeping.analytics.view',
+        ];
+
+        $atsPermissions = ATSPermissionsSeeder::PERMISSIONS;
+
+        $perms = array_values(
+            array_unique(
+                array_merge($basePerms, $hrPermissions, $timekeepingPermissions, $atsPermissions)
+            )
+        );
 
         foreach ($perms as $p) {
             Permission::firstOrCreate(['name' => $p, 'guard_name' => 'web']);
@@ -108,57 +136,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $superadmin->givePermissionTo(Permission::all()); // Always retains all permissions
 
         $hrManager = Role::firstOrCreate(['name' => 'HR Manager', 'guard_name' => 'web']);
-        // Grant HR Manager all HR permissions (do not revoke existing)
-        $hrManager->givePermissionTo($hrPermissions);
-
-        // HR Staff - Operational Support Level
-        $hrStaffPermissions = [
-            // Dashboard
-            'hr.dashboard.view',
-
-            // Employee Management (Full access for production/rolling mill management)
-            'hr.employees.view',
-            'hr.employees.create',
-            'hr.employees.update',
-            'hr.employees.delete', // Can archive employees
-            'hr.employees.view_government_ids', // Can view sensitive government IDs
-
-            // Leave Management
-            'hr.leave-requests.view',
-            'hr.leave-requests.create',
-            'hr.leave-requests.approve', // Initial approval, requires manager confirmation
-            'hr.leave-policies.view', // Read-only access to policies
-            'hr.leave-balances.view', // View leave balances
-
-            // Timekeeping
-            'hr.timekeeping.view',
-            'hr.timekeeping.manage',
-            'hr.timekeeping.attendance.create',
-            'hr.timekeeping.attendance.update',
-            'hr.timekeeping.overtime.view',
-
-            // ATS (Applicant Tracking)
-            'hr.ats.view',
-            'hr.ats.candidates.view',
-            'hr.ats.candidates.create',
-            'hr.ats.applications.view',
-            'hr.ats.interviews.schedule',
-
-            // Workforce Management
-            'hr.workforce.schedules.view',
-            'hr.workforce.schedules.create',
-            'hr.workforce.rotations.view',
-            'hr.workforce.assignments.view',
-
-            // Appraisals
-            'hr.appraisals.view',
-            'hr.appraisals.conduct',
-
-            // Reports (Read-only)
-            'hr.reports.view',
-        ];
-
-        $hrStaff = Role::firstOrCreate(['name' => 'HR Staff', 'guard_name' => 'web']);
-        $hrStaff->givePermissionTo($hrStaffPermissions);
+        // Grant HR Manager all HR-aligned permissions (do not revoke existing)
+        $hrManager->givePermissionTo(array_merge($hrPermissions, $timekeepingPermissions, $atsPermissions));
     }
 }
