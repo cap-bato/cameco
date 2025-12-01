@@ -17,6 +17,7 @@ interface RotationCardProps {
     onDelete: (id: number) => void;
     onDuplicate: (rotation: EmployeeRotation) => void;
     onAssignEmployees: (rotation: EmployeeRotation) => void;
+    onViewDetails?: (rotation: EmployeeRotation) => void;
 }
 
 export function RotationCard({
@@ -25,15 +26,49 @@ export function RotationCard({
     onDelete,
     onDuplicate,
     onAssignEmployees,
+    onViewDetails,
 }: RotationCardProps) {
     const getPatternDisplay = () => {
         const { pattern_type, pattern_json } = rotation;
-        const { work_days, rest_days } = pattern_json;
         
-        if (pattern_type === 'custom') {
+        // Handle case where pattern_json is a string (from JSON serialization)
+        let patternData = pattern_json;
+        if (typeof pattern_json === 'string') {
+            try {
+                patternData = JSON.parse(pattern_json);
+            } catch {
+                return pattern_type?.toUpperCase() || 'UNKNOWN';
+            }
+        }
+        
+        const work_days = patternData?.work_days || 0;
+        const rest_days = patternData?.rest_days || 0;
+        
+        if (pattern_type === 'custom' && (work_days > 0 || rest_days > 0)) {
             return `${work_days}w / ${rest_days}r`;
         }
-        return pattern_type.toUpperCase();
+        return pattern_type?.toUpperCase() || 'UNKNOWN';
+    };
+
+    const getPatternData = () => {
+        const { pattern_json } = rotation;
+        
+        // Handle case where pattern_json is a string (from JSON serialization)
+        let patternData = pattern_json;
+        if (typeof pattern_json === 'string') {
+            try {
+                patternData = JSON.parse(pattern_json);
+            } catch {
+                return { work_days: 0, rest_days: 0, pattern: [], cycle_length: 0 };
+            }
+        }
+        
+        return {
+            work_days: patternData?.work_days || 0,
+            rest_days: patternData?.rest_days || 0,
+            pattern: patternData?.pattern || [],
+            cycle_length: patternData?.cycle_length || patternData?.pattern?.length || 0,
+        };
     };
 
     const getStatusColor = () => {
@@ -41,8 +76,11 @@ export function RotationCard({
     };
 
     return (
-        <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader className="pb-3">
+        <Card 
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => onViewDetails?.(rotation)}
+        >
+            <CardHeader>
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                         <CardTitle className="text-base line-clamp-1">{rotation.name}</CardTitle>
@@ -52,7 +90,12 @@ export function RotationCard({
                     </div>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8"
+                                onClick={(e) => e.stopPropagation()}
+                            >
                                 <MoreHorizontal className="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
@@ -82,24 +125,38 @@ export function RotationCard({
                         <Badge variant="outline">{getPatternDisplay()}</Badge>
                     </div>
                     <div className="text-xs text-gray-600">
-                        <p>{rotation.pattern_json.work_days} work / {rotation.pattern_json.rest_days} rest days</p>
-                        <p>Cycle: {rotation.pattern_json.cycle_length || rotation.pattern_json.pattern.length} days</p>
+                        {(() => {
+                            const { work_days, rest_days, cycle_length } = getPatternData();
+                            
+                            return (
+                                <>
+                                    <p>{work_days} work / {rest_days} rest days</p>
+                                    <p>Cycle: {cycle_length} days</p>
+                                </>
+                            );
+                        })()}
                     </div>
                 </div>
 
                 {/* Pattern Visualization */}
                 <div className="flex gap-1">
-                    {rotation.pattern_json.pattern.slice(0, 7).map((day, index) => (
-                        <div
-                            key={index}
-                            className={`h-6 w-3 rounded text-xs font-bold flex items-center justify-center text-white ${
-                                day === 1 ? 'bg-blue-500' : 'bg-gray-300'
-                            }`}
-                            title={day === 1 ? 'Work' : 'Rest'}
-                        >
-                            {day === 1 ? 'W' : 'R'}
-                        </div>
-                    ))}
+                    {(() => {
+                        const { pattern } = getPatternData();
+                        if (pattern && Array.isArray(pattern) && pattern.length > 0) {
+                            return pattern.slice(0, 7).map((day, index) => (
+                                <div
+                                    key={index}
+                                    className={`h-6 w-3 rounded text-xs font-bold flex items-center justify-center text-white ${
+                                        day === 1 ? 'bg-blue-500' : 'bg-gray-300'
+                                    }`}
+                                    title={day === 1 ? 'Work' : 'Rest'}
+                                >
+                                    {day === 1 ? 'W' : 'R'}
+                                </div>
+                            ));
+                        }
+                        return <div className="text-xs text-gray-500">No pattern data</div>;
+                    })()}
                 </div>
 
                 {/* Status and Employees */}
@@ -124,7 +181,10 @@ export function RotationCard({
 
                 {/* Assign Button */}
                 <Button
-                    onClick={() => onAssignEmployees(rotation)}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onAssignEmployees(rotation);
+                    }}
                     size="sm"
                     className="w-full mt-2 gap-2"
                     variant="outline"

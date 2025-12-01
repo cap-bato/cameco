@@ -170,6 +170,11 @@ export interface ShiftAssignment {
     // Conflict detection
     has_conflict?: boolean;
     conflict_reason?: string;
+    conflicting_assignment_id?: number;
+    conflicting_employee_name?: string;
+    conflicting_shift_date?: string;
+    conflicting_shift_start?: string;
+    conflicting_shift_end?: string;
     
     // Metadata
     created_by: number;

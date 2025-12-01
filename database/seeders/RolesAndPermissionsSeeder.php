@@ -102,7 +102,35 @@ class RolesAndPermissionsSeeder extends Seeder
             'hr.reports.export',
         ];
 
-        $perms = array_values(array_unique(array_merge($basePerms, $hrPermissions)));
+        $timekeepingPermissions = [
+            // Attendance
+            'timekeeping.attendance.view',
+            'timekeeping.attendance.create',
+            'timekeeping.attendance.update',
+            'timekeeping.attendance.delete',
+            'timekeeping.attendance.correct',
+
+            // Overtime
+            'timekeeping.overtime.view',
+            'timekeeping.overtime.create',
+            'timekeeping.overtime.update',
+            'timekeeping.overtime.delete',
+
+            // Import
+            'timekeeping.import.view',
+            'timekeeping.import.create',
+
+            // Analytics
+            'timekeeping.analytics.view',
+        ];
+
+        $atsPermissions = ATSPermissionsSeeder::PERMISSIONS;
+
+        $perms = array_values(
+            array_unique(
+                array_merge($basePerms, $hrPermissions, $timekeepingPermissions, $atsPermissions)
+            )
+        );
 
         foreach ($perms as $p) {
             Permission::firstOrCreate(['name' => $p, 'guard_name' => 'web']);

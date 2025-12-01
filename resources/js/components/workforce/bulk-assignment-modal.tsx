@@ -116,6 +116,10 @@ export default function BulkAssignmentModal({
 
     // Filter employees by department and search term
     const filteredEmployees = useMemo(() => {
+        if (!employees || !Array.isArray(employees)) {
+            return [];
+        }
+        
         let filtered = employees;
         
         // Filter by department
@@ -130,8 +134,8 @@ export default function BulkAssignmentModal({
             const searchLower = employeeSearchTerm.toLowerCase();
             filtered = filtered.filter(
                 (e) =>
-                    e.full_name.toLowerCase().includes(searchLower) ||
-                    e.employee_number.toLowerCase().includes(searchLower) ||
+                    e.full_name?.toLowerCase().includes(searchLower) ||
+                    e.employee_number?.toLowerCase().includes(searchLower) ||
                     (e.position_name?.toLowerCase().includes(searchLower) || false)
             );
         }
@@ -141,6 +145,9 @@ export default function BulkAssignmentModal({
 
     // Get selected schedule details
     const selectedSchedule = useMemo(() => {
+        if (!schedules || !Array.isArray(schedules) || !formData.schedule_id) {
+            return undefined;
+        }
         return schedules.find((s) => s.id === parseInt(formData.schedule_id));
     }, [schedules, formData.schedule_id]);
 

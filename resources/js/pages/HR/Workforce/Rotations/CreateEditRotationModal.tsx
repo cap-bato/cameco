@@ -182,7 +182,7 @@ export function CreateEditRotationModal({
     const patternStats = {
         workDays: formData.pattern_json.work_days,
         restDays: formData.pattern_json.rest_days,
-        cycleLength: formData.pattern_json.cycle_length || formData.pattern_json.pattern.length,
+        cycleLength: formData.pattern_json.cycle_length || formData.pattern_json.pattern?.length || 0,
     };
 
     return (

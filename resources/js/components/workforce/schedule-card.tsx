@@ -85,7 +85,9 @@ export default function ScheduleCard({
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                         <CardTitle className="text-base font-semibold truncate">{schedule.name}</CardTitle>
-                        <p className="text-xs text-gray-500 truncate">{schedule.department_name || 'No department'}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                            {schedule.department_name || (schedule.department as any)?.name || 'No department'}
+                        </p>
                     </div>
                     <Badge variant={getStatusBadgeColor(schedule.status)}>
                         {(schedule.status || 'active').charAt(0).toUpperCase() + (schedule.status || 'active').slice(1)}
