@@ -346,7 +346,11 @@ class EmployeeRotationService
             $query->where('department_id', $departmentId);
         }
 
-        return $query->with(['department', 'createdBy', 'rotationAssignments'])->get();
+        return $query->with(['department', 'createdBy'])
+            ->withCount(['rotationAssignments as assigned_employees_count' => function ($query) {
+                $query->where('is_active', true);
+            }])
+            ->get();
     }
 
     /**
