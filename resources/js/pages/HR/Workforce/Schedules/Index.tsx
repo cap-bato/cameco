@@ -298,6 +298,8 @@ export default function SchedulesIndex() {
                 templates={templates || []}
                 isEditing={!!selectedSchedule?.id}
             />
+            </div>
+            </div>
         </AppLayout>
     );
 }
