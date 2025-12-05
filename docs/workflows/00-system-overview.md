@@ -4,11 +4,14 @@
 
 ```mermaid
 graph TB
-    subgraph External["External Sources (No System Access)"]
+    subgraph External["External Sources"]
         Supervisors[Supervisors<br/>Submit Paper Schedules]
-        Employees[Employees<br/>Submit Leave Requests]
         Applicants[Job Applicants<br/>Facebook/In-Person]
         RFID[RFID Card Taps<br/>Timekeeping]
+    end
+    
+    subgraph EmployeeAccess["Employee Self-Service"]
+        EmployeePortal[Employee Portal<br/>View & Submit Requests]
     end
     
     subgraph System["SyncingSteel HRIS - On-Premise System"]
@@ -50,9 +53,12 @@ graph TB
     
     %% External to System
     Supervisors -->|Paper Records| HRStaff
-    Employees -->|Leave Requests| HRStaff
     Applicants -->|Applications| HRStaff
     RFID -->|Card Tap Events| EventBus
+    
+    %% Employee Portal to System
+    EmployeePortal -->|Leave Requests| Modules
+    EmployeePortal -->|View Data| Modules
     
     %% Admin Layer
     Superadmin -.->|Emergency Access| Modules
@@ -168,13 +174,28 @@ graph TB
 
 ---
 
+### 6. 👤 Employee (Self-Service Portal)
+**Focus**: Personal information access and leave management
+
+- 📊 View personal information and employment details
+- ⏰ View time logs and attendance records
+- 💰 View and download payslips
+- 📅 Check leave balances and history
+- ✉️ Submit leave requests directly
+- 📄 Track request status and approvals
+- 🔔 Receive notifications and alerts
+
+**[View Employee Portal Guide →](./06-employee-portal.md)**
+
+---
+
 ## Key Processes
 
 ### 🔄 Leave Request Flow
 ```mermaid
 graph LR
-    Employee[Employee Submits<br/>Paper/Email] --> HRStaff[HR Staff<br/>Inputs to System]
-    HRStaff --> Duration{Duration?}
+    Employee[Employee Submits<br/>via Portal] --> System[HRIS System<br/>Validates Request]
+    System --> Duration{Duration?}
     Duration -->|1-2 days| AutoApprove[Auto-Approved<br/>by System]
     Duration -->|3-5 days| HRManager[HR Manager<br/>Approves]
     Duration -->|6+ days| Both[HR Manager +<br/>Office Admin]
@@ -454,7 +475,6 @@ graph TB
 - 💳 E-wallet payment support
 - 👤 Biometric attendance (facial recognition/fingerprint)
 - 🖥️ Supervisor portal for direct schedule submission
-- 👨‍💼 Employee self-service portal
 
 ---
 

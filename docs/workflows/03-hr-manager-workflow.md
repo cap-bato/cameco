@@ -47,7 +47,7 @@ Review and approve leave requests based on workforce availability and policies.
 
 ```mermaid
 graph TD
-    Start([Leave Request Received]) --> ReviewRequest[Review Leave Details]
+    Start([Leave Request Received<br/>from Employee Portal]) --> ReviewRequest[Review Leave Details]
     
     ReviewRequest --> CheckDuration{Leave Duration}
     CheckDuration -->|1-2 days| AutoApproved[Auto-Approved<br/>No Action Needed]

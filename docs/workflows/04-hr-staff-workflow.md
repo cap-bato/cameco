@@ -7,7 +7,7 @@
 - 📝 Employee onboarding and offboarding
 - 🔍 Applicant screening and ATS management
 - 📄 Document processing and 201 file management
-- 📅 Leave request processing (submission on behalf of employees)
+- 📅 Leave request support (employees submit via portal, HR Staff assists with issues)
 - 📊 Timekeeping monitoring and exception handling
 - 👥 Employee inquiries and support
 - 📋 HR administrative tasks and data entry
@@ -255,16 +255,21 @@ graph TD
 
 ---
 
-## 3. Leave Request Processing
+## 3. Leave Request Support
 
 ### Purpose
-Submit leave requests on behalf of employees (who don't have system access).
+Assist employees with leave request issues and handle special cases (employees submit directly via Employee Portal).
 
 ### Workflow
 
 ```mermaid
 graph TD
-    Start([Employee Submits Leave Form<br/>Paper Form]) --> ReceiveForm[Receive Leave Form<br/>from Employee]
+    Start([Employee Portal<br/>Leave Submission]) --> DirectSubmit[Employee Submits<br/>Leave Request Directly]
+    DirectSubmit --> AutoRoute[System Auto-Routes<br/>to Approver]
+    
+    Start --> Issue{Has Issues?}
+    Issue -->|Yes| EmployeeContact[Employee Contacts<br/>HR Staff]
+    EmployeeContact --> AssistType{Issue Type}
     
     ReceiveForm --> ValidateForm[Validate Form<br/>Complete & Signed]
     ValidateForm --> FormValid{Form Valid?}
@@ -311,67 +316,88 @@ graph TD
     FileForm --> Complete([Process Complete])
 ```
 
-### Leave Form Validation
+### HR Staff Support Scenarios
 
-**Required Fields:**
-- ✅ Employee name and ID
-- ✅ Department
-- ✅ Leave type (Vacation, Sick, Emergency, etc.)
-- ✅ Leave dates (from - to)
-- ✅ Number of days
-- ✅ Reason for leave
-- ✅ Employee signature
-- ✅ Date submitted
+**When HR Staff Assists:**
 
-**Supporting Documents (if required):**
-- **Sick Leave (3+ days)**: Medical certificate
-- **Emergency Leave**: Death certificate (bereavement), hospital records, police report, etc.
-- **Maternity Leave**: Medical certificate from OB-GYN
-- **Solo Parent Leave**: Solo parent certificate
+**Scenario 1: Technical Issues**
+- Employee cannot access portal
+- System errors during submission
+- Upload document failures
+- **Action**: HR Staff submits on behalf with proper documentation
 
-### Data Entry into HRIS
+**Scenario 2: Special Leave Types**
+- Maternity/Paternity leave (requires additional documentation)
+- Solo parent leave (requires certificate)
+- Emergency leave (urgent situations)
+- **Action**: HR Staff validates documents and assists with submission
 
-**Steps:**
-1. Login to HRIS
-2. Navigate to Leave Management module
-3. Click "Submit Leave Request" (as HR Staff on behalf of employee)
-4. Search and select employee
-5. Choose leave type from dropdown
-6. Enter leave start date
-7. Enter leave end date (system auto-calculates days)
-8. Enter reason/remarks
-9. Upload supporting documents (if any)
-10. Click "Submit" button
-11. System routes to approval workflow automatically
+**Scenario 3: Balance Inquiries**
+- Employee unsure of available balance
+- Questions about accrual
+- Leave conversion to cash inquiries
+- **Action**: HR Staff explains leave policies and checks balance
 
-**System Validations:**
+**Scenario 4: Rejected Requests**
+- Employee wants to understand rejection reason
+- Wants to appeal decision
+- Needs alternative dates
+- **Action**: HR Staff coordinates with HR Manager for clarification
+
+### Manual Submission (Special Cases Only)
+
+**When to Submit Manually:**
+- Employee portal access issues (account locked, password reset pending)
+- Emergency situations (employee hospitalized, cannot access system)
+- System maintenance window
+- New employees (pending portal activation)
+
+**Manual Submission Steps:**
+1. Receive request via email/phone/paper form
+2. Verify employee identity and situation
+3. Login to HRIS admin panel
+4. Navigate to Leave Management > Submit on Behalf
+5. Search and select employee
+6. Enter leave details and upload documents
+7. Add notes explaining manual submission reason
+8. Submit request
+9. Notify employee of submission
+
+**System Validations (Same as Portal):**
 - Checks if employee has sufficient balance
 - Checks for overlapping leave requests
 - Checks minimum advance notice (if applicable)
 - Routes to appropriate approver based on duration
 
-### Common Leave Scenarios
+### Common Support Scenarios
 
-**Scenario 1: Sick Leave with Medical Certificate**
-- Employee files 5-day sick leave
-- Requires medical certificate
-- HR Staff validates certificate authenticity
-- Enters into system
-- Routes to HR Manager for approval
+**Scenario 1: Portal Access Issue**
+- Employee cannot login to portal
+- HR Staff resets password
+- Verifies employee email address
+- Sends new activation link
+- Guides employee through portal login
 
-**Scenario 2: Vacation Leave (1 day)**
-- Employee files 1-day vacation leave
-- No documents required
-- HR Staff enters into system
-- Auto-approved if balance sufficient
-- Employee notified via email
+**Scenario 2: Document Upload Help**
+- Employee unsure how to upload medical certificate
+- HR Staff provides step-by-step guidance
+- Explains file format requirements (PDF, max 5MB)
+- Employee successfully uploads via portal
+- HR Staff verifies document received
 
-**Scenario 3: Emergency Leave**
-- Employee has family emergency
-- Verbal notice to HR Staff
-- HR Staff enters as emergency leave
-- Supporting documents can be submitted later
-- Routes to HR Manager for approval
+**Scenario 3: Emergency Leave (Employee Cannot Access Portal)**
+- Employee hospitalized, family member calls
+- HR Staff verifies caller identity
+- Submits emergency leave manually on behalf
+- Documents submitted later when employee recovers
+- Notifies HR Manager of special circumstances
+
+**Scenario 4: Leave Balance Inquiry**
+- Employee asks about remaining leave balance
+- HR Staff checks portal data
+- Explains accrual and carryover rules
+- Shows employee how to view balance in portal
+- Employee can now self-check in future
 
 ---
 
@@ -701,11 +727,12 @@ graph TD
 ### Common Employee Inquiries
 
 **Leave-Related:**
-- "What's my current leave balance?"
-- "How do I apply for leave?"
+- "How do I access the Employee Portal?"
+- "I forgot my portal password, how do I reset it?"
+- "How do I upload documents for my leave request?"
 - "Why was my leave rejected?"
-- "Can I convert my leave to cash?"
-- "I'm sick, how do I file leave?"
+- "Can I cancel my pending leave request?"
+- "How do I view my leave history?"
 
 **Payroll-Related:**
 - "When is the next payday?"
@@ -774,10 +801,12 @@ graph TD
 
 ### Daily Tasks
 - ✅ Monitor timekeeping exceptions (missing punches, late arrivals)
-- ✅ Process leave applications submitted by employees
+- ✅ Assist employees with Employee Portal access issues
+- ✅ Support leave requests with technical or documentation issues
 - ✅ Respond to employee inquiries (email, phone, walk-in)
 - ✅ Update employee records in HRIS
 - ✅ Issue RFID cards to new hires or replacements
+- ✅ Activate Employee Portal accounts for new hires
 
 ### Weekly Tasks
 - ✅ Screen new job applications in ATS

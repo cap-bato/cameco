@@ -58,10 +58,7 @@ export default function SchedulesIndex() {
     const handleDeleteClick = (id: number) => {
         if (confirm('Are you sure you want to delete this schedule?')) {
             router.delete(`/hr/workforce/schedules/${id}`, {
-                onSuccess: () => {
-                    // Refresh the page to update the list
-                    window.location.reload();
-                },
+                preserveScroll: true,
             });
         }
     };
@@ -70,16 +67,12 @@ export default function SchedulesIndex() {
         router.post(`/hr/workforce/schedules/${schedule.id}/duplicate`, {
             name: `${schedule.name} (Copy)`,
         }, {
-            onSuccess: () => {
-                // Full page reload to get fresh data from server
-                window.location.reload();
-            },
+            preserveScroll: true,
         });
     };
 
     const handleSaveSchedule = () => {
-        // This is now handled by the modal's direct router.post calls
-        // Just refresh the page after successful save
+        // Modal handles save directly with Inertia
     };
 
     const getTotalSchedulesCount = () => {
