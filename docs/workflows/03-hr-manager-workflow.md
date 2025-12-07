@@ -106,19 +106,55 @@ graph TD
 
 ### Decision Factors
 
+**System-Provided Workforce Coverage Analysis:**
+
+When reviewing leave request, system displays:
+
+**Coverage Impact Report:**
+```
+📊 Workforce Coverage Analysis
+
+Department: Sales
+Requested Leave: Dec 10-17, 2025 (6 working days)
+
+Current Coverage: 100% (10/10 employees)
+With This Leave: 70% (7/10 employees)
+⚠️ WARNING: Below 75% minimum threshold
+
+Other Approved Leaves During Period:
+- John Smith: Dec 12-13 (2 days)
+- Maria Garcia: Dec 15 (1 day)
+
+Critical Dates:
+- Dec 15: Monthly sales report deadline
+- Dec 16: Client presentation
+
+Recommendation: Consider alternative dates or shortened duration
+```
+
 **Approve if:**
 - ✅ Sufficient leave balance
-- ✅ No critical schedule conflicts
-- ✅ Adequate department coverage
-- ✅ Proper advance notice
+- ✅ Workforce coverage above minimum threshold (e.g., > 75%)
+- ✅ No critical schedule conflicts or deadlines
+- ✅ Adequate department coverage for essential functions
+- ✅ Proper advance notice (per policy)
 - ✅ Valid reason provided
+- ✅ Can acknowledge coverage warning if below ideal but acceptable
 
 **Reject if:**
 - ❌ Insufficient leave balance
-- ❌ Critical schedule conflict (busy period, insufficient coverage)
-- ❌ Inadequate advance notice (< 3 days for planned leave)
-- ❌ Concurrent leave requests from same department
-- ❌ Previous unresolved leave issues
+- ❌ Critical coverage impact (< 50% or below policy minimum)
+- ❌ Major deadline/project during leave period
+- ❌ Inadequate advance notice (< policy minimum)
+- ❌ Too many concurrent leaves from same department
+- ❌ Previous unresolved attendance issues
+- ❌ Blackout period (unless exceptional circumstances)
+
+**Approve with Conditions if:**
+- ⚠️ Coverage warning but acceptable (60-75%)
+- ⚠️ Can be covered with overtime or temp staff
+- ⚠️ Non-critical period, manageable impact
+- ⚠️ Employee willing to adjust dates if needed
 
 ---
 

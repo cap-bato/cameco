@@ -415,11 +415,51 @@ graph TD
 
 **Approval Flow:**
 
-| Days Requested | Approver(s) | Typical Response Time |
-|----------------|-------------|----------------------|
-| 1-2 days | Auto-Approved | Instant (if balance sufficient) |
-| 3-5 days | HR Manager | Within 24 hours |
-| 6+ days | HR Manager → Office Admin | 2-3 business days |
+Approval routing is configured by Office Admin and varies by company policy. Typical flow:
+
+| Leave Request | Primary Approver | Escalation Trigger | Final Approver | Response Time |
+|---------------|------------------|-------------------|----------------|---------------|
+| Standard (e.g., 1-5 days) | HR Staff | None | HR Staff | Within 24 hours |
+| Long Duration (e.g., > 5 days) | HR Staff | Auto-escalate | HR Manager | 1-2 business days |
+| Extended (e.g., > 15 days) | HR Staff → HR Manager | Policy threshold | Office Admin | 2-3 business days |
+| Critical Coverage Impact | HR Staff | Coverage < 60% | HR Manager | 1-2 business days |
+| Blackout Period | HR Staff | Date range | HR Manager | Case-by-case |
+| Special Types (Unpaid, LOA) | HR Staff | Leave type | HR Manager + Office Admin | 2-5 business days |
+
+**Note**: Most leave requests are approved by HR Staff directly. You will be notified if your request requires manager approval.
+
+**Workforce Coverage Notifications:**
+
+When submitting leave, you may see coverage impact warnings:
+
+```
+⚠️ Coverage Impact Notice
+
+Your requested leave dates will affect department coverage:
+
+Department: IT Support
+Requested: Feb 10-14, 2025
+Coverage Impact: 70% (3 other team members on leave)
+
+This is below the preferred 80% coverage level.
+Your request will be reviewed carefully by HR Staff.
+
+Tip: Consider alternative dates:
+  • Feb 17-21: 90% coverage (recommended)
+  • Feb 24-28: 85% coverage (acceptable)
+```
+
+**Coverage Status Meanings:**
+- 🟢 **Optimal Coverage**: Your dates have minimal impact - likely approved quickly
+- 🟡 **Acceptable Coverage**: Slight impact, but manageable - should be approved
+- 🟠 **Low Coverage**: Significant impact - may be rejected or require justification
+- 🔴 **Critical Coverage**: Severe impact - likely rejected, please choose different dates
+
+**What This Means for You:**
+- Coverage warnings don't automatically reject your request
+- HR Staff considers overall department needs
+- You may be asked to adjust dates or shorten duration
+- Emergency/medical leaves are processed regardless of coverage
 
 **Request Details View:**
 - Submission date & time

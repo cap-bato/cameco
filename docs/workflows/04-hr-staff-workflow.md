@@ -258,18 +258,40 @@ graph TD
 ## 3. Leave Request Support
 
 ### Purpose
-Assist employees with leave request issues and handle special cases (employees submit directly via Employee Portal).
+Review and approve employee leave requests submitted via Employee Portal. Primary approval authority for standard leaves, with automatic escalation to HR Manager only when policy thresholds are exceeded.
 
 ### Workflow
 
 ```mermaid
 graph TD
-    Start([Employee Portal<br/>Leave Submission]) --> DirectSubmit[Employee Submits<br/>Leave Request Directly]
-    DirectSubmit --> AutoRoute[System Auto-Routes<br/>to Approver]
+    Start([Employee Submits<br/>Leave via Portal]) --> Validation[System Validates<br/>Request]
+    Validation --> CheckPolicy{Meets Policy<br/>Criteria?}
     
-    Start --> Issue{Has Issues?}
-    Issue -->|Yes| EmployeeContact[Employee Contacts<br/>HR Staff]
-    EmployeeContact --> AssistType{Issue Type}
+    CheckPolicy -->|Insufficient Balance| AutoReject[Auto-Rejected<br/>Employee Notified]
+    CheckPolicy -->|Within Limits| ToHRStaff[Routed to<br/>HR Staff]
+    CheckPolicy -->|Exceeds Threshold| ToManager[Escalated to<br/>HR Manager]
+    
+    ToHRStaff --> ReviewRequest[HR Staff Reviews<br/>Request]
+    ReviewRequest --> CheckCoverage[Check Workforce<br/>Coverage Impact]
+    CheckCoverage --> CoverageOK{Coverage<br/>Acceptable?}
+    
+    CoverageOK -->|Yes| ApproveStaff[HR Staff<br/>Approves]
+    CoverageOK -->|Warning| ReviewWarning[Review Warning<br/>Assess Impact]
+    ReviewWarning --> StaffDecision{Can<br/>Approve?}
+    StaffDecision -->|Yes| ApproveWithWarning[Approve with<br/>Acknowledgment]
+    StaffDecision -->|No| RejectStaff[HR Staff<br/>Rejects]
+    CoverageOK -->|Critical| RejectStaff
+    
+    ApproveStaff --> NotifyApproved[Employee Notified<br/>Approved]
+    ApproveWithWarning --> NotifyApproved
+    RejectStaff --> NotifyRejected[Employee Notified<br/>with Reason]
+    
+    ToManager --> ManagerReview[HR Manager<br/>Reviews]
+    ManagerReview --> ManagerDecision{Manager<br/>Decision}
+    ManagerDecision -->|Approve| CheckMajor{Exceeds Major<br/>Threshold?}
+    CheckMajor -->|Yes| ToAdmin[Forward to<br/>Office Admin]
+    CheckMajor -->|No| NotifyApproved
+    ManagerDecision -->|Reject| NotifyRejected
     
     ReceiveForm --> ValidateForm[Validate Form<br/>Complete & Signed]
     ValidateForm --> FormValid{Form Valid?}
@@ -316,9 +338,109 @@ graph TD
     FileForm --> Complete([Process Complete])
 ```
 
+### Leave Approval Process (HR Staff)
+
+**Step 1: Review Leave Request**
+
+When leave request arrives in queue:
+1. Open leave request details
+2. Verify employee information and leave type
+3. Check leave balance (system shows available balance)
+4. Review requested dates and duration
+5. Read employee's reason for leave
+6. Check attached documents (if required)
+
+**Step 2: Workforce Coverage Analysis**
+
+System automatically displays coverage impact:
+
+**Coverage Dashboard:**
+```
+📊 Workforce Coverage Impact
+
+Employee: Juan Dela Cruz
+Department: Customer Service
+Leave Request: Jan 15-19, 2025 (5 days)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Current Department Strength: 12 employees
+Other Approved Leaves (same period): 1 employee
+
+If Approved:
+  Available Staff: 10/12 (83.3%)
+  Status: ✅ ACCEPTABLE (above 75% threshold)
+
+Schedule Conflicts: None
+Critical Deadlines: None during period
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Approval Authority: HR Staff
+Escalation Required: No
+```
+
+**Coverage Status Indicators:**
+- 🟢 **Optimal (90-100%)**: No concerns, safe to approve
+- 🟡 **Acceptable (75-89%)**: Manageable, can approve with awareness
+- 🟠 **Warning (60-74%)**: Below threshold, review carefully, may require coverage plan
+- 🔴 **Critical (<60%)**: Insufficient coverage, consider rejecting or suggesting alternatives
+
+**Step 3: Make Decision**
+
+**If Coverage is Optimal/Acceptable (Green/Yellow):**
+1. Click "Approve" button
+2. Add optional notes (e.g., "Approved. Adequate coverage maintained.")
+3. Submit approval
+4. System notifies employee immediately
+
+**If Coverage Warning (Orange):**
+1. System prompts: "⚠️ Coverage will be 68%. Acknowledge to proceed?"
+2. Options:
+   - "Approve with Acknowledgment" - You accept the coverage impact
+   - "Request Coverage Plan" - Ask supervisor for coverage arrangement
+   - "Suggest Alternative Dates" - Recommend different dates to employee
+   - "Reject" - Deny due to insufficient coverage
+3. Add detailed notes explaining decision
+4. Submit decision
+
+**If Coverage Critical (Red):**
+1. System shows: "🔴 CRITICAL: Coverage will be 45% (below 50% minimum)"
+2. Options:
+   - "Reject with Reason" - Standard action for critical coverage
+   - "Escalate to HR Manager" - For exceptional circumstances
+3. Must provide detailed reason
+4. Suggest alternative dates or shortened duration
+
+**Step 4: Handle Auto-Escalations**
+
+System automatically escalates to HR Manager if:
+- Duration exceeds threshold (e.g., > 5 days per policy)
+- Coverage falls below critical threshold
+- Blackout period request
+- Insufficient advance notice
+- Other policy-configured triggers
+
+When escalated:
+1. System shows: "⬆️ Auto-escalated to HR Manager (Duration: 7 days exceeds 5-day limit)"
+2. HR Staff can add recommendation/notes
+3. Click "Forward to HR Manager"
+4. HR Manager receives request in their queue
+5. HR Staff receives notification when manager decides
+
+**Step 5: Document Decision**
+
+All decisions automatically logged with:
+- Date/time of decision
+- Approver name (HR Staff)
+- Coverage percentage at time of approval
+- Warnings acknowledged (if any)
+- Notes/comments
+- Audit trail for compliance
+
 ### HR Staff Support Scenarios
 
-**When HR Staff Assists:**
+**When HR Staff Assists (Beyond Approval):**
 
 **Scenario 1: Technical Issues**
 - Employee cannot access portal
@@ -327,22 +449,22 @@ graph TD
 - **Action**: HR Staff submits on behalf with proper documentation
 
 **Scenario 2: Special Leave Types**
-- Maternity/Paternity leave (requires additional documentation)
-- Solo parent leave (requires certificate)
-- Emergency leave (urgent situations)
-- **Action**: HR Staff validates documents and assists with submission
+- Maternity/Paternity leave (auto-escalates to HR Manager)
+- Solo parent leave (requires certificate validation)
+- Emergency leave (expedite review, typically approved immediately)
+- **Action**: HR Staff validates documents and processes urgently
 
-**Scenario 3: Balance Inquiries**
-- Employee unsure of available balance
-- Questions about accrual
-- Leave conversion to cash inquiries
-- **Action**: HR Staff explains leave policies and checks balance
+**Scenario 3: Coverage Concerns**
+- Employee asks if dates are acceptable
+- Wants to know coverage impact before submitting
+- Seeking alternative dates with better coverage
+- **Action**: HR Staff checks coverage calendar, suggests optimal dates
 
 **Scenario 4: Rejected Requests**
 - Employee wants to understand rejection reason
 - Wants to appeal decision
 - Needs alternative dates
-- **Action**: HR Staff coordinates with HR Manager for clarification
+- **Action**: HR Staff explains policy, suggests alternatives, can escalate appeal to HR Manager if warranted
 
 ### Manual Submission (Special Cases Only)
 

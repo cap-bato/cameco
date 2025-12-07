@@ -195,20 +195,25 @@ graph TB
 ```mermaid
 graph LR
     Employee[Employee Submits<br/>via Portal] --> System[HRIS System<br/>Validates Request]
-    System --> Duration{Duration?}
-    Duration -->|1-2 days| AutoApprove[Auto-Approved<br/>by System]
-    Duration -->|3-5 days| HRManager[HR Manager<br/>Approves]
-    Duration -->|6+ days| Both[HR Manager +<br/>Office Admin]
-    AutoApprove --> Notify[Employee<br/>Notified]
+    System --> Policy{Meets Policy<br/>Thresholds?}
+    Policy -->|Standard Request| HRStaff[HR Staff<br/>Approves/Rejects]
+    Policy -->|Exceeds Threshold| HRManager[HR Manager<br/>Approves/Rejects]
+    Policy -->|Major Request| Both[HR Manager +<br/>Office Admin]
+    HRStaff --> Notify[Employee<br/>Notified]
     HRManager --> Notify
     Both --> Notify
     
+    HRStaff -.Coverage Warning.-> Review[HR Staff Reviews<br/>Workforce Impact]
+    Review --> HRStaff
+    
     style Employee fill:#ffecb3
     style HRStaff fill:#c8e6c9
-    style AutoApprove fill:#b2dfdb
-    style HRManager fill:#fff9c4
-    style Both fill:#ffccbc
+    style System fill:#e1f5fe
+    style Policy fill:#fff9c4
+    style HRManager fill:#ffccbc
+    style Both fill:#ff9800,color:#fff
     style Notify fill:#d1c4e9
+    style Review fill:#fff3e0
 ```
 
 **[View Detailed Process →](./processes/leave-request-approval.md)**
