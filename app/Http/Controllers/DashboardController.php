@@ -32,16 +32,28 @@ class DashboardController extends Controller
             'roles' => $userRoles,
         ]);
 
-        // Check Payroll Officer FIRST (most specific)
+        // Check Office Admin FIRST (most specific for configuration)
+        if ($user->hasRole('Office Admin')) {
+            \Log::debug('DashboardController - Routing to Office Admin Dashboard');
+            return redirect()->route('admin.dashboard');
+        }
+
+        // Check Payroll Officer SECOND
         if ($user->hasRole('Payroll Officer')) {
             \Log::debug('DashboardController - Routing to Payroll Dashboard');
             return redirect()->route('payroll.dashboard');
         }
 
-        // Check HR roles SECOND
+        // Check HR roles THIRD
         if ($user->hasRole('HR Manager') || $user->hasRole('HR Staff') || $user->hasRole('HR')) {
             \Log::debug('DashboardController - Routing to HR Dashboard');
             return redirect()->route('hr.dashboard');
+        }
+
+        // Check Employee role FOURTH (employee self-service portal)
+        if ($user->hasRole('Employee')) {
+            \Log::debug('DashboardController - Routing to Employee Portal Dashboard');
+            return redirect()->route('employee.dashboard');
         }
 
         // Check Superadmin LAST (most general)
