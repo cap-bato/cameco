@@ -286,6 +286,7 @@ export default function CreateRequest({
         <AppLayout>
             <Head title="Apply for Leave" />
 
+            <div className="space-y-6 p-6">
             {/* Page Header */}
             <div className="mb-6">
                 <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
@@ -616,6 +617,7 @@ export default function CreateRequest({
                     </div>
                 </div>
             </div>
+        </div>
         </AppLayout>
     );
 }

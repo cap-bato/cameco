@@ -363,7 +363,8 @@ export default function Dashboard({ employee, quickStats, recentActivity, error 
                             </CardContent>
                         </Card>
                     </div>
-                </div>
+                </Card>
+            </div>
             </div>
         </AppLayout>
     );

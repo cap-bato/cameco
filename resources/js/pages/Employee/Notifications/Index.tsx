@@ -67,7 +67,7 @@ export default function NotificationsIndex({
     employee,
 }: NotificationsIndexProps) {
     const [selectedType, setSelectedType] = useState<string>(filters.type || 'all');
-    const [optimisticNotifications, setOptimisticNotifications] = useState<Notification[]>(notifications);
+    const [optimisticNotifications, setOptimisticNotifications] = useState<Notification[]>(Array.isArray(notifications) ? notifications : []);
 
     // Handle filter change
     const handleFilterChange = () => {
@@ -159,6 +159,7 @@ export default function NotificationsIndex({
         <AppLayout>
             <Head title="Notifications" />
 
+            <div className="space-y-6 p-6">
             {/* Page Header */}
             <div className="mb-6">
                 <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -202,7 +203,7 @@ export default function NotificationsIndex({
                     <CardContent className="pt-6">
                         <div className="text-center">
                             <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                                {stats.total}
+                                {stats?.total || 0}
                             </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                 Total
@@ -211,10 +212,10 @@ export default function NotificationsIndex({
                     </CardContent>
                 </Card>
                 <Card>
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-6 px-6">
                         <div className="text-center">
                             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                                {stats.unread}
+                                {stats?.unread || 0}
                             </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                 Unread
@@ -226,7 +227,7 @@ export default function NotificationsIndex({
                     <CardContent className="pt-6">
                         <div className="text-center">
                             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                                {stats.leave}
+                                {stats?.leave || 0}
                             </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                 Leave
@@ -238,7 +239,7 @@ export default function NotificationsIndex({
                     <CardContent className="pt-6">
                         <div className="text-center">
                             <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                                {stats.payroll}
+                                {stats?.payroll || 0}
                             </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                 Payroll
@@ -250,7 +251,7 @@ export default function NotificationsIndex({
                     <CardContent className="pt-6">
                         <div className="text-center">
                             <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                                {stats.attendance}
+                                {stats?.attendance || 0}
                             </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                 Attendance
@@ -269,7 +270,7 @@ export default function NotificationsIndex({
                             Filter & Actions
                         </CardTitle>
                         <div className="flex flex-col md:flex-row gap-2">
-                            {stats.unread > 0 && (
+                            {(stats?.unread || 0) > 0 && (
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -279,7 +280,7 @@ export default function NotificationsIndex({
                                     Mark All as Read
                                 </Button>
                             )}
-                            {stats.total > 0 && (
+                            {(stats?.total || 0) > 0 && (
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -305,10 +306,10 @@ export default function NotificationsIndex({
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Notifications</SelectItem>
-                                    <SelectItem value="leave">Leave ({stats.leave})</SelectItem>
-                                    <SelectItem value="payroll">Payroll ({stats.payroll})</SelectItem>
-                                    <SelectItem value="attendance">Attendance ({stats.attendance})</SelectItem>
-                                    <SelectItem value="system">System ({stats.system})</SelectItem>
+                                    <SelectItem value="leave">Leave ({stats?.leave || 0})</SelectItem>
+                                    <SelectItem value="payroll">Payroll ({stats?.payroll || 0})</SelectItem>
+                                    <SelectItem value="attendance">Attendance ({stats?.attendance || 0})</SelectItem>
+                                    <SelectItem value="system">System ({stats?.system || 0})</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -384,6 +385,7 @@ export default function NotificationsIndex({
                     </CardContent>
                 </Card>
             )}
+            </div>
         </AppLayout>
     );
 }

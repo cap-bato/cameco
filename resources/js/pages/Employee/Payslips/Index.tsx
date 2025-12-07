@@ -182,16 +182,15 @@ export default function PayslipsIndex({
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Payslips" />
 
-            <div className="mb-6 space-y-6 p-6">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Payslips
-                </h1>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                    View and download your payslips and salary history
-                </p>
-            </div>
-
             <div className="space-y-6 p-6">
+                <div className="mb-6">
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                        Payslips
+                    </h1>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                        View and download your payslips and salary history
+                    </p>
+                </div>
                 {/* Error Message */}
                 {error && (
                     <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-900/10">

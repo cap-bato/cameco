@@ -371,6 +371,7 @@ export default function LeaveBalances({
                     </CardContent>
                 </Card>
             </div>
+            </div>
         </AppLayout>
     );
 }
