@@ -2,10 +2,13 @@ import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Icon } from '@/components/icon';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuTrigger,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
     NavigationMenu,
@@ -32,7 +35,8 @@ import { cn, isSameUrl, resolveUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, Menu, Search, Bell, Calendar, DollarSign, Clock } from 'lucide-react';
+import { formatDistanceToNow, parseISO } from 'date-fns';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
 
@@ -193,6 +197,117 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                             >
                                 <Search className="!size-5 opacity-80 group-hover:opacity-100" />
                             </Button>
+
+                            {/* Notification Bell (Employee Portal Only) */}
+                            {auth.user.roles?.some((role: { name: string }) => role.name === 'Employee') && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="group h-9 w-9 cursor-pointer relative"
+                                        >
+                                            <Bell className="!size-5 opacity-80 group-hover:opacity-100" />
+                                            {auth.notifications?.unread_count > 0 && (
+                                                <Badge
+                                                    variant="destructive"
+                                                    className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                                                >
+                                                    {auth.notifications.unread_count > 99 ? '99+' : auth.notifications.unread_count}
+                                                </Badge>
+                                            )}
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-80">
+                                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                                            <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                                                Notifications
+                                            </h3>
+                                            {auth.notifications?.unread_count > 0 && (
+                                                <Badge variant="secondary" className="text-xs">
+                                                    {auth.notifications.unread_count} New
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        {auth.notifications?.recent && auth.notifications.recent.length > 0 ? (
+                                            <>
+                                                <div className="max-h-96 overflow-y-auto">
+                                                    {auth.notifications.recent.map((notification: {
+                                                        id: number;
+                                                        type: 'leave' | 'payroll' | 'attendance' | 'system';
+                                                        title: string;
+                                                        message: string;
+                                                        timestamp: string;
+                                                        read: boolean;
+                                                    }) => {
+                                                        const notificationIcon = {
+                                                            leave: Calendar,
+                                                            payroll: DollarSign,
+                                                            attendance: Clock,
+                                                            system: Bell,
+                                                        }[notification.type];
+                                                        const IconComponent = notificationIcon;
+                                                        const relativeTime = formatDistanceToNow(parseISO(notification.timestamp), { addSuffix: true });
+
+                                                        return (
+                                                            <DropdownMenuItem
+                                                                key={notification.id}
+                                                                asChild
+                                                            >
+                                                                <Link
+                                                                    href="/employee/notifications"
+                                                                    className={cn(
+                                                                        'flex items-start gap-3 p-3 cursor-pointer',
+                                                                        !notification.read && 'bg-blue-50/50 dark:bg-blue-950/20'
+                                                                    )}
+                                                                >
+                                                                    <IconComponent className="h-4 w-4 mt-0.5 flex-shrink-0 text-gray-500 dark:text-gray-400" />
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-2 mb-0.5">
+                                                                            <p className={cn(
+                                                                                'text-xs text-gray-900 dark:text-gray-100 truncate',
+                                                                                !notification.read && 'font-semibold'
+                                                                            )}>
+                                                                                {notification.title}
+                                                                            </p>
+                                                                            {!notification.read && (
+                                                                                <span className="h-2 w-2 bg-blue-600 dark:bg-blue-400 rounded-full flex-shrink-0" />
+                                                                            )}
+                                                                        </div>
+                                                                        <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-1">
+                                                                            {notification.message}
+                                                                        </p>
+                                                                        <p className="text-xs text-gray-500 dark:text-gray-500">
+                                                                            {relativeTime}
+                                                                        </p>
+                                                                    </div>
+                                                                </Link>
+                                                            </DropdownMenuItem>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem asChild>
+                                                    <Link
+                                                        href="/employee/notifications"
+                                                        className="flex items-center justify-center p-3 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 cursor-pointer"
+                                                    >
+                                                        View All Notifications
+                                                    </Link>
+                                                </DropdownMenuItem>
+                                            </>
+                                        ) : (
+                                            <div className="p-8 text-center">
+                                                <Bell className="h-8 w-8 mx-auto text-gray-400 dark:text-gray-600 mb-2" />
+                                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                    No new notifications
+                                                </p>
+                                            </div>
+                                        )}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
+
                             <div className="hidden lg:flex">
                                 {rightNavItems.map((item) => (
                                     <TooltipProvider

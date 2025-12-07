@@ -78,6 +78,15 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::delete('/requests/{id}', [LeaveRequestController::class, 'destroy'])->name('requests.destroy');
             Route::get('/balances', [LeaveBalanceController::class, 'index'])->name('balances');
             Route::get('/policies', [LeavePolicyController::class, 'index'])->name('policies');
+            
+            // Leave Policy CRUD (HR Manager only)
+            Route::middleware('permission:hr.leave-policies.create')->group(function () {
+                Route::post('/policies', [LeavePolicyController::class, 'store'])->name('policies.store');
+            });
+            Route::middleware('permission:hr.leave-policies.update')->group(function () {
+                Route::put('/policies/{policy}', [LeavePolicyController::class, 'update'])->name('policies.update');
+                Route::delete('/policies/{policy}', [LeavePolicyController::class, 'destroy'])->name('policies.destroy');
+            });
         });
 
         // Reports
