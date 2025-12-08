@@ -190,6 +190,35 @@ Route::middleware(['auth', 'verified', EnsureOfficeAdmin::class])
         });
 
         // ============================================================
+        // LEAVE BLACKOUT PERIODS (4.1. Blackout Period Management)
+        // ============================================================
+        Route::prefix('leave-blackouts')->name('leave-blackouts.')->group(function () {
+            // List blackout periods
+            Route::get('/', [\App\Http\Controllers\Admin\LeaveBlackoutController::class, 'index'])
+                ->middleware('permission:admin.leave-policies.view')
+                ->name('index');
+            
+            // Create blackout period
+            Route::post('/', [\App\Http\Controllers\Admin\LeaveBlackoutController::class, 'store'])
+                ->middleware('permission:admin.leave-policies.create')
+                ->name('store');
+            
+            // Update blackout period
+            Route::put('/{blackout}', [\App\Http\Controllers\Admin\LeaveBlackoutController::class, 'update'])
+                ->middleware('permission:admin.leave-policies.edit')
+                ->name('update');
+            
+            // Delete blackout period
+            Route::delete('/{blackout}', [\App\Http\Controllers\Admin\LeaveBlackoutController::class, 'destroy'])
+                ->middleware('permission:admin.leave-policies.delete')
+                ->name('destroy');
+            
+            // API: Check if date range conflicts with blackout
+            Route::post('/check', [\App\Http\Controllers\Admin\LeaveBlackoutController::class, 'checkBlackout'])
+                ->name('check');
+        });
+
+        // ============================================================
         // PAYROLL RULES (5. Payroll Rules Configuration)
         // ============================================================
         Route::prefix('payroll-rules')->name('payroll-rules.')->group(function () {
