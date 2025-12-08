@@ -195,13 +195,25 @@ class LeaveRequestController extends Controller
             'name' => $e->profile?->first_name . ' ' . $e->profile?->last_name,
         ])->toArray();
 
-        $leaveTypes = LeavePolicy::active()->orderBy('name')->get()->map(fn($p) => [
+        // Define priority order for leave types
+        $priorityOrder = [
+            'BL' => 1, // Bereavement Leave
+            'ML' => 2, // Maternity/Paternity Leave
+            'SL' => 3, // Sick Leave
+            'EL' => 4, // Emergency Leave
+            'SP' => 5, // Special Leave
+            'PL' => 6, // Privilege Leave
+            'VL' => 7, // Vacation Leave
+        ];
+
+        $leaveTypes = LeavePolicy::active()->get()->map(fn($p) => [
             'id' => $p->id,
             'code' => $p->code,
             'name' => $p->name,
             // include entitlement so frontend can show how many days this policy covers
             'annual_entitlement' => $p->annual_entitlement,
-        ])->toArray();
+            'priority' => $priorityOrder[strtoupper($p->code)] ?? 999, // Unknown codes go to end
+        ])->sortBy('priority')->values()->toArray();
 
         return Inertia::render('HR/Leave/CreateRequest', [
             'employees' => $employees,
@@ -270,11 +282,14 @@ class LeaveRequestController extends Controller
         }
 
         // STEP 3: Calculate number of days requested
-        $startDate = \Carbon\Carbon::parse($validated['start_date']);
-        $endDate = \Carbon\Carbon::parse($validated['end_date']);
-        // compute absolute difference (in case dates are accidentally swapped) and include both
-        // start and end dates (+1)
-        $daysRequested = (int) ($endDate->diffInDays($startDate, true) + 1);
+        $startDate = \Carbon\Carbon::parse($validated['start_date'])->startOfDay();
+        $endDate = \Carbon\Carbon::parse($validated['end_date'])->startOfDay();
+        
+        // Calculate days from start to end (inclusive of both dates)
+        // For same day: diffInDays = 0, so 0 + 1 = 1 day
+        // For consecutive days: diffInDays = 1, so 1 + 1 = 2 days
+        $daysDiff = $startDate->diffInDays($endDate);
+        $daysRequested = (int) ($daysDiff + 1);
 
         // STEP 3.5: Check leave balance (prevent filing when remaining is 0) unless policy is Emergency
         $year = $startDate->year;
@@ -323,28 +338,40 @@ class LeaveRequestController extends Controller
         // HR staff will still process/deduct balances during approval, but initial validation
         // is performed at request submission to prevent requests exceeding entitlement or balance.
 
-        // STEP 4: Create leave request record in database
-        // Status starts as "Pending" - awaiting supervisor approval
+        // STEP 4: Determine if this is a 1-day leave request (auto-approve)
+        $isOneDayLeave = ($daysRequested === 1);
+        $initialStatus = $isOneDayLeave ? 'approved' : 'pending';
+
+        // Debug logging
+        \Log::info('Leave Request Submission', [
+            'days_requested' => $daysRequested,
+            'is_one_day' => $isOneDayLeave,
+            'status' => $initialStatus,
+            'start_date' => $validated['start_date'],
+            'end_date' => $validated['end_date'],
+        ]);
+
+        // STEP 5: Create leave request record in database
+        // Status starts as "Approved" for 1-day leaves, "Pending" for multi-day leaves
         $leaveRequestData = [
             'employee_id' => $employee->id,
             'leave_policy_id' => $validated['leave_policy_id'],
-            'leave_type' => $policy->name,
             'start_date' => $validated['start_date'],
             'end_date' => $validated['end_date'],
             'days_requested' => $daysRequested,
             'reason' => $validated['reason'] ?? '',
-            'status' => 'pending', // Initial status: awaiting supervisor approval
+            'status' => $initialStatus, // Auto-approved for 1 day, pending for multi-day
             'submitted_by' => auth()->id(), // HR Staff who entered the request
             'submitted_at' => now(),
             'supervisor_id' => $employee->immediate_supervisor_id, // Route to supervisor for approval
-            'supervisor_comments' => null,
-            'supervisor_approved_at' => null,
+            'supervisor_comments' => $isOneDayLeave ? 'Auto-approved (1-day leave)' : null,
+            'supervisor_approved_at' => $isOneDayLeave ? now() : null,
             'manager_id' => null,
-            'manager_comments' => null,
-            'manager_approved_at' => null,
+            'manager_comments' => $isOneDayLeave ? 'Auto-approved (1-day leave)' : null,
+            'manager_approved_at' => $isOneDayLeave ? now() : null,
             'hr_notes' => $validated['hr_notes'] ?? '',
-            'hr_processed_by' => null,
-            'hr_processed_at' => null,
+            'hr_processed_by' => $isOneDayLeave ? auth()->id() : null,
+            'hr_processed_at' => $isOneDayLeave ? now() : null,
             'cancellation_reason' => null,
             'cancelled_at' => null,
         ];
@@ -352,13 +379,40 @@ class LeaveRequestController extends Controller
         // Persist to database
         $leaveRequest = LeaveRequest::create($leaveRequestData);
 
-        // STEP 5: Send notification to supervisor
-        // Supervisor receives notification to review and approve/reject request
+        // STEP 6: Deduct leave balance immediately for auto-approved 1-day leaves
+        if ($isOneDayLeave && !$isEmergency) {
+            if ($balance) {
+                // Update existing balance record
+                $balance->used = (float) $balance->used + 1.0;
+                $balance->remaining = (float) $balance->remaining - 1.0;
+                $balance->save();
+            } else {
+                // Create new balance record with deduction
+                $entitlement = $policy->annual_entitlement ? (float) $policy->annual_entitlement : 0.0;
+                LeaveBalance::create([
+                    'employee_id' => $validated['employee_id'],
+                    'leave_policy_id' => $validated['leave_policy_id'],
+                    'year' => $year,
+                    'earned' => $entitlement,
+                    'used' => 1.0,
+                    'remaining' => $entitlement - 1.0,
+                    'carried_forward' => 0.0,
+                ]);
+            }
+        }
+
+        // STEP 7: Send notification based on status
+        // For 1-day leaves: Notify employee of auto-approval
+        // For multi-day leaves: Notify supervisor to review and approve/reject
         // Example: Mail::send(new LeaveRequestSubmittedNotification($employee, $leaveRequest));
+
+        $successMessage = $isOneDayLeave 
+            ? "Leave request for {$employee->profile->first_name} {$employee->profile->last_name} has been auto-approved (1-day leave)."
+            : "Leave request for {$employee->profile->first_name} {$employee->profile->last_name} has been submitted successfully. Awaiting supervisor approval.";
 
         // Always redirect to the leave requests list after filing
         return redirect()->route('hr.leave.requests')
-            ->with('success', "Leave request for {$employee->profile->first_name} {$employee->profile->last_name} has been submitted successfully. Awaiting supervisor approval.");
+            ->with('success', $successMessage);
     }
 
     /**
