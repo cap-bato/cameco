@@ -62,13 +62,32 @@ interface TestResult {
 }
 
 interface WorkflowTesterProps {
-    approvalRules: ApprovalRules;
-    leaveTypes: LeaveType[];
+    approvalRules?: ApprovalRules;
+    leaveTypes?: LeaveType[];
 }
 
-export function WorkflowTester({ approvalRules, leaveTypes }: WorkflowTesterProps) {
+export function WorkflowTester({ approvalRules, leaveTypes = [] }: WorkflowTesterProps) {
+    // Provide default values if approvalRules is undefined
+    const rules: ApprovalRules = approvalRules || {
+        duration_threshold_days: 3,
+        duration_tier2_days: 7,
+        balance_threshold_days: 5,
+        balance_warning_enabled: true,
+        advance_notice_days: 3,
+        short_notice_requires_approval: true,
+        coverage_threshold_percentage: 20,
+        coverage_warning_enabled: true,
+        unpaid_leave_requires_manager: true,
+        maternity_requires_admin: true,
+        blackout_periods_enabled: false,
+        blackout_dates: [],
+        frequency_limit_enabled: false,
+        frequency_max_requests: 3,
+        frequency_period_days: 30,
+    };
+
     const [testScenario, setTestScenario] = useState<TestScenario>({
-        leaveType: leaveTypes[0]?.code || 'VL',
+        leaveType: leaveTypes?.[0]?.code || 'VL',
         duration: 1,
         coverageImpact: 90,
         advanceNotice: 7,
@@ -87,17 +106,17 @@ export function WorkflowTester({ approvalRules, leaveTypes }: WorkflowTesterProp
         const selectedLeave = leaveTypes.find(lt => lt.code === testScenario.leaveType);
 
         // Rule 1: Duration-based escalation
-        if (testScenario.duration >= approvalRules.duration_tier2_days) {
+        if (testScenario.duration >= rules.duration_tier2_days) {
             approvalTier = 'office_admin';
-            escalationReasons.push(`Duration (${testScenario.duration} days) exceeds Office Admin threshold (${approvalRules.duration_tier2_days} days)`);
-        } else if (testScenario.duration >= approvalRules.duration_threshold_days) {
+            escalationReasons.push(`Duration (${testScenario.duration} days) exceeds Office Admin threshold (${rules.duration_tier2_days} days)`);
+        } else if (testScenario.duration >= rules.duration_threshold_days) {
             approvalTier = 'hr_manager';
-            escalationReasons.push(`Duration (${testScenario.duration} days) exceeds HR Manager threshold (${approvalRules.duration_threshold_days} days)`);
+            escalationReasons.push(`Duration (${testScenario.duration} days) exceeds HR Manager threshold (${rules.duration_threshold_days} days)`);
         }
 
         // Rule 2: Balance threshold warning
-        if (approvalRules.balance_warning_enabled && testScenario.balanceAfter < approvalRules.balance_threshold_days) {
-            warnings.push(`⚠️ Balance after leave (${testScenario.balanceAfter} days) is below warning threshold (${approvalRules.balance_threshold_days} days)`);
+        if (rules.balance_warning_enabled && testScenario.balanceAfter < rules.balance_threshold_days) {
+            warnings.push(`⚠️ Balance after leave (${testScenario.balanceAfter} days) is below warning threshold (${rules.balance_threshold_days} days)`);
             if (approvalTier === 'hr_staff') {
                 approvalTier = 'hr_manager';
                 escalationReasons.push('Low balance requires manager approval');
@@ -105,39 +124,39 @@ export function WorkflowTester({ approvalRules, leaveTypes }: WorkflowTesterProp
         }
 
         // Rule 3: Advance notice
-        if (approvalRules.short_notice_requires_approval && testScenario.advanceNotice < approvalRules.advance_notice_days) {
+        if (rules.short_notice_requires_approval && testScenario.advanceNotice < rules.advance_notice_days) {
             if (approvalTier === 'hr_staff') {
                 approvalTier = 'hr_manager';
-                escalationReasons.push(`Short notice (${testScenario.advanceNotice} days) requires manager approval (minimum ${approvalRules.advance_notice_days} days)`);
+                escalationReasons.push(`Short notice (${testScenario.advanceNotice} days) requires manager approval (minimum ${rules.advance_notice_days} days)`);
             } else {
-                warnings.push(`⚠️ Advance notice (${testScenario.advanceNotice} days) is less than required (${approvalRules.advance_notice_days} days)`);
+                warnings.push(`⚠️ Advance notice (${testScenario.advanceNotice} days) is less than required (${rules.advance_notice_days} days)`);
             }
         }
 
         // Rule 4: Workforce coverage
-        if (approvalRules.coverage_warning_enabled && testScenario.coverageImpact < approvalRules.coverage_threshold_percentage) {
-            warnings.push(`⚠️ Coverage impact (${testScenario.coverageImpact}%) is below threshold (${approvalRules.coverage_threshold_percentage}%)`);
+        if (rules.coverage_warning_enabled && testScenario.coverageImpact < rules.coverage_threshold_percentage) {
+            warnings.push(`⚠️ Coverage impact (${testScenario.coverageImpact}%) is below threshold (${rules.coverage_threshold_percentage}%)`);
             if (approvalTier === 'hr_staff') {
                 approvalTier = 'hr_manager';
-                escalationReasons.push(`Workforce coverage (${testScenario.coverageImpact}%) below minimum (${approvalRules.coverage_threshold_percentage}%)`);
+                escalationReasons.push(`Workforce coverage (${testScenario.coverageImpact}%) below minimum (${rules.coverage_threshold_percentage}%)`);
             }
         }
 
         // Rule 5: Leave type specific
-        if (selectedLeave && !selectedLeave.is_paid && approvalRules.unpaid_leave_requires_manager) {
+        if (selectedLeave && !selectedLeave.is_paid && rules.unpaid_leave_requires_manager) {
             if (approvalTier === 'hr_staff') {
                 approvalTier = 'hr_manager';
                 escalationReasons.push('Unpaid leave requires manager approval');
             }
         }
 
-        if (testScenario.leaveType === 'MATERNITY' && approvalRules.maternity_requires_admin) {
+        if (testScenario.leaveType === 'MATERNITY' && rules.maternity_requires_admin) {
             approvalTier = 'office_admin';
             escalationReasons.push('Maternity leave requires Office Admin approval');
         }
 
         // Rule 6: Blackout periods (simplified - would need actual date checking)
-        if (approvalRules.blackout_periods_enabled && approvalRules.blackout_dates.length > 0) {
+        if (rules.blackout_periods_enabled && rules.blackout_dates.length > 0) {
             warnings.push('⚠️ Check blackout period calendar before approval');
         }
 
@@ -217,7 +236,7 @@ export function WorkflowTester({ approvalRules, leaveTypes }: WorkflowTesterProp
                                 onChange={(e) => setTestScenario({ ...testScenario, duration: parseInt(e.target.value) || 1 })}
                             />
                             <p className="text-xs text-muted-foreground">
-                                HR Manager: {approvalRules.duration_threshold_days}+ days | Office Admin: {approvalRules.duration_tier2_days}+ days
+                                HR Manager: {rules.duration_threshold_days}+ days | Office Admin: {rules.duration_tier2_days}+ days
                             </p>
                         </div>
 
@@ -232,7 +251,7 @@ export function WorkflowTester({ approvalRules, leaveTypes }: WorkflowTesterProp
                                 onChange={(e) => setTestScenario({ ...testScenario, coverageImpact: parseInt(e.target.value) || 0 })}
                             />
                             <p className="text-xs text-muted-foreground">
-                                Minimum threshold: {approvalRules.coverage_threshold_percentage}%
+                                Minimum threshold: {rules.coverage_threshold_percentage}%
                             </p>
                         </div>
 
@@ -247,7 +266,7 @@ export function WorkflowTester({ approvalRules, leaveTypes }: WorkflowTesterProp
                                 onChange={(e) => setTestScenario({ ...testScenario, advanceNotice: parseInt(e.target.value) || 0 })}
                             />
                             <p className="text-xs text-muted-foreground">
-                                Required: {approvalRules.advance_notice_days} days minimum
+                                Required: {rules.advance_notice_days} days minimum
                             </p>
                         </div>
 
@@ -262,7 +281,7 @@ export function WorkflowTester({ approvalRules, leaveTypes }: WorkflowTesterProp
                                 onChange={(e) => setTestScenario({ ...testScenario, balanceAfter: parseInt(e.target.value) || 0 })}
                             />
                             <p className="text-xs text-muted-foreground">
-                                Warning threshold: {approvalRules.balance_threshold_days} days
+                                Warning threshold: {rules.balance_threshold_days} days
                             </p>
                         </div>
                     </div>
