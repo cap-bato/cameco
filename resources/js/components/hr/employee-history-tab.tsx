@@ -37,7 +37,119 @@ interface EmployeeHistoryTabProps {
     auditLogs?: AuditLog[];
 }
 
-export function EmployeeHistoryTab({ auditLogs = [] }: EmployeeHistoryTabProps) {
+// Mock data for demonstration
+const mockAuditLogs: AuditLog[] = [
+    {
+        id: 1,
+        action: 'created',
+        description: 'Employee record created during onboarding process',
+        changes: [
+            { field: 'Employee Number', old_value: null, new_value: 'EMP-2024-001' },
+            { field: 'Status', old_value: null, new_value: 'Active' },
+            { field: 'Employment Type', old_value: null, new_value: 'Probationary' },
+        ],
+        performed_by: {
+            name: 'HR Staff',
+            role: 'HR Staff',
+        },
+        performed_at: '2024-01-15T09:30:00Z',
+        ip_address: '192.168.1.105',
+    },
+    {
+        id: 2,
+        action: 'updated',
+        description: 'Updated personal information after document verification',
+        changes: [
+            { field: 'Phone Number', old_value: '0917-123-4567', new_value: '0917-987-6543' },
+            { field: 'Current Address', old_value: '123 Old St, Manila', new_value: '456 New Ave, Quezon City' },
+        ],
+        performed_by: {
+            name: 'HR Staff',
+            role: 'HR Staff',
+        },
+        performed_at: '2024-01-20T14:15:00Z',
+        ip_address: '192.168.1.105',
+    },
+    {
+        id: 3,
+        action: 'updated',
+        description: 'Government IDs updated after verification',
+        changes: [
+            { field: 'SSS Number', old_value: null, new_value: '34-1234567-8' },
+            { field: 'PhilHealth Number', old_value: null, new_value: '12-345678901-2' },
+            { field: 'Pag-IBIG Number', old_value: null, new_value: '1234-5678-9012' },
+        ],
+        performed_by: {
+            name: 'HR Staff',
+            role: 'HR Staff',
+        },
+        performed_at: '2024-02-05T10:00:00Z',
+        ip_address: '192.168.1.105',
+    },
+    {
+        id: 4,
+        action: 'updated',
+        description: 'Department transfer approved by HR Manager',
+        changes: [
+            { field: 'Department', old_value: 'IT Department', new_value: 'Engineering Department' },
+            { field: 'Position', old_value: 'Junior Developer', new_value: 'Software Engineer' },
+            { field: 'Supervisor', old_value: 'John Doe', new_value: 'Jane Smith' },
+        ],
+        performed_by: {
+            name: 'HR Manager',
+            role: 'HR Manager',
+        },
+        performed_at: '2024-03-10T11:30:00Z',
+        ip_address: '192.168.1.102',
+    },
+    {
+        id: 5,
+        action: 'status_changed',
+        description: 'Employment status changed from Probationary to Regular after successful evaluation',
+        changes: [
+            { field: 'Employment Type', old_value: 'Probationary', new_value: 'Regular' },
+            { field: 'Regularization Date', old_value: null, new_value: '2024-07-15' },
+        ],
+        performed_by: {
+            name: 'HR Manager',
+            role: 'HR Manager',
+        },
+        performed_at: '2024-07-15T16:00:00Z',
+        ip_address: '192.168.1.102',
+    },
+    {
+        id: 6,
+        action: 'updated',
+        description: 'Updated emergency contact information',
+        changes: [
+            { field: 'Emergency Contact Name', old_value: 'Maria Santos', new_value: 'Juan Santos' },
+            { field: 'Emergency Contact Phone', old_value: '0917-111-2222', new_value: '0917-333-4444' },
+            { field: 'Emergency Contact Relationship', old_value: 'Mother', new_value: 'Father' },
+        ],
+        performed_by: {
+            name: 'HR Staff',
+            role: 'HR Staff',
+        },
+        performed_at: '2024-09-20T13:45:00Z',
+        ip_address: '192.168.1.105',
+    },
+    {
+        id: 7,
+        action: 'updated',
+        description: 'Salary adjustment after performance review',
+        changes: [
+            { field: 'Basic Salary', old_value: '₱25,000', new_value: '₱28,000' },
+        ],
+        performed_by: {
+            name: 'HR Manager',
+            role: 'HR Manager',
+        },
+        performed_at: '2024-11-01T10:00:00Z',
+        ip_address: '192.168.1.102',
+    },
+];
+
+export function EmployeeHistoryTab({ employeeId, auditLogs = mockAuditLogs }: EmployeeHistoryTabProps) {
     const [selectedFilter, setSelectedFilter] = useState<string>('all');
 
     const actionFilters = [
@@ -231,18 +343,21 @@ export function EmployeeHistoryTab({ auditLogs = [] }: EmployeeHistoryTabProps) 
                 </div>
             )}
 
-            {/* Coming Soon Notice */}
-            <Card className="p-6 bg-amber-50 border-amber-200">
+            {/* Development Notice */}
+            <Card className="p-6 bg-blue-50 border-blue-200">
                 <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
                     <div>
-                        <h4 className="font-semibold text-amber-900 mb-1">
-                            Audit Logging Coming Soon
+                        <h4 className="font-semibold text-blue-900 mb-1">
+                            Audit History System (Demonstration)
                         </h4>
-                        <p className="text-sm text-amber-800">
-                            Comprehensive audit logging is currently under development. Once implemented, 
-                            all changes to employee records will be automatically tracked and displayed here 
-                            with full details including who made the change, when, and what was modified.
+                        <p className="text-sm text-blue-800 mb-2">
+                            <strong>Currently showing:</strong> Mock audit history data for demonstration purposes.
+                        </p>
+                        <p className="text-sm text-blue-800">
+                            Full audit logging will be implemented in Phase 4, tracking all changes to employee records including:
+                            status changes, department transfers, salary adjustments, document uploads, and personal information updates.
+                            Each log will include user details, IP address, timestamp, and detailed field changes.
                         </p>
                     </div>
                 </div>

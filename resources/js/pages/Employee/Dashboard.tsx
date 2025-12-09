@@ -241,7 +241,7 @@ export default function Dashboard({ employee, quickStats, recentActivity, error 
                                                         <p className="text-sm font-medium">
                                                             {activity.title}
                                                         </p>
-                                                        {activity.status && statusCfg && (
+                                                        {activity.status && statusCfg && StatusIcon && (
                                                             <Badge variant={statusCfg.variant} className="gap-1">
                                                                 <StatusIcon className="h-3 w-3" />
                                                                 {activity.status}
@@ -363,8 +363,7 @@ export default function Dashboard({ employee, quickStats, recentActivity, error 
                             </CardContent>
                         </Card>
                     </div>
-                </Card>
-            </div>
+                </div>
             </div>
         </AppLayout>
     );

@@ -653,11 +653,11 @@ export default function ShowEmployee({ employee }: ShowEmployeeProps) {
                             <MessageSquare className="h-4 w-4" />
                             Remarks
                         </TabsTrigger>
-                        <TabsTrigger value="documents" className="gap-2" disabled>
+                        <TabsTrigger value="documents" className="gap-2">
                             <FileText className="h-4 w-4" />
                             Documents
                         </TabsTrigger>
-                        <TabsTrigger value="history" className="gap-2" disabled>
+                        <TabsTrigger value="history" className="gap-2">
                             <History className="h-4 w-4" />
                             History
                         </TabsTrigger>

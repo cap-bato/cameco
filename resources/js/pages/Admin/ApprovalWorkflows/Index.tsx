@@ -56,8 +56,8 @@ interface LeaveType {
 }
 
 interface ApprovalWorkflowsIndexProps {
-    approvalRules: LeaveApprovalRules;
-    leaveTypes: LeaveType[];
+    approvalRules?: LeaveApprovalRules;
+    leaveTypes?: LeaveType[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -75,7 +75,27 @@ export default function ApprovalWorkflowsIndex({ approvalRules, leaveTypes }: Ap
     const { toast } = useToast();
     const [activeTab, setActiveTab] = useState('leave');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [formData, setFormData] = useState<LeaveApprovalRules>(approvalRules);
+    
+    // Provide default values if approvalRules is null/undefined
+    const defaultRules: LeaveApprovalRules = {
+        duration_threshold_days: 3,
+        duration_tier2_days: 7,
+        balance_threshold_days: 5,
+        balance_warning_enabled: true,
+        advance_notice_days: 3,
+        short_notice_requires_approval: true,
+        coverage_threshold_percentage: 20,
+        coverage_warning_enabled: true,
+        unpaid_leave_requires_manager: true,
+        maternity_requires_admin: true,
+        blackout_periods_enabled: false,
+        blackout_dates: [],
+        frequency_limit_enabled: false,
+        frequency_max_requests: 3,
+        frequency_period_days: 30,
+    };
+    
+    const [formData, setFormData] = useState<LeaveApprovalRules>(approvalRules || defaultRules);
     const [hasChanges, setHasChanges] = useState(false);
 
     const handleRuleChange = (field: keyof LeaveApprovalRules, value: number | boolean | BlackoutDate[]) => {
@@ -154,7 +174,7 @@ export default function ApprovalWorkflowsIndex({ approvalRules, leaveTypes }: Ap
                                 <div>
                                     <p className="text-sm font-medium text-muted-foreground">Leave Approval</p>
                                     <p className="text-2xl font-bold">
-                                        {Object.values(formData).filter(v => typeof v === 'boolean' && v).length} Rules Active
+                                        {formData ? Object.values(formData).filter(v => typeof v === 'boolean' && v).length : 0} Rules Active
                                     </p>
                                     <Badge variant="default" className="mt-1">Fully Implemented</Badge>
                                 </div>

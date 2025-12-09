@@ -326,7 +326,8 @@ class EmployeeSeeder extends Seeder
                     'pagibig_number' => '9012-3456-7890',
                 ],
                 'employee' => [
-                    'email' => 'diego.villanueva@cameco.com',
+                    'email' => '
+                    ',
                     'employee_number' => 'EMP-2024-0009',
                     'department_id' => $sales?->id,
                     'position_id' => $salesRep?->id,
@@ -390,8 +391,34 @@ class EmployeeSeeder extends Seeder
             // Create profile
             $profile = Profile::create($data['profile']);
 
-            // Create employee
-            $employeeData = array_merge($data['employee'], ['profile_id' => $profile->id, 'created_by' => $createdBy, 'updated_by' => $createdBy]);
+            // Create user account for the employee
+            $user = User::create([
+                'name' => $data['profile']['first_name'] . ' ' . $data['profile']['last_name'],
+                'email' => $data['employee']['email'],
+                'username' => strtolower($data['profile']['first_name']) . '.' . strtolower($data['profile']['last_name']),
+                'password' => 'password', // Default password
+                'email_verified_at' => now(),
+            ]);
+
+            // Assign Employee role
+            if (method_exists($user, 'assignRole')) {
+                try {
+                    $user->assignRole('Employee');
+                } catch (\Throwable $e) {
+                    // ignore assignment errors during seeding
+                }
+            }
+
+            // Create employee record with user_id
+            $employeeData = array_merge(
+                $data['employee'], 
+                [
+                    'profile_id' => $profile->id, 
+                    'user_id' => $user->id,
+                    'created_by' => $createdBy, 
+                    'updated_by' => $createdBy
+                ]
+            );
             $employee = Employee::create($employeeData);
 
             $createdEmployees[$data['employee']['employee_number']] = $employee;

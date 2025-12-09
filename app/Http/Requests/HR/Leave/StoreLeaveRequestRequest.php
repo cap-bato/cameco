@@ -19,7 +19,7 @@ class StoreLeaveRequestRequest extends FormRequest
             // ensure we have a leave_policy_id after normalization (prepareForValidation)
             'leave_policy_id' => 'required|exists:leave_policies,id',
             'leave_type_id' => 'nullable|exists:leave_policies,id',
-            'start_date' => 'required|date|after_or_equal:today',
+            'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
             'reason' => 'required|string|max:1000',
             'hr_notes' => 'required|string|max:1000',
