@@ -90,16 +90,23 @@ export default function DepartmentIndex({
     statistics = {}
 }: DepartmentIndexProps) {
     const { hasPermission } = usePermission();
+    const page = usePage();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
     const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
     const [expandedDepts, setExpandedDepts] = useState<Set<number>>(new Set());
 
+    // Detect if accessed from Admin or HR context
+    const isAdminContext = page.url.startsWith('/admin');
+    const routePrefix = isAdminContext ? '/admin' : '/hr';
+
     useEffect(() => {
-        if (!hasPermission('hr.departments.manage')) {
-            router.visit('/hr/dashboard');
+        // Check if user has either HR manage or Admin view permission
+        const hasAccess = hasPermission('hr.departments.manage') || hasPermission('admin.departments.view');
+        if (!hasAccess) {
+            router.visit(isAdminContext ? '/admin/dashboard' : '/hr/dashboard');
         }
-    }, [hasPermission]);
+    }, [hasPermission, isAdminContext]);
 
     const departmentTree = useMemo(() => buildDepartmentTree(departments), [departments]);
 
@@ -137,8 +144,8 @@ export default function DepartmentIndex({
 
     const handleModalSubmit = async (data: Omit<Department, 'id' | 'employee_count'>) => {
         const url = modalMode === 'create'
-            ? '/hr/departments'
-            : `/hr/departments/${selectedDepartment?.id}`;
+            ? `${routePrefix}/departments`
+            : `${routePrefix}/departments/${selectedDepartment?.id}`;
 
         const method = modalMode === 'create' ? 'post' : 'put';
 
@@ -151,7 +158,7 @@ export default function DepartmentIndex({
 
     const handleArchive = (dept: Department) => {
         if (confirm(`Are you sure you want to archive "${dept.name}"?`)) {
-            router.delete(`/hr/departments/${dept.id}`);
+            router.delete(`${routePrefix}/departments/${dept.id}`);
         }
     };
 

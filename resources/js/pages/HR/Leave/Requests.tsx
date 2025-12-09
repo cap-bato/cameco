@@ -117,8 +117,9 @@ export default function LeaveRequests({ requests, meta }: LeaveRequestsProps) {
     ];
 
     // Check permission for creating leave requests
-    const canCreate = usePermission('hr.leave-requests.create');
-    const canApprove = usePermission('hr.leave-requests.approve');
+    const { hasPermission } = usePermission();
+    const canCreate = hasPermission('hr.leave-requests.create');
+    const canApprove = hasPermission('hr.leave-requests.approve');
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>

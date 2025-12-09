@@ -223,68 +223,67 @@ export default function CreateEditScheduleModal({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!validateForm()) return;
+        if (!validateForm() || isLoading) return;
 
         setIsLoading(true);
-        try {
-            const submitData: Record<string, any> = {
-                name: formData.name,
-                description: formData.description,
-                effective_date: formData.effective_date,
-                department_id: formData.department_id || null,
-                status: formData.status,
-            };
 
-            // Map all days - set times for work days, clear for rest days
-            const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-            DAYS.forEach((day) => {
-                const dayKey = day.toLowerCase();
-                const times = formData.shift_pattern[day];
-                
-                if (times && times.start_time && times.end_time) {
-                    // Format time - add :00 only if not present
-                    const formatTime = (timeStr: string) => {
-                        if (timeStr.split(':').length === 3) {
-                            return timeStr; // Already has seconds
-                        }
-                        return timeStr + ':00'; // Add seconds
-                    };
-                    submitData[`${dayKey}_start`] = formatTime(times.start_time);
-                    submitData[`${dayKey}_end`] = formatTime(times.end_time);
-                } else {
-                    // Clear times for rest days or days without times set
-                    submitData[`${dayKey}_start`] = null;
-                    submitData[`${dayKey}_end`] = null;
-                }
-            });
+        const submitData: Record<string, any> = {
+            name: formData.name,
+            description: formData.description,
+            effective_date: formData.effective_date,
+            department_id: formData.department_id || null,
+            status: formData.status,
+        };
 
-            if (isEditing && schedule?.id) {
-                // Update existing schedule - use PUT method
-                router.put(`/hr/workforce/schedules/${schedule.id}`, submitData, {
-                    onSuccess: () => {
-                        onClose();
-                        // Refresh the page to get fresh data from server
-                        window.location.reload();
-                    },
-                    onError: (errors) => {
-                        setErrors(errors as Record<string, string>);
-                    },
-                });
+        // Map all days - set times for work days, clear for rest days
+        const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        DAYS.forEach((day) => {
+            const dayKey = day.toLowerCase();
+            const times = formData.shift_pattern[day];
+            
+            if (times && times.start_time && times.end_time) {
+                // Format time - add :00 only if not present
+                const formatTime = (timeStr: string) => {
+                    if (timeStr.split(':').length === 3) {
+                        return timeStr; // Already has seconds
+                    }
+                    return timeStr + ':00'; // Add seconds
+                };
+                submitData[`${dayKey}_start`] = formatTime(times.start_time);
+                submitData[`${dayKey}_end`] = formatTime(times.end_time);
             } else {
-                // Create new schedule - use POST method
-                router.post('/hr/workforce/schedules', submitData, {
-                    onSuccess: () => {
-                        onClose();
-                        // Refresh the page to get fresh data from server
-                        window.location.reload();
-                    },
-                    onError: (errors) => {
-                        setErrors(errors as Record<string, string>);
-                    },
-                });
+                // Clear times for rest days or days without times set
+                submitData[`${dayKey}_start`] = null;
+                submitData[`${dayKey}_end`] = null;
             }
-        } finally {
-            setIsLoading(false);
+        });
+
+        if (isEditing && schedule?.id) {
+            // Update existing schedule - use PUT method
+            router.put(`/hr/workforce/schedules/${schedule.id}`, submitData, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setIsLoading(false);
+                    onClose();
+                },
+                onError: (errors) => {
+                    setErrors(errors as Record<string, string>);
+                    setIsLoading(false);
+                },
+            });
+        } else {
+            // Create new schedule - use POST method
+            router.post('/hr/workforce/schedules', submitData, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setIsLoading(false);
+                    onClose();
+                },
+                onError: (errors) => {
+                    setErrors(errors as Record<string, string>);
+                    setIsLoading(false);
+                },
+            });
         }
     };
 
@@ -511,8 +510,18 @@ export default function CreateEditScheduleModal({
                         <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={isLoading}>
-                            {isLoading ? 'Saving...' : isEditing ? 'Update Schedule' : 'Create Schedule'}
+                        <Button type="submit" disabled={isLoading} className="min-w-[140px]">
+                            {isLoading ? (
+                                <>
+                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    {isEditing ? 'Updating...' : 'Creating...'}
+                                </>
+                            ) : (
+                                isEditing ? 'Update Schedule' : 'Create Schedule'
+                            )}
                         </Button>
                     </div>
                 </form>

@@ -9,11 +9,13 @@ class PositionPolicy
 {
     /**
      * Determine if the user can view any positions.
-     * Note: All HR users can VIEW positions, but only HR Manager can MANAGE them.
+     * Note: HR users and Office Admin can VIEW positions.
      */
     public function viewAny(User $user): bool
     {
-        return $user->can('hr.positions.view') || $user->can('hr.dashboard.view');
+        return $user->can('hr.positions.view') 
+            || $user->can('hr.dashboard.view')
+            || $user->can('admin.positions.view');
     }
 
     /**
@@ -21,33 +23,38 @@ class PositionPolicy
      */
     public function view(User $user, Position $position): bool
     {
-        return $user->can('hr.positions.view') || $user->can('hr.dashboard.view');
+        return $user->can('hr.positions.view') 
+            || $user->can('hr.dashboard.view')
+            || $user->can('admin.positions.view');
     }
 
     /**
      * Determine if the user can create positions.
-     * Only HR Manager can manage positions.
+     * HR Manager and Office Admin can manage positions.
      */
     public function create(User $user): bool
     {
-        return $user->can('hr.positions.manage');
+        return $user->can('hr.positions.manage')
+            || $user->can('admin.positions.create');
     }
 
     /**
      * Determine if the user can update a position.
-     * Only HR Manager can manage positions.
+     * HR Manager and Office Admin can manage positions.
      */
     public function update(User $user, Position $position): bool
     {
-        return $user->can('hr.positions.manage');
+        return $user->can('hr.positions.manage')
+            || $user->can('admin.positions.edit');
     }
 
     /**
      * Determine if the user can delete a position.
-     * Only HR Manager can manage positions.
+     * HR Manager and Office Admin can manage positions.
      */
     public function delete(User $user, Position $position): bool
     {
-        return $user->can('hr.positions.manage');
+        return $user->can('hr.positions.manage')
+            || $user->can('admin.positions.delete');
     }
 }

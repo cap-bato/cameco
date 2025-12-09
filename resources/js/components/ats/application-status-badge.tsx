@@ -1,7 +1,7 @@
 import type { ApplicationStatus } from '@/types/ats-pages';
 
 interface ApplicationStatusBadgeProps {
-  status: ApplicationStatus;
+  status: ApplicationStatus | null | undefined;
 }
 
 const statusConfig: Record<
@@ -17,12 +17,12 @@ const statusConfig: Record<
   withdrawn: { label: 'Withdrawn', bgColor: 'bg-gray-100', textColor: 'text-gray-800' },
 };
 
-/**
- * Application Status Badge Component
- * Displays application status with color-coding
- */
 export function ApplicationStatusBadge({ status }: ApplicationStatusBadgeProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status as ApplicationStatus] ?? {
+    label: 'New',
+    bgColor: 'bg-yellow-100',
+    textColor: 'text-yellow-800',
+  };
 
   return (
     <span

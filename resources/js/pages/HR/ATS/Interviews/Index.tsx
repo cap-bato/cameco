@@ -1,5 +1,6 @@
+// InterviewsIndex.tsx
 import React, { useState } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +16,7 @@ import { InterviewTable } from '@/components/ats/interview-table';
 import { InterviewScheduleModal } from '@/components/ats/interview-schedule-modal';
 import type { PageProps } from '@inertiajs/core';
 import type { Interview, InterviewStatus } from '@/types/ats-pages';
+import axios from 'axios';
 
 interface InterviewsIndexProps extends PageProps {
   interviews: Interview[];
@@ -35,38 +37,35 @@ const breadcrumbs = [
   { title: 'Interviews', href: '/hr/ats/interviews' },
 ];
 
-/**
- * Interviews Index Page
- * Displays all interviews with calendar view (month/week/day) or list view
- * Supports scheduling new interviews, viewing details, rescheduling, and feedback
- */
-export default function InterviewsIndex({
-  interviews,
-  statistics,
-}: InterviewsIndexProps) {
+export default function InterviewsIndex({ interviews, statistics }: InterviewsIndexProps) {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month');
+
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+  const [selectedInterview, setSelectedInterview] = useState<Interview | null>(null);
+
   const [filterStatus, setFilterStatus] = useState<InterviewStatus | 'all'>('all');
   const [filterInterviewer, setFilterInterviewer] = useState<string>('all');
 
-  // Get unique interviewers for filter dropdown
+  const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(null);
+  const [selectedJobTitle, setSelectedJobTitle] = useState<string>('');
+  const [selectedInterviewer, setSelectedInterviewer] = useState<string>('');
+
+  // Feedback States
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedback, setFeedback] = useState<string>('');
+
   const interviewers = Array.from(
     new Set(interviews.map((i) => i.interviewer_name).filter(Boolean))
   ) as string[];
 
-  // Filter interviews based on selected filters
   const getFilteredInterviews = () => {
     return interviews.filter((interview) => {
-      if (filterStatus !== 'all' && interview.status !== filterStatus) {
+      if (filterStatus !== 'all' && interview.status !== filterStatus) return false;
+      if (filterInterviewer !== 'all' && interview.interviewer_name !== filterInterviewer)
         return false;
-      }
-      if (
-        filterInterviewer !== 'all' &&
-        interview.interviewer_name !== filterInterviewer
-      ) {
-        return false;
-      }
       return true;
     });
   };
@@ -79,31 +78,82 @@ export default function InterviewsIndex({
     duration_minutes: number;
     location_type: string;
   }) => {
-    console.log('Schedule interview:', data);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    console.log('Interview scheduled successfully');
-    setIsScheduleModalOpen(false);
+    try {
+      const payload = {
+        ...data,
+        application_id: selectedApplicationId,
+        candidate_id: selectedCandidateId,
+        job_title: selectedJobTitle,
+        interviewer_name: selectedInterviewer,
+      };
+      await axios.post('/hr/ats/interviews', payload);
+      setIsScheduleModalOpen(false);
+    } catch (error) {
+      console.error('Failed to schedule interview:', error);
+    }
   };
 
   const handleRescheduleInterview = (interview: Interview) => {
-    console.log('Reschedule interview:', interview.id);
-    setIsScheduleModalOpen(true);
+    setSelectedInterview(interview);
+    setIsRescheduleModalOpen(true);
   };
 
-  const handleDeleteInterview = (interview: Interview) => {
-    console.log('Delete interview:', interview.id);
+  const handleSubmitReschedule = async (data: {
+    scheduled_date: string;
+    scheduled_time: string;
+  }) => {
+    if (!selectedInterview) return;
+    try {
+      await axios.put(`/hr/ats/interviews/${selectedInterview.id}`, data);
+      alert('Interview rescheduled successfully');
+      window.location.reload();
+      setIsRescheduleModalOpen(false);
+      setSelectedInterview(null);
+    } catch (error) {
+      console.error('Failed to reschedule interview:', error);
+    }
   };
 
-  const handleAddFeedback = (interview: Interview) => {
-    console.log('Add feedback for interview:', interview.id);
+  const handleDeleteInterview = async (interview: Interview) => {
+    if (!window.confirm('Cancel this interview?')) return;
+    try {
+      await axios.post(`/hr/ats/interviews/${interview.id}/cancel`, {
+        cancellation_reason: 'Cancelled via UI',
+      });
+    } catch (error) {
+      console.error('Failed to cancel:', error);
+    }
+  };
+
+
+
+const handleAddFeedback = (interview: Interview) => {
+    setSelectedInterview(interview);
+    setFeedback(interview.feedback || '');
+    setShowFeedbackModal(true);
+  };
+
+  // 2️⃣ Also define submitFeedback here
+  const submitFeedback = async () => {
+    if (!selectedInterview) return;
+
+    try {
+      await router.put(`/hr/ats/interviews/${selectedInterview.id}`, { feedback });
+      alert("Feedback saved!");
+      setShowFeedbackModal(false);
+      setFeedback("");
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to save feedback:", error);
+      alert("Error saving feedback");
+    }
   };
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Interviews" />
-
       <div className="space-y-6 p-6">
-        {/* Header Section */}
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Interviews</h1>
@@ -112,8 +162,7 @@ export default function InterviewsIndex({
             </p>
           </div>
           <Button onClick={() => setIsScheduleModalOpen(true)} size="lg">
-            <Plus className="mr-2 h-4 w-4" />
-            Schedule Interview
+            <Plus className="mr-2 h-4 w-4" /> Schedule Interview
           </Button>
         </div>
 
@@ -137,9 +186,7 @@ export default function InterviewsIndex({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-green-600">
-                {statistics.completed}
-              </p>
+              <p className="text-2xl font-bold text-green-600">{statistics.completed}</p>
             </CardContent>
           </Card>
 
@@ -150,9 +197,7 @@ export default function InterviewsIndex({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-red-600">
-                {statistics.cancelled}
-              </p>
+              <p className="text-2xl font-bold text-red-600">{statistics.cancelled}</p>
             </CardContent>
           </Card>
 
@@ -163,9 +208,7 @@ export default function InterviewsIndex({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-orange-600">
-                {statistics.no_show}
-              </p>
+              <p className="text-2xl font-bold text-orange-600">{statistics.no_show}</p>
             </CardContent>
           </Card>
 
@@ -183,13 +226,11 @@ export default function InterviewsIndex({
           </Card>
         </div>
 
-        {/* Controls & Filters Card */}
+        {/* Filters */}
         <Card>
           <CardHeader>
             <div className="space-y-4">
-              {/* Top Row: View Mode & Calendar View Tabs */}
               <div className="flex items-center justify-between gap-4">
-                {/* View Mode Toggle */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-muted-foreground">View:</span>
                   <Button
@@ -200,6 +241,7 @@ export default function InterviewsIndex({
                     <Calendar className="mr-2 h-4 w-4" />
                     Calendar
                   </Button>
+
                   <Button
                     variant={viewMode === 'list' ? 'default' : 'outline'}
                     size="sm"
@@ -210,23 +252,18 @@ export default function InterviewsIndex({
                   </Button>
                 </div>
 
-                {/* Calendar View Tabs (only show when in calendar view) */}
                 {viewMode === 'calendar' && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-muted-foreground">Period:</span>
                     <Button
-                      variant={
-                        calendarView === 'month' ? 'default' : 'outline'
-                      }
+                      variant={calendarView === 'month' ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setCalendarView('month')}
                     >
                       Month
                     </Button>
                     <Button
-                      variant={
-                        calendarView === 'week' ? 'default' : 'outline'
-                      }
+                      variant={calendarView === 'week' ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setCalendarView('week')}
                     >
@@ -243,38 +280,27 @@ export default function InterviewsIndex({
                 )}
               </div>
 
-              {/* Bottom Row: Filters */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-medium text-muted-foreground">Filter:</span>
-                
-                {/* Status Filter */}
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm">
-                      Status:{' '}
-                      {filterStatus === 'all'
-                        ? 'All'
-                        : filterStatus.charAt(0).toUpperCase() +
-                          filterStatus.slice(1)}
+                      Status: {filterStatus === 'all' ? 'All' : filterStatus}
                     </Button>
                   </DropdownMenuTrigger>
+
                   <DropdownMenuContent align="start">
                     <DropdownMenuItem onClick={() => setFilterStatus('all')}>
                       All
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setFilterStatus('scheduled')}
-                    >
+                    <DropdownMenuItem onClick={() => setFilterStatus('scheduled')}>
                       Scheduled
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setFilterStatus('completed')}
-                    >
+                    <DropdownMenuItem onClick={() => setFilterStatus('completed')}>
                       Completed
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setFilterStatus('cancelled')}
-                    >
+                    <DropdownMenuItem onClick={() => setFilterStatus('cancelled')}>
                       Cancelled
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setFilterStatus('no_show')}>
@@ -283,20 +309,18 @@ export default function InterviewsIndex({
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* Interviewer Filter */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm">
-                      Interviewer:{' '}
-                      {filterInterviewer === 'all'
-                        ? 'All'
-                        : filterInterviewer}
+                      Interviewer: {filterInterviewer === 'all' ? 'All' : filterInterviewer}
                     </Button>
                   </DropdownMenuTrigger>
+
                   <DropdownMenuContent align="start">
                     <DropdownMenuItem onClick={() => setFilterInterviewer('all')}>
                       All
                     </DropdownMenuItem>
+
                     {interviewers.map((interviewer) => (
                       <DropdownMenuItem
                         key={interviewer}
@@ -312,45 +336,71 @@ export default function InterviewsIndex({
           </CardHeader>
         </Card>
 
-        {/* Content Section */}
+        {/* Calendar or List */}
         {viewMode === 'calendar' ? (
-          <div className="space-y-4">
-            {/* Calendar Component */}
-            <InterviewCalendar
-              interviews={filteredInterviews}
-              view={calendarView}
-              onSelectDate={() => {
-                setIsScheduleModalOpen(true);
-              }}
-              onReschedule={handleRescheduleInterview}
-              onAddFeedback={handleAddFeedback}
-              onCancel={handleDeleteInterview}
-            />
-
-          </div>
+          <InterviewCalendar
+            interviews={filteredInterviews}
+            view={calendarView}
+            onSelectDate={() => setIsScheduleModalOpen(true)}
+            onReschedule={handleRescheduleInterview}
+            onAddFeedback={handleAddFeedback}
+            onCancel={handleDeleteInterview}
+          />
         ) : (
-          <div>
-            {/* List View */}
-            <InterviewTable
-              interviews={filteredInterviews}
-              onReschedule={handleRescheduleInterview}
-              onAddFeedback={handleAddFeedback}
-              onCancel={handleDeleteInterview}
-            />
-          </div>
+          <InterviewTable
+            interviews={filteredInterviews}
+            onReschedule={handleRescheduleInterview}
+            onAddFeedback={handleAddFeedback}
+            onCancel={handleDeleteInterview}
+          />
         )}
       </div>
 
-      {/* Schedule Interview Modal */}
+      {/* Schedule Modal */}
       <InterviewScheduleModal
         isOpen={isScheduleModalOpen}
-        onClose={() => {
-          setIsScheduleModalOpen(false);
-        }}
+        onClose={() => setIsScheduleModalOpen(false)}
         onSubmit={handleScheduleInterview}
         candidateName="Select Candidate"
         applicationId={0}
       />
+
+      {/* Reschedule Modal */}
+      {selectedInterview && (
+        <InterviewScheduleModal
+          isOpen={isRescheduleModalOpen}
+          onClose={() => setIsRescheduleModalOpen(false)}
+          onSubmit={handleSubmitReschedule}
+          candidateName={selectedInterview.candidate_name || ''}
+          scheduledDate={selectedInterview.scheduled_date}
+          scheduledTime={selectedInterview.scheduled_time}
+        />
+      )}
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">
+              Add Feedback – Interview #{selectedInterview?.id}
+            </h2>
+
+            <textarea
+              className="w-full border rounded p-3 min-h-[120px]"
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              placeholder="Write feedback here..."
+            />
+
+            <div className="flex justify-end mt-4 gap-2">
+              <Button variant="outline" onClick={() => setShowFeedbackModal(false)}>
+                Cancel
+              </Button>
+              <Button onClick={submitFeedback}>Save</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

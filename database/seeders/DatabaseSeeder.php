@@ -90,6 +90,16 @@ class DatabaseSeeder extends Seeder
             $this->call(\Database\Seeders\PayrollOfficerAccountSeeder::class);
         }
 
+        // Seed Office Admin role and permissions (must run after RolesAndPermissionsSeeder)
+        if (class_exists(\Database\Seeders\OfficeAdminSeeder::class)) {
+            $this->call(\Database\Seeders\OfficeAdminSeeder::class);
+        }
+
+        // Seed Employee role and permissions (must run after RolesAndPermissionsSeeder)
+        if (class_exists(\Database\Seeders\EmployeeRoleSeeder::class)) {
+            $this->call(\Database\Seeders\EmployeeRoleSeeder::class);
+        }
+
         if (class_exists(\Database\Seeders\HRStaffAccountSeeder::class)) {
             $this->call(\Database\Seeders\HRStaffAccountSeeder::class);
         }

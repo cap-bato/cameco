@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// InterviewScheduleModal.tsx
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Calendar, Clock, MapPin } from 'lucide-react';
-import type { Interview, InterviewLocationType } from '@/types/ats-pages';
+import type { InterviewLocationType } from '@/types/ats-pages';
 
 interface ScheduleInterviewData {
   scheduled_date: string;
@@ -33,55 +34,50 @@ interface InterviewScheduleModalProps {
   onSubmit: (data: ScheduleInterviewData) => Promise<void>;
   candidateName?: string;
   applicationId?: number;
-  selectedDate?: Date;
+  scheduledDate?: string;
+  scheduledTime?: string;
   availableTimeSlots?: string[];
-  interviews?: Interview[];
 }
 
-/**
- * Interview Schedule Modal
- * Reusable modal for scheduling interviews with date, time, location type, and duration
- */
 export function InterviewScheduleModal({
   isOpen,
   onClose,
   onSubmit,
   candidateName = 'Candidate',
-  selectedDate,
+  scheduledDate,
+  scheduledTime,
   availableTimeSlots = [],
 }: InterviewScheduleModalProps) {
   const [formData, setFormData] = useState<ScheduleInterviewData>({
-    scheduled_date: '',
-    scheduled_time: '',
+    scheduled_date: scheduledDate || '',
+    scheduled_time: scheduledTime || '',
     duration_minutes: 30,
     location_type: 'office',
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  // Set the scheduled date when selectedDate changes
-  React.useEffect(() => {
-    if (selectedDate && isOpen) {
-      const dateStr = selectedDate.toISOString().split('T')[0];
+  useEffect(() => {
+    if (isOpen) {
       setFormData((prev) => ({
         ...prev,
-        scheduled_date: dateStr,
+        scheduled_date: scheduledDate || '',
+        scheduled_time: scheduledTime || '',
       }));
     }
-  }, [selectedDate, isOpen]);
+  }, [isOpen, scheduledDate, scheduledTime]);
 
   const handleSubmit = async () => {
+    if (!formData.scheduled_date || !formData.scheduled_time) return;
     setIsLoading(true);
     try {
       await onSubmit(formData);
+      onClose();
       setFormData({
         scheduled_date: '',
         scheduled_time: '',
         duration_minutes: 30,
         location_type: 'office',
       });
-      onClose();
-    } catch (error) {
-      console.error('Error submitting form:', error);
     } finally {
       setIsLoading(false);
     }
@@ -91,48 +87,32 @@ export function InterviewScheduleModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Schedule Interview</DialogTitle>
+          <DialogTitle>{scheduledDate && scheduledTime ? 'Reschedule Interview' : 'Schedule Interview'}</DialogTitle>
           <DialogDescription>
-            Schedule a new interview for {candidateName}
+            {scheduledDate && scheduledTime
+              ? `Reschedule interview for ${candidateName}`
+              : `Schedule a new interview for ${candidateName}`}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Date Selection */}
           <div className="space-y-2">
-            <Label htmlFor="scheduled_date" className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Date
-            </Label>
+            <Label htmlFor="scheduled_date" className="flex items-center gap-2"><Calendar className="h-4 w-4" />Date</Label>
             <Input
               id="scheduled_date"
               type="date"
               value={formData.scheduled_date}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  scheduled_date: e.target.value,
-                }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, scheduled_date: e.target.value }))}
               disabled={isLoading}
             />
           </div>
 
-          {/* Time Selection */}
           <div className="space-y-2">
-            <Label htmlFor="scheduled_time" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Time
-            </Label>
+            <Label htmlFor="scheduled_time" className="flex items-center gap-2"><Clock className="h-4 w-4" />Time</Label>
             {availableTimeSlots.length > 0 ? (
               <Select
                 value={formData.scheduled_time}
-                onValueChange={(value) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    scheduled_time: value,
-                  }))
-                }
+                onValueChange={(value) => setFormData((prev) => ({ ...prev, scheduled_time: value }))}
                 disabled={isLoading}
               >
                 <SelectTrigger id="scheduled_time">
@@ -140,37 +120,25 @@ export function InterviewScheduleModal({
                 </SelectTrigger>
                 <SelectContent>
                   {availableTimeSlots.map((slot) => (
-                    <SelectItem key={slot} value={slot}>
-                      {slot}
-                    </SelectItem>
+                    <SelectItem key={slot} value={slot}>{slot}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : (
               <div className="p-3 rounded-md bg-yellow-50 border border-yellow-200">
-                <p className="text-sm text-yellow-800">
-                  No available time slots on this day within office hours
-                </p>
+                <p className="text-sm text-yellow-800">No available time slots on this day</p>
               </div>
             )}
           </div>
 
-          {/* Duration Selection */}
           <div className="space-y-2">
             <Label htmlFor="duration_minutes">Duration (minutes)</Label>
             <Select
               value={formData.duration_minutes.toString()}
-              onValueChange={(value) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  duration_minutes: parseInt(value),
-                }))
-              }
+              onValueChange={(value) => setFormData((prev) => ({ ...prev, duration_minutes: parseInt(value) }))}
               disabled={isLoading}
             >
-              <SelectTrigger id="duration_minutes">
-                <SelectValue placeholder="Select duration" />
-              </SelectTrigger>
+              <SelectTrigger id="duration_minutes"><SelectValue placeholder="Select duration" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="30">30 minutes</SelectItem>
                 <SelectItem value="45">45 minutes</SelectItem>
@@ -181,25 +149,14 @@ export function InterviewScheduleModal({
             </Select>
           </div>
 
-          {/* Location Type Selection */}
           <div className="space-y-2">
-            <Label htmlFor="location_type" className="flex items-center gap-2">
-              <MapPin className="h-4 w-4" />
-              Location Type
-            </Label>
+            <Label htmlFor="location_type" className="flex items-center gap-2"><MapPin className="h-4 w-4" />Location Type</Label>
             <Select
               value={formData.location_type}
-              onValueChange={(value) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  location_type: value as InterviewLocationType,
-                }))
-              }
+              onValueChange={(value) => setFormData((prev) => ({ ...prev, location_type: value as InterviewLocationType }))}
               disabled={isLoading}
             >
-              <SelectTrigger id="location_type">
-                <SelectValue placeholder="Select location" />
-              </SelectTrigger>
+              <SelectTrigger id="location_type"><SelectValue placeholder="Select location" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="office">Office</SelectItem>
                 <SelectItem value="phone">Phone</SelectItem>
@@ -210,15 +167,12 @@ export function InterviewScheduleModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isLoading}>
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancel</Button>
           <Button
             onClick={handleSubmit}
             disabled={!formData.scheduled_date || !formData.scheduled_time || isLoading}
-            className="gap-2"
           >
-            {isLoading ? 'Scheduling...' : 'Schedule Interview'}
+            {scheduledDate && scheduledTime ? 'Reschedule' : 'Schedule Interview'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -16,6 +16,7 @@ import { JobPostingFilters } from '@/components/ats/job-posting-filters';
 import { JobPostingCreateEditModal } from './CreateEditModal';
 import type { PageProps } from '@inertiajs/core';
 import type { JobPosting, JobPostingFormData, JobPostingFilters as JobPostingFiltersType, JobPostingSummary } from '@/types/ats-pages';
+import axios from 'axios';
 
 interface Department {
   id: number;
@@ -52,6 +53,7 @@ export default function JobPostingsIndex({
   const [appliedFilters, setAppliedFilters] = useState<JobPostingFiltersType>(
     initialFilters || {}
   );
+  const [jobPostings, setJobPostings] = useState<JobPosting[]>(job_postings);
   const [actionJob, setActionJob] = useState<JobPosting | undefined>(undefined);
   const [actionType, setActionType] = useState<'publish' | 'close' | 'delete' | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -71,11 +73,34 @@ export default function JobPostingsIndex({
     setIsModalOpen(false);
   };
 
-  const handleFormSubmit = (data: JobPostingFormData) => {
-    // In a real implementation, this would send the data to the server
-    console.log('Form submitted:', data, 'Editing:', editingJob?.id);
+const handleFormSubmit = async (data: JobPostingFormData) => {
+  try {
+    if (editingJob && editingJob.id) {
+      // Use POST with _method=PUT because Laravel resource routes sometimes block raw PUT
+      await axios.post(`/hr/ats/job-postings/${editingJob.id}`, {
+        ...data,
+        _method: 'PUT',
+      });
+      console.log('Job posting updated:', data);
+      alert('Job posting updated successfully!');
+      window.location.reload();
+    } else {
+      await axios.post('/hr/ats/job-postings', data);
+      console.log('Job posting created:', data);
+      alert('Job posting created successfully!');
+      window.location.reload();
+    }
+
     handleModalClose();
-  };
+    // Optionally refresh job postings list
+  } catch (error: any) {
+    const message =
+      error.response?.data?.message ||
+      'An unexpected error occurred. Please try again.';
+    alert(message);
+    console.error('Error submitting form:', error.response?.data || error.message);
+  }
+};
 
   const handleFilterChange = (newFilters: JobPostingFiltersType) => {
     setAppliedFilters(newFilters);
@@ -97,25 +122,44 @@ export default function JobPostingsIndex({
     setActionType('delete');
   };
 
-  const handleConfirmAction = async () => {
-    if (!actionJob || !actionType) return;
+const handleConfirmAction = async () => {
+  if (!actionJob || !actionType) return;
 
-    setIsActionLoading(true);
-    try {
-      // In a real implementation, this would send a request to the server
-      console.log(`${actionType} job:`, actionJob.id);
-      
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      
-      // Show success feedback
-      console.log(`Job ${actionJob.title} ${actionType}d successfully`);
-    } finally {
-      setIsActionLoading(false);
-      setActionJob(undefined);
-      setActionType(null);
+  setIsActionLoading(true);
+
+  try {
+    if (actionType === 'delete') {
+      // Use POST with _method=DELETE to match Laravel route
+      await axios.post(`/hr/ats/job-postings/${actionJob.id}`, {
+        _method: 'DELETE',
+      });
+      console.log(`Job ${actionJob.title} deleted successfully`);
+
+      // Update local state
+      setJobPostings((prev: JobPosting[]) =>
+        prev.filter((job: JobPosting) => job.id !== actionJob.id)
+      );
+    } else if (actionType === 'publish') {
+      await axios.post(`/hr/ats/job-postings/${actionJob.id}/publish`);
+      console.log(`Job ${actionJob.title} published successfully`);
+    } else if (actionType === 'close') {
+      await axios.post(`/hr/ats/job-postings/${actionJob.id}/close`);
+      console.log(`Job ${actionJob.title} closed successfully`);
     }
-  };
+
+    alert(`Job ${actionJob.title} ${actionType}d successfully`);
+    window.location.reload(); 
+  } catch (error: any) {
+    console.error('Error performing action:', error.response?.data || error.message);
+    const message = error.response?.data?.message || 'An error occurred';
+    alert(message);
+  } finally {
+    setIsActionLoading(false);
+    setActionJob(undefined);
+    setActionType(null);
+  }
+};
+
 
   const handleCancelAction = () => {
     setActionJob(undefined);

@@ -285,20 +285,40 @@ graph TD
 
 ### Approval Workflows
 
-**Auto-Approval (1-2 days):**
+**Configurable Approval Rules:**
+
+Office Admin can configure leave approval workflows based on multiple criteria:
+
+**Tier 1: HR Staff Approval (Default)**
+- HR Staff has full authority to approve/reject
+- Standard leave requests (within policy limits)
 - Sufficient leave balance
-- No schedule conflicts
-- Advance notice (minimum 3 days)
+- No critical workforce impact
+- Advance notice met (minimum 3 days)
 
-**HR Manager Approval (3-5 days):**
-- Reviews leave balance
-- Checks workforce schedule
-- Approves or rejects with reason
+**Tier 2: HR Staff → HR Manager Approval (Configurable Triggers)**
 
-**HR Manager + Office Admin (6+ days):**
-- HR Manager reviews first
-- Forwards to Office Admin for final approval
-- Both must approve for leave to be granted
+Office Admin can set any combination of these triggers:
+- **Duration-based**: Exceeds X days (e.g., > 5 days)
+- **Balance threshold**: Requires approval if balance falls below X days after leave
+- **Advance notice**: Less than X days advance notice
+- **Workforce impact**: Coverage falls below X% threshold
+- **Leave type**: Specific leave types always require manager approval (e.g., unpaid leave)
+- **Blackout periods**: Requests during busy season/peak periods
+- **Frequency**: Employee taking Y leave requests within Z timeframe
+
+**Tier 3: HR Manager → Office Admin (Major Requests)**
+- Exceeds maximum manager approval limit (configurable, e.g., > 15 days)
+- Extended unpaid leave
+- Leave of absence requests
+- Special circumstances requiring executive approval
+
+**Workforce Coverage Warning System:**
+- System calculates department coverage percentage
+- Warns approver if coverage falls below threshold
+- Shows: "⚠️ Approving this leave will reduce [Department] coverage to 65% (below 75% minimum)"
+- Approver can still approve but must acknowledge warning
+- Critical warnings (< 50% coverage) may require manager override
 
 ---
 
@@ -590,6 +610,70 @@ graph TD
 2. Department head approves
 3. Accounting reviews
 4. Office Admin approves (if above threshold)
+
+### Configuring Leave Approval Rules
+
+**Access**: Settings > Leave Management > Approval Rules
+
+**Rule Configuration Options:**
+
+1. **Duration-Based Rules**
+   - Days requiring HR Manager approval: `[  5  ] days` (default: 5)
+   - Days requiring Office Admin approval: `[ 15 ] days` (default: 15)
+   - Auto-approval maximum: `[  2  ] days` (if balance sufficient)
+
+2. **Workforce Coverage Rules**
+   - Minimum department coverage: `[ 75 ]%`
+   - Warning threshold: `[ 80 ]%` (show warning to approver)
+   - Critical threshold: `[ 50 ]%` (require manager approval)
+   - ☑ Block leave if coverage falls below critical threshold
+
+3. **Advance Notice Rules**
+   - Standard advance notice: `[ 3 ] days`
+   - Short notice requires manager approval: `< [ 2 ] days`
+   - Emergency leave exemption: ☑ Allow emergency leave without advance notice
+
+4. **Leave Type Specific Rules**
+   - Vacation Leave: HR Staff approval (≤5 days), Manager (>5 days)
+   - Sick Leave: HR Staff approval (≤5 days), Manager (>5 days)
+   - Emergency Leave: Always HR Staff approval (urgent)
+   - Unpaid Leave: Always requires HR Manager approval
+   - Maternity/Paternity: Always requires HR Manager approval
+   - Leave of Absence: Requires HR Manager + Office Admin
+
+5. **Balance Threshold Rules**
+   - Require manager approval if remaining balance < `[ 3 ] days`
+   - ☑ Warn employee when balance < 5 days
+   - ☑ Block leave if insufficient balance
+
+6. **Blackout Period Rules**
+   - Define blackout periods (e.g., December 15-31, Inventory Week)
+   - Action during blackout: ○ Require Manager Approval ● Block All Leave ○ Warning Only
+
+7. **Frequency Rules**
+   - Require manager approval if employee has `[ 3 ]` or more leave requests in `[ 30 ] days`
+   - ☑ Flag frequent short-term absences for review
+
+**Example Configuration:**
+
+*Small Company (Relaxed Policy):*
+- HR Staff approves up to 10 days
+- 60% minimum coverage
+- 2 days advance notice
+
+*Large Enterprise (Strict Policy):*
+- HR Staff approves up to 3 days only
+- 85% minimum coverage
+- 5 days advance notice
+- Manager approval for any leave during Q4
+
+**Testing Approval Rules:**
+1. Configure rules in settings
+2. Use "Test Leave Scenario" tool
+3. Input: Employee, leave type, duration, dates
+4. System shows: Approval path, warnings, blockers
+5. Adjust rules as needed
+6. Save and activate
 
 ---
 

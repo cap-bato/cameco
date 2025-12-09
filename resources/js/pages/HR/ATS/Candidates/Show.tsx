@@ -12,7 +12,7 @@ import { AddCandidateModal, type CandidateFormData } from '@/components/ats/add-
 import { AddNoteModal } from '@/components/ats/add-note-modal';
 import type { PageProps } from '@inertiajs/core';
 import type { Candidate, Application, Interview, CandidateNote } from '@/types/ats-pages';
-
+import axios from 'axios';
 interface CandidateShowProps extends PageProps {
   candidate: Candidate;
   applications: Application[];
@@ -41,18 +41,55 @@ export default function CandidateShow({
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const handleAddNote = async (noteData: { note: string; is_private: boolean }) => {
-    console.log('Add note:', noteData, 'for candidate:', candidate.id);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    console.log('Note added successfully');
-  };
+const handleAddNote = async (noteData: { note: string; is_private: boolean }) => {
+  try {
+    await axios.post(`/hr/ats/candidates/${candidate.id}/notes`, noteData);
 
-  const handleEditCandidate = async (candidateData: CandidateFormData) => {
-    console.log('Edit candidate:', candidateData, 'for candidate ID:', candidate.id);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    console.log('Candidate updated successfully');
+    alert("Note added successfully!");
+    window.location.reload(); 
+  } catch (error: any) {
+    console.error(error);
+    alert(error.response?.data?.message || "Something went wrong.");
+  }
+};
+
+const handleEditCandidate = async (candidateData: CandidateFormData) => {
+  try {
+    const formData = new FormData();
+
+    // Append all fields
+    Object.entries(candidateData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, value as any);
+      }
+    });
+
+    // If a resume file exists
+    if (candidateData.resume instanceof File) {
+      formData.append('resume', candidateData.resume);
+    }
+
+    // Add method override for PUT
+    formData.append("_method", "PUT");
+
+    await axios.post(
+      `/hr/ats/candidates/${candidate.id}`,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      }
+    );
+
+    alert("Candidate updated successfully!");
+    window.location.reload();
+  } catch (error: any) {
+    console.error(error);
+    alert(error.response?.data?.message || "Something went wrong.");
+  } finally {
     setIsEditModalOpen(false);
-  };
+  }
+};
+
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
