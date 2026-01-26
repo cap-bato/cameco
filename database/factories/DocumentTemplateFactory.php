@@ -13,6 +13,7 @@ class DocumentTemplateFactory extends Factory
     public function definition(): array
     {
         $status = $this->faker->randomElement(['draft', 'pending_approval', 'approved', 'archived']);
+        $types = array_keys(DocumentTemplate::TYPES);
         
         return [
             'name' => $this->faker->word() . ' Template',
@@ -25,7 +26,7 @@ class DocumentTemplateFactory extends Factory
                 'department' => '{{department}}',
                 'start_date' => '{{start_date}}',
             ],
-            'template_type' => $this->faker->randomElement(DocumentTemplate::TYPES),
+            'template_type' => $this->faker->randomElement($types),
             'created_by' => User::factory(),
             'approved_by' => $status === 'approved' ? User::factory() : null,
             'approved_at' => $status === 'approved' ? now() : null,

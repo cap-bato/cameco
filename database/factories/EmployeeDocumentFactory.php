@@ -15,10 +15,11 @@ class EmployeeDocumentFactory extends Factory
     public function definition(): array
     {
         $status = $this->faker->randomElement(['pending', 'approved', 'rejected', 'auto_approved']);
+        $categories = array_keys(EmployeeDocument::CATEGORIES);
         
         return [
             'employee_id' => Employee::factory(),
-            'document_category' => $this->faker->randomElement(EmployeeDocument::CATEGORIES),
+            'document_category' => $this->faker->randomElement($categories),
             'document_type' => $this->faker->word(),
             'file_name' => $this->faker->word() . '.pdf',
             'file_path' => 'storage/documents/' . $this->faker->uuid() . '.pdf',
@@ -35,7 +36,7 @@ class EmployeeDocumentFactory extends Factory
             'notes' => $this->faker->optional()->sentence(),
             'reminder_sent_at' => null,
             'bulk_upload_batch_id' => null,
-            'source' => $this->faker->randomElement(['manual', 'bulk', 'employee_portal']),
+            'source' => $this->faker->randomElement(array_keys(EmployeeDocument::SOURCES)),
         ];
     }
 

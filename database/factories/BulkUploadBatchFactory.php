@@ -16,7 +16,8 @@ class BulkUploadBatchFactory extends Factory
         $success = $this->faker->numberBetween(0, $total);
         $error = $total - $success;
         
-        $status = $this->faker->randomElement(['processing', 'completed', 'failed', 'partially_completed']);
+        $statuses = array_keys(BulkUploadBatch::STATUSES);
+        $status = $this->faker->randomElement($statuses);
 
         return [
             'uploaded_by' => User::factory(),
