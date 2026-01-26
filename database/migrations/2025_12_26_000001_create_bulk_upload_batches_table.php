@@ -25,7 +25,7 @@ return new class extends Migration
                 'completed',
                 'failed',
                 'partially_completed'
-            ])->default('processing')->index();
+            ])->default('processing');
             
             // Processing statistics
             $table->unsignedInteger('total_count')->default(0);

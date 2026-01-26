@@ -39,7 +39,7 @@ return new class extends Migration
             ])->index();
             
             // Template file and content
-            $table->string('file_path'); // storage/app/templates/{id}/{filename}
+            $table->string('file_path')->nullable(); // storage/app/templates/{id}/{filename}
             $table->json('variables')->nullable(); // e.g., ["{{employee_name}}", "{{position}}", "{{start_date}}"]
             
             // Version control
