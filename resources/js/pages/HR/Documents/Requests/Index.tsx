@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Head, Link } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -172,14 +172,13 @@ function truncateText(text: string, maxLength: number): string {
 
 export default function RequestsIndex({ requests: initialRequests, statistics: initialStats, filters: initialFilters }: RequestsIndexProps) {
     // Mock data fallback
-    const mockRequests = initialRequests || [];
-    const mockStats = initialStats || { pending: 0, processing: 0, completed: 0, rejected: 0 };
+    const mockRequests = useMemo(() => initialRequests || [], [initialRequests]);
+    const mockStats = useMemo(() => initialStats || { pending: 0, processing: 0, completed: 0, rejected: 0 }, [initialStats]);
 
     // State
     const { toast } = useToast();
     const [requests, setRequests] = useState<DocumentRequest[]>(mockRequests);
     const [statistics, setStatistics] = useState(initialStats || { pending: 0, processing: 0, completed: 0, rejected: 0 });
-    const [loading, setLoading] = useState(false);
     const [selectedRequests, setSelectedRequests] = useState<number[]>([]);
     const [searchTerm, setSearchTerm] = useState(initialFilters?.search || '');
     const [statusFilter, setStatusFilter] = useState(initialFilters?.status || 'all');
@@ -191,7 +190,6 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
 
     // Fetch requests from API
     const fetchRequests = useCallback(async () => {
-        setLoading(true);
         try {
             const response = await fetch('/hr/documents/requests', {
                 method: 'GET',
@@ -219,8 +217,6 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                 description: 'Using cached request data',
                 variant: 'default',
             });
-        } finally {
-            setLoading(false);
         }
     }, [mockRequests, mockStats, toast]);
 
@@ -353,7 +349,7 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
         <AppLayout>
             <Head title="Document Requests" />
 
-            <div className="space-y-6">
+            <div className="space-y-6 p-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>

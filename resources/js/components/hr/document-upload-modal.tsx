@@ -274,7 +274,7 @@ export function DocumentUploadModal({ open, onClose, employees = [] }: DocumentU
             // Create FormData for file upload
             const submitData = new FormData();
             submitData.append('employee_id', formData.employee_id);
-            submitData.append('category', formData.category);
+            submitData.append('document_category', formData.category);
             submitData.append('document_type', formData.document_type);
             if (formData.file) {
                 submitData.append('file', formData.file);
@@ -297,35 +297,38 @@ export function DocumentUploadModal({ open, onClose, employees = [] }: DocumentU
                 });
             }, 200);
 
-            // TODO: Replace with actual API call
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            // router.post('/hr/documents', submitData, {
-            //     onSuccess: () => {
-            //         setUploadProgress(100);
-            //         setTimeout(() => {
-            //             handleClose();
-            //         }, 500);
-            //     },
-            //     onError: (errors) => {
-            //         setErrors(errors);
-            //         setIsUploading(false);
-            //         setUploadProgress(0);
-            //     },
-            // });
+            // Make actual API call to upload document
+            const response = await fetch('/hr/documents', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: submitData,
+            });
 
             clearInterval(progressInterval);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to upload document');
+            }
+
             setUploadProgress(100);
             
             // Success - close modal after short delay
             setTimeout(() => {
                 handleClose();
-                // TODO: Show success toast
+                // Show success message
                 console.log('Document uploaded successfully');
+                window.location.reload(); // Reload to show new document
             }, 500);
 
         } catch (error) {
             console.error('Upload error:', error);
+            setErrors({
+                file: error instanceof Error ? error.message : 'Failed to upload document',
+            });
             setIsUploading(false);
             setUploadProgress(0);
         }

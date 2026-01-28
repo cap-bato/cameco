@@ -146,9 +146,9 @@ class DocumentRequestController extends Controller
         ];
 
         // Log security audit
-        $this->logSecurityAudit(
+        $this->logAudit(
             'document_requests.view',
-            'Viewed document requests list',
+            'info',
             ['filters' => $request->only(['status', 'document_type', 'date_from', 'date_to', 'search'])]
         );
 
@@ -188,9 +188,9 @@ class DocumentRequestController extends Controller
                 'size' => '125 KB',
             ];
 
-            $this->logSecurityAudit(
+            $this->logAudit(
                 'document_requests.approve',
-                'Approved and generated document for request',
+                'info',
                 [
                     'request_id' => $id,
                     'template_id' => $validated['template_id'] ?? null,
@@ -204,9 +204,9 @@ class DocumentRequestController extends Controller
         }
 
         if ($action === 'reject') {
-            $this->logSecurityAudit(
+            $this->logAudit(
                 'document_requests.reject',
-                'Rejected document request',
+                'info',
                 [
                     'request_id' => $id,
                     'rejection_reason' => $validated['rejection_reason'],

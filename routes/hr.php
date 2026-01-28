@@ -151,27 +151,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 ->middleware('permission:hr.documents.bulk-upload')
                 ->name('bulk-upload.store');
             
-            Route::get('/{document}', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'show'])
-                ->middleware('permission:hr.documents.view')
-                ->name('show');
-            
-            Route::get('/{document}/download', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'download'])
-                ->middleware('permission:hr.documents.download')
-                ->name('download');
-            
-            Route::post('/{document}/approve', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'approve'])
-                ->middleware('permission:hr.documents.approve')
-                ->name('approve');
-            
-            Route::post('/{document}/reject', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'reject'])
-                ->middleware('permission:hr.documents.reject')
-                ->name('reject');
-            
-            Route::delete('/{document}', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'destroy'])
-                ->middleware('permission:hr.documents.delete')
-                ->name('destroy');
-            
-            // Document Templates
+            // Document Templates (must come before generic {document} route)
             Route::prefix('templates')->name('templates.')->group(function () {
                 Route::get('/', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'index'])
                     ->middleware('permission:hr.documents.view')
@@ -198,7 +178,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                     ->name('generate');
             });
             
-            // Document Requests
+            // Document Requests (must come before generic {document} route)
             Route::prefix('requests')->name('requests.')->group(function () {
                 Route::get('/', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'index'])
                     ->middleware('permission:hr.documents.view')
@@ -208,6 +188,27 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                     ->middleware('permission:hr.documents.upload')
                     ->name('process');
             });
+            
+            // Generic document routes (must come last)
+            Route::get('/{document}', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'show'])
+                ->middleware('permission:hr.documents.view')
+                ->name('show');
+            
+            Route::get('/{document}/download', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'download'])
+                ->middleware('permission:hr.documents.download')
+                ->name('download');
+            
+            Route::post('/{document}/approve', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'approve'])
+                ->middleware('permission:hr.documents.approve')
+                ->name('approve');
+            
+            Route::post('/{document}/reject', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'reject'])
+                ->middleware('permission:hr.documents.reject')
+                ->name('reject');
+            
+            Route::delete('/{document}', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'destroy'])
+                ->middleware('permission:hr.documents.delete')
+                ->name('destroy');
         });
 
         // Appraisal & Performance Management Module

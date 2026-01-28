@@ -253,7 +253,7 @@ export default function TemplatesIndex({ templates: initialTemplates, stats: ini
     const fetchTemplates = async () => {
         setLoading(true);
         try {
-            const response = await fetch('/hr/documents', {
+            const response = await fetch('/hr/documents/templates', {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -299,34 +299,86 @@ export default function TemplatesIndex({ templates: initialTemplates, stats: ini
     });
 
     // Actions
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleEdit = (_templateId: number) => {
-        const template = templates.find(t => t.id === _templateId);
+    const handleEdit = (templateId: number) => {
+        const template = templates.find(t => t.id === templateId);
         if (template) {
             setTemplateToEdit(template);
             setIsCreateModalOpen(true);
         }
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleDuplicate = async (_templateId: number) => {
+    const handleDuplicate = async (templateId: number) => {
         try {
-            const template = templates.find(t => t.id === _templateId);
+            const template = templates.find(t => t.id === templateId);
             if (!template) return;
 
-            const response = await fetch(`/hr/documents/templates/${_templateId}/duplicate`, {
+            const response = await fetch(`/hr/documents/templates/${templateId}/duplicate`, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
-                    'Conteasync (_templateId: number) => {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to duplicate template');
+            }
+
+            toast({
+                title: 'Template Duplicated',
+                description: 'A copy of the template has been created.',
+            });
+            fetchTemplates();
+        } catch (err) {
+            console.error('Error duplicating template:', err);
+            toast({
+                variant: 'destructive',
+                title: 'Duplication Failed',
+                description: 'Failed to duplicate template. Please try again.',
+            });
+        }
+    };
+
+    const handleArchive = async (templateId: number) => {
         try {
-            const template = templates.find(t => t.id === _templateId);
+            const template = templates.find(t => t.id === templateId);
             if (!template) return;
 
             const newStatus = template.status === 'archived' ? 'active' : 'archived';
             
-            const response = await fetch(`/hr/documents/templates/${_templateId}`, {
-                method: 'async () => {
+            const response = await fetch(`/hr/documents/templates/${templateId}`, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify({ status: newStatus }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update template');
+            }
+
+            toast({
+                title: newStatus === 'archived' ? 'Template Archived' : 'Template Restored',
+                description: `The template has been ${newStatus === 'archived' ? 'archived' : 'restored'} successfully.`,
+            });
+            fetchTemplates();
+        } catch (err) {
+            console.error('Error updating template:', err);
+            toast({
+                variant: 'destructive',
+                title: 'Update Failed',
+                description: 'Failed to update template. Please try again.',
+            });
+        }
+    };
+
+    const handleDelete = async () => {
         if (!templateToDelete) return;
 
         try {
@@ -358,66 +410,10 @@ export default function TemplatesIndex({ templates: initialTemplates, stats: ini
                 description: 'Failed to delete template. Please try again.',
             });
         }
-
-            if (!response.ok) {
-                throw new Error('Failed to update template');
-            }
-
-            toast({
-                title: newStatus === 'archived' ? 'Template Archived' : 'Template Restored',
-                description: `The template has been ${newStatus === 'archived' ? 'archived' : 'restored'} successfully.`,
-            });
-            fetchTemplates();
-        } catch (err) {
-            console.error('Error updating template:', err);
-            toast({
-                variant: 'destructive',
-                title: 'Update Failed',
-                description: 'Failed to update template. Please try again.',
-            });
-        }
-            if (!response.ok) {
-                throw new Error('Failed to duplicate template');
-            }
-
-            toast({
-                title: 'Template Duplicated',
-                description: 'A copy of the template has been created.',
-            });
-            fetchTemplates();
-        } catch (err) {
-            console.error('Error duplicating template:', err);
-            toast({
-                variant: 'destructive',
-                title: 'Duplication Failed',
-                description: 'Failed to duplicate template. Please try again.',
-            });
-        }
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleArchive = (_templateId: number) => {
-        toast({
-            title: 'Template Archived',
-            description: 'The template has been archived successfully.',
-        });
-        fetchTemplates();
-    };
-
-    const handleDelete = () => {
-        if (!templateToDelete) return;
-
-        toast({
-            title: 'Template Deleted',
-            description: 'The template has been deleted successfully.',
-        });
-        setTemplateToDelete(null);
-        fetchTemplates();
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleGenerate = (_templateId: number) => {
-        const template = templates.find(t => t.id === _templateId);
+    const handleGenerate = (templateId: number) => {
+        const template = templates.find(t => t.id === templateId);
         if (template) {
             setTemplateToGenerate(template);
             setIsGenerateModalOpen(true);
@@ -479,7 +475,7 @@ export default function TemplatesIndex({ templates: initialTemplates, stats: ini
         <AppLayout>
             <Head title="Document Templates" />
 
-            <div className="space-y-6">
+            <div className="space-y-6 p-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
@@ -736,7 +732,7 @@ export default function TemplatesIndex({ templates: initialTemplates, stats: ini
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} className="bg-destructive">
+                        <AlertDialogAction onClick={() => handleDelete()} className="bg-destructive">
                             Delete
                         </AlertDialogAction>
                     </AlertDialogFooter>

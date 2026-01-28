@@ -187,8 +187,11 @@ export default function DocumentsIndex({
     const canApprove = hasPermission('hr.documents.approve');
     const canDelete = hasPermission('hr.documents.delete');
 
+    // Ensure documents is an array
+    const documentsArray = Array.isArray(documents) ? documents : [];
+
     // Filter documents
-    const filteredDocuments = documents.filter((doc) => {
+    const filteredDocuments = documentsArray.filter((doc) => {
         if (categoryFilter !== 'all' && doc.category !== categoryFilter) return false;
         if (statusFilter !== 'all' && doc.status !== statusFilter) return false;
         if (departmentFilter !== 'all' && doc.department !== departmentFilter) return false;

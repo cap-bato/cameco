@@ -122,9 +122,9 @@ class DocumentTemplateController extends Controller
         }
 
         // Log security audit
-        $this->logSecurityAudit(
+        $this->logAudit(
             'document_templates.view',
-            'Viewed document templates list',
+            'info',
             ['filters' => $request->only(['status', 'category', 'search'])]
         );
 
@@ -168,9 +168,10 @@ class DocumentTemplateController extends Controller
             'pay_period' => 'Pay Period',
         ];
 
-        $this->logSecurityAudit(
+        $this->logAudit(
             'document_templates.create_form',
-            'Opened template creation form'
+            'info',
+            []
         );
 
         return Inertia::render('HR/Documents/Templates/CreateEdit', [
@@ -205,9 +206,9 @@ class DocumentTemplateController extends Controller
         // In production, save file and create database record
         // For now, just log the action
 
-        $this->logSecurityAudit(
+        $this->logAudit(
             'document_templates.create',
-            'Created new document template',
+            'info',
             [
                 'template_name' => $validated['name'],
                 'category' => $validated['category'],
@@ -245,9 +246,9 @@ class DocumentTemplateController extends Controller
             'current_date' => 'Current Date',
         ];
 
-        $this->logSecurityAudit(
+        $this->logAudit(
             'document_templates.edit_form',
-            'Opened template edit form',
+            'info',
             ['template_id' => $id]
         );
 
@@ -279,9 +280,9 @@ class DocumentTemplateController extends Controller
 
         // In production, update file and database record, increment version
 
-        $this->logSecurityAudit(
+        $this->logAudit(
             'document_templates.update',
-            'Updated document template',
+            'info',
             [
                 'template_id' => $id,
                 'template_name' => $validated['name'],
@@ -317,9 +318,9 @@ class DocumentTemplateController extends Controller
             'generated_at' => now()->format('Y-m-d H:i:s'),
         ];
 
-        $this->logSecurityAudit(
+        $this->logAudit(
             'document_templates.generate',
-            'Generated document from template',
+            'info',
             [
                 'template_id' => $id,
                 'employee_id' => $validated['employee_id'],

@@ -125,33 +125,92 @@ class EmployeeDocumentController extends Controller
     {
         $validated = $request->validated();
 
-        // TODO: Implement document storage when EmployeeDocument model is created (Phase 4)
-        // For now, log the action and return success message
-        
-        \Log::info('Document upload request received', [
-            'employee_id' => $validated['employee_id'],
-            'document_category' => $validated['document_category'],
-            'document_type' => $validated['document_type'],
-            'file_name' => $validated['file']->getClientOriginalName(),
-            'file_size' => $validated['file']->getSize(),
-            'uploaded_by' => auth()->id(),
-        ]);
-
-        // Log security audit
-        $this->logAudit(
-            eventType: 'document_uploaded',
-            severity: 'info',
-            details: [
+        try {
+            // Store the file in a structured path
+            $employee = \App\Models\Employee::findOrFail($validated['employee_id']);
+            $year = now()->year;
+            $category = $validated['document_category'];
+            
+            // Create storage path: storage/app/employee-documents/{employee_id}/{category}/{year}/
+            $storagePath = "{$employee->id}/{$category}/{$year}";
+            
+            // Store the file and get the path using the 'employee_documents' disk
+            $file = $validated['file'];
+            $originalFileName = $file->getClientOriginalName();
+            $fileName = time() . '_' . $originalFileName;
+            $filePath = $file->storeAs($storagePath, $fileName, 'employee_documents');
+            
+            // Create EmployeeDocument record
+            $document = \App\Models\EmployeeDocument::create([
                 'employee_id' => $validated['employee_id'],
                 'document_category' => $validated['document_category'],
                 'document_type' => $validated['document_type'],
-                'file_name' => $validated['file']->getClientOriginalName(),
-            ]
-        );
+                'file_name' => $originalFileName,
+                'file_path' => $filePath,
+                'file_size' => $file->getSize(),
+                'mime_type' => $file->getMimeType(),
+                'expires_at' => $validated['expires_at'] ?? null,
+                'notes' => $validated['notes'] ?? null,
+                'status' => 'pending',
+                'uploaded_by' => auth()->id(),
+                'uploaded_at' => now(),
+                'source' => 'manual',
+            ]);
 
-        return redirect()
-            ->route('hr.documents.index')
-            ->with('success', 'Document uploaded successfully. (Database implementation pending - Phase 4)');
+            // Log security audit
+            $this->logAudit(
+                eventType: 'document_uploaded',
+                severity: 'info',
+                details: [
+                    'document_id' => $document->id,
+                    'employee_id' => $validated['employee_id'],
+                    'document_category' => $validated['document_category'],
+                    'document_type' => $validated['document_type'],
+                    'file_name' => $originalFileName,
+                    'file_path' => $filePath,
+                ]
+            );
+
+            \Log::info('Document uploaded successfully', [
+                'document_id' => $document->id,
+                'employee_id' => $validated['employee_id'],
+                'file_path' => $filePath,
+                'uploaded_by' => auth()->id(),
+            ]);
+
+            // Return JSON response for AJAX requests
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Document uploaded successfully.',
+                    'document_id' => $document->id,
+                    'document' => $document,
+                ], 201);
+            }
+
+            return redirect()
+                ->route('hr.documents.index')
+                ->with('success', 'Document uploaded successfully.');
+        } catch (\Exception $e) {
+            \Log::error('Document upload failed', [
+                'error' => $e->getMessage(),
+                'employee_id' => $validated['employee_id'] ?? null,
+                'uploaded_by' => auth()->id(),
+            ]);
+
+            // Return JSON response for AJAX requests
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to upload document: ' . $e->getMessage(),
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
+
+            return redirect()
+                ->back()
+                ->with('error', 'Failed to upload document: ' . $e->getMessage());
+        }
     }
 
     /**
