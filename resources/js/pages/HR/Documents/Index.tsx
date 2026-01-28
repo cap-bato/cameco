@@ -89,6 +89,7 @@ interface DocumentsIndexProps {
         recently_uploaded: number;
     };
     departments?: { id: number; name: string }[];
+    employees?: Array<{ id: number; employee_number: string; name: string; department: string }>;
 }
 
 // ============================================================================
@@ -185,6 +186,7 @@ export default function DocumentsIndex({
         recently_uploaded: 0,
     },
     departments = [],
+    employees = [],
 }: DocumentsIndexProps) {
     // State
     const [selectedDocuments, setSelectedDocuments] = useState<number[]>([]);
@@ -754,6 +756,7 @@ export default function DocumentsIndex({
                 open={isUploadModalOpen}
                 onClose={() => setIsUploadModalOpen(false)}
                 onSuccess={handleUploadSuccess}
+                employees={employees}
             />
 
             {/* Document View Modal */}
