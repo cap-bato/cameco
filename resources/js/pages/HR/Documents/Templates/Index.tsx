@@ -263,7 +263,7 @@ export default function TemplatesIndex({ templates: initialTemplates, stats: ini
     const fetchTemplates = async () => {
         setLoading(true);
         try {
-            const response = await fetch('/hr/documents/templates', {
+            const response = await fetch('/hr/documents/api/templates', {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',

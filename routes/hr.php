@@ -178,6 +178,11 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                     ->name('generate');
             });
             
+            // API Endpoints for templates
+            Route::get('/api/templates', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'apiList'])
+                ->middleware('permission:hr.documents.view')
+                ->name('api.templates');
+            
             // Document Requests (must come before generic {document} route)
             Route::prefix('requests')->name('requests.')->group(function () {
                 Route::get('/', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'index'])
@@ -190,6 +195,10 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             });
 
             // API Endpoints for Document Generation
+            Route::get('/api/templates', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'apiList'])
+                ->middleware('permission:hr.documents.view')
+                ->name('api.templates.list');
+            
             Route::post('/api/templates/generate', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'apiGenerate'])
                 ->middleware('permission:hr.documents.view')
                 ->name('api.templates.generate');

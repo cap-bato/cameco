@@ -350,6 +350,109 @@ class DocumentTemplateController extends Controller
     }
 
     /**
+     * API endpoint to list templates as JSON.
+     * Used by frontend for AJAX requests to fetch template list.
+     */
+    public function apiList(Request $request)
+    {
+        // Get templates list
+        $templates = collect([
+            [
+                'id' => 1,
+                'name' => 'Certificate of Employment',
+                'category' => 'employment',
+                'description' => 'Standard COE template with employment details',
+                'version' => '1.2',
+                'variables' => ['employee_name', 'position', 'date_hired', 'current_date'],
+                'status' => 'active',
+                'created_by' => 'HR Admin',
+                'created_at' => now()->subMonths(6)->format('Y-m-d H:i:s'),
+                'updated_at' => now()->subWeeks(2)->format('Y-m-d H:i:s'),
+            ],
+            [
+                'id' => 2,
+                'name' => 'BIR Form 2316',
+                'category' => 'government',
+                'description' => 'Annual tax certificate template',
+                'version' => '2.0',
+                'variables' => ['employee_name', 'tin', 'tax_year', 'gross_compensation', 'tax_withheld'],
+                'status' => 'active',
+                'created_by' => 'Payroll Manager',
+                'created_at' => now()->subMonths(12)->format('Y-m-d H:i:s'),
+                'updated_at' => now()->subMonths(1)->format('Y-m-d H:i:s'),
+            ],
+            [
+                'id' => 3,
+                'name' => 'Monthly Payslip',
+                'category' => 'payroll',
+                'description' => 'Monthly compensation statement',
+                'version' => '1.5',
+                'variables' => ['employee_name', 'employee_number', 'pay_period', 'basic_salary', 'deductions', 'net_pay'],
+                'status' => 'active',
+                'created_by' => 'Payroll Manager',
+                'created_at' => now()->subMonths(8)->format('Y-m-d H:i:s'),
+                'updated_at' => now()->subDays(15)->format('Y-m-d H:i:s'),
+            ],
+            [
+                'id' => 4,
+                'name' => 'SSS E-1 Form',
+                'category' => 'government',
+                'description' => 'SSS employment report template',
+                'version' => '1.0',
+                'variables' => ['employee_name', 'ss_number', 'date_hired', 'salary'],
+                'status' => 'active',
+                'created_by' => 'HR Staff',
+                'created_at' => now()->subMonths(4)->format('Y-m-d H:i:s'),
+                'updated_at' => now()->subMonths(4)->format('Y-m-d H:i:s'),
+            ],
+            [
+                'id' => 5,
+                'name' => 'Employment Contract',
+                'category' => 'contracts',
+                'description' => 'Standard employment contract template',
+                'version' => '3.1',
+                'variables' => ['employee_name', 'position', 'start_date', 'salary', 'department', 'reporting_to'],
+                'status' => 'active',
+                'created_by' => 'HR Manager',
+                'created_at' => now()->subYear()->format('Y-m-d H:i:s'),
+                'updated_at' => now()->subMonths(3)->format('Y-m-d H:i:s'),
+            ],
+        ]);
+
+        // Apply filters
+        if ($request->filled('status')) {
+            $templates = $templates->where('status', $request->status);
+        }
+
+        if ($request->filled('category')) {
+            $templates = $templates->where('category', $request->category);
+        }
+
+        if ($request->filled('search')) {
+            $search = strtolower($request->search);
+            $templates = $templates->filter(function ($template) use ($search) {
+                return str_contains(strtolower($template['name']), $search) ||
+                       str_contains(strtolower($template['description']), $search);
+            });
+        }
+
+        $this->logAudit(
+            'document_templates.api_list',
+            'info',
+            ['filters' => $request->only(['status', 'category', 'search'])]
+        );
+
+        return response()->json([
+            'success' => true,
+            'data' => $templates->values(),
+            'meta' => [
+                'total_templates' => $templates->count(),
+                'active_templates' => $templates->where('status', 'active')->count(),
+            ]
+        ]);
+    }
+
+    /**
      * API endpoint for generating documents from templates.
      * Used by frontend for AJAX requests with blob response for download.
      */
@@ -432,13 +535,19 @@ class DocumentTemplateController extends Controller
         }
 
         // Return blob response for download
-        $contentType = $validated['output_format'] === 'pdf' 
-            ? 'application/pdf' 
-            : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        // Generate actual PDF or DOCX content
+        if ($validated['output_format'] === 'pdf') {
+            $fileContent = $this->generatePdfContent($template['name'], $documentContent);
+            $contentType = 'application/pdf';
+        } else {
+            $fileContent = $this->generateDocxContent($template['name'], $documentContent);
+            $contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        }
 
-        return response($mockContent)
+        return response($fileContent)
             ->header('Content-Type', $contentType)
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->header('Content-Length', strlen($fileContent));
     }
 
     /**
@@ -479,5 +588,107 @@ class DocumentTemplateController extends Controller
         }
 
         return $content;
+    }
+
+    /**
+     * Generate PDF content as binary data.
+     * This is a minimal PDF generator - in production, use a proper library like MPDF or DOMPDF.
+     */
+    private function generatePdfContent($title, $content)
+    {
+        // Minimal valid PDF structure
+        $pdf = "%PDF-1.4\n";
+        $pdf .= "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
+        $pdf .= "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n";
+        $pdf .= "3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 612 792] /Contents 5 0 R >>\nendobj\n";
+        $pdf .= "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n";
+        $pdf .= "5 0 obj\n<< /Length " . (strlen("BT\n/F1 12 Tf\n100 700 Td\n(" . str_replace(['(', ')'], ['\\(', '\\)'], $title) . ") Tj\n100 680 Td\n(" . str_replace(['(', ')'], ['\\(', '\\)'], substr($content, 0, 200)) . ") Tj\nET\n")) . " >>\nstream\n";
+        $pdf .= "BT\n/F1 12 Tf\n100 700 Td\n(" . str_replace(['(', ')'], ['\\(', '\\)'], $title) . ") Tj\n100 680 Td\n(" . str_replace(['(', ')'], ['\\(', '\\)'], substr($content, 0, 200)) . ") Tj\nET\n";
+        $pdf .= "endstream\nendobj\n";
+        $pdf .= "xref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000247 00000 n \n0000000333 00000 n \n";
+        $pdf .= "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n" . (strlen($pdf) + 100) . "\n%%EOF\n";
+
+        return $pdf;
+    }
+
+    /**
+     * Generate DOCX content as binary data.
+     * This creates a minimal valid DOCX (which is a ZIP file with XML).
+     */
+    private function generateDocxContent($title, $content)
+    {
+        // Create a temporary directory for DOCX files
+        $tempDir = storage_path('app/temp-docx');
+        if (!is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+
+        $zipPath = $tempDir . '/' . uniqid('doc_') . '.docx';
+        $extractPath = $tempDir . '/' . uniqid('extract_') . '/';
+        mkdir($extractPath);
+
+        // Create minimal DOCX structure
+        mkdir($extractPath . 'word');
+        mkdir($extractPath . '_rels');
+        mkdir($extractPath . 'word/_rels');
+
+        // Create [Content_Types].xml
+        $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>';
+        file_put_contents($extractPath . '[Content_Types].xml', $contentTypes);
+
+        // Create .rels file
+        $rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>';
+        file_put_contents($extractPath . '_rels/.rels', $rels);
+
+        // Create word/document.xml
+        $document = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:r><w:t>' . htmlspecialchars($title) . '</w:t></w:r></w:p>
+<w:p><w:r><w:t>' . htmlspecialchars(substr($content, 0, 500)) . '</w:t></w:r></w:p>
+</w:body>
+</w:document>';
+        file_put_contents($extractPath . 'word/document.xml', $document);
+
+        // Create ZIP file
+        $zip = new \ZipArchive();
+        $zip->open($zipPath, \ZipArchive::CREATE);
+        $this->addFilesToZip($zip, $extractPath, '');
+        $zip->close();
+
+        // Read the zip content
+        $content = file_get_contents($zipPath);
+
+        // Cleanup
+        array_map('unlink', glob($extractPath . '*'));
+        rmdir($extractPath);
+        unlink($zipPath);
+
+        return $content;
+    }
+
+    /**
+     * Helper to recursively add files to ZIP archive
+     */
+    private function addFilesToZip($zip, $dir, $base)
+    {
+        $files = scandir($dir);
+        foreach ($files as $file) {
+            if ($file == '.' || $file == '..') continue;
+            $path = $dir . $file;
+            if (is_dir($path)) {
+                $this->addFilesToZip($zip, $path . '/', $base . $file . '/');
+            } else {
+                $zip->addFile($path, $base . $file);
+            }
+        }
     }
 }
