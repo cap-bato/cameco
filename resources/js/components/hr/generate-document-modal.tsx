@@ -82,6 +82,9 @@ interface Employee {
     first_name: string;
     last_name: string;
     department: string;
+    position?: string;
+    date_hired?: string;
+    email?: string;
 }
 
 interface GenerateDocumentModalProps {
@@ -99,18 +102,50 @@ interface FormErrors {
 }
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Normalize variables - convert string array to variable objects
+ * Handles both string arrays (e.g., ['employee_name', 'position'])
+ * and object arrays (e.g., [{name: 'employee_name', label: 'Employee', ...}])
+ */
+function normalizeVariables(vars: any[]): Variable[] {
+    if (!Array.isArray(vars)) return [];
+    
+    return vars.map((v: any) => {
+        if (typeof v === 'string') {
+            // Convert string to variable object
+            return {
+                name: v,
+                label: v.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+                type: 'text',
+                required: false,
+                default_value: '',
+            };
+        }
+        // Already an object
+        return v;
+    });
+}
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
 export function GenerateDocumentModal({ open, onClose, template, employees = [] }: GenerateDocumentModalProps) {
     const { toast } = useToast();
 
+    // Normalize variables on component creation
+    const normalizedVars = normalizeVariables(template.variables);
+
     // Form state
     const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
     const [variableValues, setVariableValues] = useState<Record<string, unknown>>(() => {
         // Initialize with default values
         const defaults: Record<string, unknown> = {};
-        template.variables.forEach(v => {
+        
+        normalizedVars.forEach((v: Variable) => {
             defaults[v.name] = v.default_value || '';
         });
         return defaults;
@@ -163,6 +198,37 @@ export function GenerateDocumentModal({ open, onClose, template, employees = [] 
         setSelectedEmployee(employee);
         setIsEmployeePopoverOpen(false);
         setErrors(prev => ({ ...prev, employee_id: undefined }));
+        
+        // Auto-populate variables from employee data
+        const autoPopulatedValues: Record<string, unknown> = { ...variableValues };
+        
+        normalizedVars.forEach((variable: Variable) => {
+            const varName = variable.name.toLowerCase();
+            
+            // Map common variable names to employee data
+            if (varName.includes('employee_name') || varName === 'name') {
+                autoPopulatedValues[variable.name] = `${employee.first_name} ${employee.last_name}`;
+            } else if (varName.includes('first_name')) {
+                autoPopulatedValues[variable.name] = employee.first_name;
+            } else if (varName.includes('last_name')) {
+                autoPopulatedValues[variable.name] = employee.last_name;
+            } else if (varName.includes('employee_number') || varName === 'number') {
+                autoPopulatedValues[variable.name] = employee.employee_number;
+            } else if (varName.includes('department')) {
+                autoPopulatedValues[variable.name] = employee.department || 'N/A';
+            } else if (varName.includes('position') || varName.includes('job_title')) {
+                autoPopulatedValues[variable.name] = employee.position || 'N/A';
+            } else if (varName.includes('date_hired') || varName.includes('start_date')) {
+                autoPopulatedValues[variable.name] = employee.date_hired || new Date().toISOString().split('T')[0];
+            } else if (varName.includes('current_date') || (varName.includes('date') && !varName.includes('hired'))) {
+                autoPopulatedValues[variable.name] = new Date().toISOString().split('T')[0];
+            } else if (varName.includes('email')) {
+                autoPopulatedValues[variable.name] = employee.email || 'N/A';
+            }
+            // Keep existing value if not auto-populated
+        });
+        
+        setVariableValues(autoPopulatedValues);
     };
 
     // Handle variable value change
@@ -193,7 +259,7 @@ export function GenerateDocumentModal({ open, onClose, template, employees = [] 
         }
 
         // Validate required variables
-        template.variables.forEach(variable => {
+        normalizedVars.forEach(variable => {
             if (variable.required && !variableValues[variable.name]) {
                 newErrors.variables![variable.name] = `${variable.label} is required`;
             }
@@ -227,19 +293,31 @@ export function GenerateDocumentModal({ open, onClose, template, employees = [] 
         setIsSubmitting(true);
 
         try {
+            // Ensure variables is always an object, even if empty
+            const variablesToSend = variableValues || {};
+            
+            const payload = {
+                template_id: template.id,
+                employee_id: selectedEmployee!.id,
+                variables: variablesToSend,
+                output_format: outputFormat,
+                send_email: sendEmail,
+                email_subject: sendEmail ? emailSubject : undefined,
+                email_message: sendEmail ? emailMessage : undefined,
+            };
+
+            console.log('Sending payload:', payload);
+            console.log('Variables type:', typeof variablesToSend, 'Is array:', Array.isArray(variablesToSend));
+
             const response = await axios.post(
                 '/hr/documents/api/templates/generate',
-                {
-                    template_id: template.id,
-                    employee_id: selectedEmployee!.id,
-                    variables: variableValues,
-                    output_format: outputFormat,
-                    send_email: sendEmail,
-                    email_subject: sendEmail ? emailSubject : undefined,
-                    email_message: sendEmail ? emailMessage : undefined,
-                },
+                payload,
                 {
                     responseType: 'blob',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                        'Content-Type': 'application/json',
+                    },
                 }
             );
 
@@ -270,27 +348,79 @@ export function GenerateDocumentModal({ open, onClose, template, employees = [] 
             console.error('Generation error:', error);
             
             let errorMessage = 'Failed to generate document';
-            if (error && typeof error === 'object' && 'response' in error) {
-                const axiosError = error as { response?: { data?: Blob | { message?: string } } };
-                if (axiosError.response?.data) {
-                    // Try to parse error if it's not a blob
-                    if (axiosError.response.data instanceof Blob) {
-                        const text = await axiosError.response.data.text();
-                        try {
-                            const errorData = JSON.parse(text);
-                            errorMessage = errorData.message || errorMessage;
-                        } catch {
-                            // If parsing fails, use default message
+            let errorDetails: string[] = [];
+
+            if (error && typeof error === 'object') {
+                const err = error as any;
+                
+                console.log('Error response:', err.response);
+                console.log('Error status:', err.response?.status);
+                console.log('Error data type:', err.response?.data instanceof Blob ? 'Blob' : typeof err.response?.data);
+                
+                // Handle 422 validation errors
+                if (err.response?.data instanceof Blob) {
+                    // Parse Blob to text
+                    const text = await err.response.data.text();
+                    console.log('Error response text:', text);
+                    
+                    try {
+                        const errorData = JSON.parse(text);
+                        console.log('Parsed error data:', errorData);
+                        
+                        if (errorData.message) {
+                            errorMessage = errorData.message;
                         }
-                    } else if (typeof axiosError.response.data === 'object' && 'message' in axiosError.response.data) {
-                        errorMessage = axiosError.response.data.message || errorMessage;
+                        
+                        if (errorData.errors) {
+                            // Collect all validation errors
+                            Object.entries(errorData.errors).forEach(([field, msgs]: [string, any]) => {
+                                const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                if (Array.isArray(msgs)) {
+                                    msgs.forEach(msg => {
+                                        errorDetails.push(`${fieldLabel}: ${msg}`);
+                                    });
+                                } else {
+                                    errorDetails.push(`${fieldLabel}: ${msgs}`);
+                                }
+                            });
+                        }
+                    } catch (parseError) {
+                        console.error('Failed to parse error response:', parseError);
+                        errorMessage = 'An error occurred. Please check console for details.';
+                    }
+                } else if (typeof err.response?.data === 'object') {
+                    console.log('Error data object:', err.response.data);
+                    
+                    if (err.response.data.message) {
+                        errorMessage = err.response.data.message;
+                    }
+                    
+                    if (err.response.data.errors) {
+                        Object.entries(err.response.data.errors).forEach(([field, msgs]: [string, any]) => {
+                            const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            if (Array.isArray(msgs)) {
+                                msgs.forEach(msg => {
+                                    errorDetails.push(`${fieldLabel}: ${msg}`);
+                                });
+                            } else {
+                                errorDetails.push(`${fieldLabel}: ${msgs}`);
+                            }
+                        });
                     }
                 }
             }
 
+            // Combine all error messages
+            const fullErrorMessage = errorDetails.length > 0 
+                ? `${errorMessage}\n\n${errorDetails.join('\n')}`
+                : errorMessage;
+
+            console.log('Final error message:', fullErrorMessage);
+
+            // Show error toast
             toast({
                 title: 'Generation Failed',
-                description: errorMessage,
+                description: fullErrorMessage,
                 variant: 'destructive',
             });
         } finally {
@@ -304,7 +434,7 @@ export function GenerateDocumentModal({ open, onClose, template, employees = [] 
             setSelectedEmployee(null);
             setVariableValues(() => {
                 const defaults: Record<string, unknown> = {};
-                template.variables.forEach(v => {
+                normalizedVars.forEach(v => {
                     defaults[v.name] = v.default_value || '';
                 });
                 return defaults;
@@ -453,7 +583,7 @@ export function GenerateDocumentModal({ open, onClose, template, employees = [] 
                                 <div className="flex items-center gap-4 text-xs text-gray-500">
                                     <span>Version {template.version}</span>
                                     <span>•</span>
-                                    <span>{template.variables.length} variables</span>
+                                    <span>{normalizedVars.length} variables</span>
                                     <span>•</span>
                                     <span>Last modified: {template.last_modified}</span>
                                 </div>
@@ -540,11 +670,11 @@ export function GenerateDocumentModal({ open, onClose, template, employees = [] 
                     </div>
 
                     {/* Dynamic Variable Inputs */}
-                    {template.variables.length > 0 && (
+                    {normalizedVars.length > 0 && (
                         <div className="space-y-4 mb-6">
                             <Label className="text-base font-semibold">Document Variables</Label>
                             <div className="grid grid-cols-1 gap-4">
-                                {template.variables.map(renderVariableInput)}
+                                {normalizedVars.map(renderVariableInput)}
                             </div>
                         </div>
                     )}

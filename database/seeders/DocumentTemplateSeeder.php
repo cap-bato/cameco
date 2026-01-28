@@ -278,7 +278,7 @@ class DocumentTemplateSeeder extends Seeder
                     'is_active' => $template['is_active'],
                     'is_locked' => $template['is_locked'],
                     'version' => $template['version'],
-                    'variables' => json_encode($template['variables']),
+                    'variables' => $template['variables'], // Don't json_encode - model cast handles it
                     'created_by' => $adminUser->id,
                     'approved_by' => $adminUser->id,
                     'approved_at' => now(),

@@ -246,10 +246,10 @@ export default function TemplatesIndex({ templates: initialTemplates, stats: ini
     const { toast } = useToast();
 
     // State management
-    const [templates, setTemplates] = useState<Template[]>(initialTemplates || mockTemplates);
-    const [stats, setStats] = useState<TemplateStats>(initialStats || mockStats);
+    const [templates, setTemplates] = useState<Template[]>([]);
+    const [stats, setStats] = useState<TemplateStats>(mockStats);
     const [employees, setEmployees] = useState(initialEmployees);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -277,7 +277,7 @@ export default function TemplatesIndex({ templates: initialTemplates, stats: ini
             }
 
             const result = await response.json();
-            setTemplates(result.data || mockTemplates);
+            setTemplates(result.data || []);
             
             // Merge with mock stats to ensure all required fields exist
             const newStats = {
@@ -289,12 +289,14 @@ export default function TemplatesIndex({ templates: initialTemplates, stats: ini
                 },
             };
             setStats(newStats);
-            setLoading(false);
         } catch (err) {
             console.error('Error fetching templates:', err);
-            // Fallback to mock data on error
-            setTemplates(mockTemplates);
-            setStats(mockStats);
+            toast({
+                title: 'Error',
+                description: 'Failed to load templates. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
             setLoading(false);
         }
     };

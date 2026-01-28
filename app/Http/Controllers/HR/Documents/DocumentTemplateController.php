@@ -40,9 +40,10 @@ class DocumentTemplateController extends Controller
                 ];
             });
 
-        // Get employees list for document generation
-        $employees = \App\Models\Employee::with('profile:id,first_name,last_name')
-            ->select('id', 'employee_number', 'profile_id')
+        // Get employees list for document generation with full details
+        $employees = \App\Models\Employee::with(['profile:id,first_name,last_name,email', 'department:id,name', 'position:id,title'])
+            ->select('id', 'employee_number', 'profile_id', 'department_id', 'position_id', 'date_hired', 'basic_salary')
+            ->where('status', 'active')
             ->orderBy('employee_number')
             ->get()
             ->map(fn($emp) => [
@@ -50,7 +51,10 @@ class DocumentTemplateController extends Controller
                 'employee_number' => $emp->employee_number,
                 'first_name' => $emp->profile->first_name ?? '',
                 'last_name' => $emp->profile->last_name ?? '',
-                'department' => 'N/A',
+                'department' => $emp->department->name ?? 'N/A',
+                'position' => $emp->position->title ?? 'N/A',
+                'date_hired' => $emp->date_hired,
+                'email' => $emp->profile->email ?? 'N/A',
             ]);
 
         // Log security audit
@@ -338,7 +342,7 @@ class DocumentTemplateController extends Controller
         $validated = $request->validate([
             'template_id' => 'required|integer',
             'employee_id' => 'required|integer',
-            'variables' => 'required|array',
+            'variables' => 'sometimes|array', // Changed from 'required' to 'sometimes' to allow empty
             'output_format' => 'required|in:pdf,docx',
             'send_email' => 'boolean',
             'email_subject' => 'nullable|string|max:255',
@@ -346,7 +350,7 @@ class DocumentTemplateController extends Controller
         ]);
 
         // Get employee data for variable substitution
-        $employee = \App\Models\Employee::with('profile')
+        $employee = \App\Models\Employee::with(['profile', 'user', 'department', 'position'])
             ->find($validated['employee_id']);
 
         if (!$employee) {
@@ -369,17 +373,30 @@ class DocumentTemplateController extends Controller
         // Build substitution variables
         $substitutions = [
             'employee_name' => $employee->profile->first_name . ' ' . $employee->profile->last_name,
+            'first_name' => $employee->profile->first_name,
+            'last_name' => $employee->profile->last_name,
             'employee_number' => $employee->employee_number,
-            'position' => $employee->position ?? 'N/A',
-            'department' => $employee->department ?? 'N/A',
-            'date_hired' => $employee->date_hired ?? 'N/A',
-            'current_date' => now()->format('Y-m-d'),
+            'employee_address' => $employee->profile->current_address ?? 'N/A',
+            'position' => $employee->position->title ?? $employee->position ?? 'N/A',
+            'department' => $employee->department->name ?? $employee->department ?? 'N/A',
+            'date_hired' => $employee->date_hired ? \Carbon\Carbon::parse($employee->date_hired)->format('F d, Y') : 'N/A',
+            'start_date' => $employee->date_hired ? \Carbon\Carbon::parse($employee->date_hired)->format('F d, Y') : 'N/A',
+            'current_date' => now()->format('F d, Y'),
+            'company_name' => config('app.name', 'SyncingSteel HRIS'),
+            'company_address' => '123 Business St, Makati City, Metro Manila, Philippines',
+            'salary' => $employee->basic_salary ?? 'N/A',
+            'tin' => $employee->profile->tin ?? 'N/A',
+            'sss_number' => $employee->profile->sss_number ?? 'N/A',
+            'philhealth_number' => $employee->profile->philhealth_number ?? 'N/A',
+            'pagibig_number' => $employee->profile->pagibig_number ?? 'N/A',
         ];
 
-        // Merge with user-provided variables
-        $substitutions = array_merge($substitutions, $validated['variables']);
+        // Merge with user-provided variables (if any)
+        if (!empty($validated['variables'])) {
+            $substitutions = array_merge($substitutions, $validated['variables']);
+        }
 
-        // Generate document content (mock implementation)
+        // Generate document content with variable substitution
         $documentContent = $this->generateDocumentContent($template, $substitutions);
 
         // Create filename
@@ -398,19 +415,6 @@ class DocumentTemplateController extends Controller
             ]
         );
 
-        // For now, return mock blob data (in production, generate actual PDF/DOCX)
-        $mockContent = "Mock {$validated['output_format']} document content for {$employee->profile->first_name}";
-
-        if ($validated['send_email'] ?? false) {
-            // In production: Send email with document attachment
-            // For now: Just return success JSON
-            return response()->json([
-                'success' => true,
-                'message' => 'Document generated and sent via email successfully',
-                'filename' => $filename,
-            ]);
-        }
-
         // Return blob response for download
         // Generate actual PDF or DOCX content
         if ($validated['output_format'] === 'pdf') {
@@ -419,6 +423,42 @@ class DocumentTemplateController extends Controller
         } else {
             $fileContent = $this->generateDocxContent($template['name'], $documentContent);
             $contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        }
+
+        // Handle email sending if requested
+        if ($validated['send_email'] ?? false) {
+            try {
+                // Send email with attachment
+                // Get employee email from profile
+                $employeeEmail = $employee->profile->email ?? null;
+                
+                if (!$employeeEmail) {
+                    \Log::warning('No email found for employee', ['employee_id' => $employee->id]);
+                    throw new \Exception('Employee does not have an email address in their profile. Cannot send document.');
+                }
+                
+                \Mail::raw(
+                    $validated['email_message'] ?? "Please find attached your {$template['name']}.",
+                    function($message) use ($employeeEmail, $validated, $fileContent, $filename, $contentType) {
+                        $message->to($employeeEmail)
+                                ->subject($validated['email_subject'] ?? 'Document: ' . $validated['template_id'])
+                                ->attachData($fileContent, $filename, ['mime' => $contentType]);
+                    }
+                );
+                
+                // Also return the file for download
+                return response($fileContent)
+                    ->header('Content-Type', $contentType)
+                    ->header('Content-Disposition', 'attachment; filename="' . $filename . '"')
+                    ->header('Content-Length', strlen($fileContent))
+                    ->header('X-Email-Sent', 'true');
+            } catch (\Exception $e) {
+                \Log::error('Failed to send document email', [
+                    'error' => $e->getMessage(),
+                    'employee_id' => $employee->id,
+                ]);
+                // Continue with download even if email fails
+            }
         }
 
         return response($fileContent)
