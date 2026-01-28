@@ -23,9 +23,6 @@ class EmployeeDocumentController extends Controller
      */
     public function index(Request $request)
     {
-        // TODO: Implement filtering logic when EmployeeDocument model is created (Phase 4)
-        // For now, return empty data structure for frontend development
-        
         $filters = [
             'search' => $request->input('search'),
             'employee_id' => $request->input('employee_id'),
@@ -34,14 +31,68 @@ class EmployeeDocumentController extends Controller
             'expiry_date' => $request->input('expiry_date'),
         ];
 
-        // Mock data structure for frontend development
-        $documents = [
-            'data' => [],
-            'current_page' => 1,
-            'last_page' => 1,
-            'per_page' => 20,
-            'total' => 0,
-        ];
+        // Query documents with filters
+        $query = \App\Models\EmployeeDocument::with([
+            'employee.profile:id,first_name,last_name',
+            'uploadedBy:id,name'
+        ]);
+
+        // Apply filters
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('document_type', 'ilike', "%{$search}%")
+                  ->orWhere('file_name', 'ilike', "%{$search}%")
+                  ->orWhereHas('employee.profile', function ($q) use ($search) {
+                      $q->where('first_name', 'ilike', "%{$search}%")
+                        ->orWhere('last_name', 'ilike', "%{$search}%");
+                  });
+            });
+        }
+
+        if ($request->filled('employee_id')) {
+            $query->where('employee_id', $request->input('employee_id'));
+        }
+
+        if ($request->filled('category')) {
+            $query->where('document_category', $request->input('category'));
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        // Paginate results
+        $documents = $query->paginate(20)->through(function ($doc) {
+            // Handle missing relationships gracefully
+            $employeeName = 'Unknown Employee';
+            $employeeNumber = 'N/A';
+            
+            if ($doc->employee && $doc->employee->profile) {
+                $employeeName = $doc->employee->profile->first_name . ' ' . $doc->employee->profile->last_name;
+                $employeeNumber = $doc->employee->employee_number;
+            }
+            
+            $uploadedBy = $doc->uploadedBy->name ?? 'Unknown';
+
+            return [
+                'id' => $doc->id,
+                'employee_id' => $doc->employee_id,
+                'employee_name' => $employeeName,
+                'employee_number' => $employeeNumber,
+                'document_category' => $doc->document_category,
+                'document_type' => $doc->document_type,
+                'file_name' => $doc->file_name,
+                'file_size' => $doc->file_size,
+                'file_path' => $doc->file_path,
+                'status' => $doc->status,
+                'uploaded_by' => $uploadedBy,
+                'uploaded_at' => $doc->uploaded_at->toDateTimeString(),
+                'expires_at' => $doc->expires_at?->toDateString(),
+                'notes' => $doc->notes,
+                'mime_type' => $doc->mime_type,
+            ];
+        });
 
         // Get employees for filter dropdown
         $employees = \App\Models\Employee::with('profile:id,first_name,last_name')
@@ -119,7 +170,7 @@ class EmployeeDocumentController extends Controller
      * Store a newly uploaded document.
      * 
      * @param UploadDocumentRequest $request
-     * @return \Illuminate\Http\RedirectResponse
+     * @return \Symfony\Component\HttpFoundation\Response
      */
     public function store(UploadDocumentRequest $request)
     {
@@ -258,7 +309,7 @@ class EmployeeDocumentController extends Controller
      * Download the specified document.
      * 
      * @param int $id
-     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     * @return \Symfony\Component\HttpFoundation\Response
      */
     public function download(int $id)
     {
@@ -279,7 +330,9 @@ class EmployeeDocumentController extends Controller
             ]
         );
 
-        return back()->with('error', 'Document download not yet implemented. (Database implementation pending - Phase 4)');
+        return response()->json([
+            'error' => 'Document download not yet implemented.'
+        ], 501);
     }
 
     /**

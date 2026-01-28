@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,7 @@ import {
     AlertCircle,
 } from 'lucide-react';
 import { PermissionGate, usePermission } from '@/components/permission-gate';
+import { useToast } from '@/hooks/use-toast';
 import { DocumentUploadModal } from '@/components/hr/document-upload-modal';
 
 // ============================================================================
@@ -49,21 +50,28 @@ interface Document {
     employee_id: number;
     employee_number: string;
     employee_name: string;
-    department: string;
-    category: 'personal' | 'educational' | 'employment' | 'medical' | 'contracts' | 'benefits' | 'performance' | 'separation' | 'government' | 'special';
+    department?: string;
+    document_category: 'personal' | 'educational' | 'employment' | 'medical' | 'contracts' | 'benefits' | 'performance' | 'separation' | 'government' | 'special';
     document_type: string;
     file_name: string;
     file_size: number;
+    file_path: string;
     uploaded_by: string;
-    upload_date: string;
-    status: 'pending' | 'approved' | 'rejected' | 'expired';
-    expiry_date: string | null;
-    days_until_expiry: number | null;
-    is_expiring_soon: boolean;
+    uploaded_at: string;
+    status: 'pending' | 'approved' | 'rejected' | 'auto_approved' | 'expired';
+    expires_at: string | null;
+    notes?: string | null;
+    mime_type: string;
 }
 
 interface DocumentsIndexProps {
-    documents: Document[];
+    documents: Document[] | {
+        data: Document[];
+        current_page: number;
+        last_page: number;
+        per_page: number;
+        total: number;
+    };
     filters?: {
         search?: string;
         department?: string;
@@ -182,17 +190,33 @@ export default function DocumentsIndex({
     const [departmentFilter, setDepartmentFilter] = useState(filters.department || 'all');
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
+    // Hooks
+    const { toast } = useToast();
+
     // Permissions
     const { hasPermission } = usePermission();
     const canApprove = hasPermission('hr.documents.approve');
     const canDelete = hasPermission('hr.documents.delete');
 
-    // Ensure documents is an array
-    const documentsArray = Array.isArray(documents) ? documents : [];
+    // Ensure documents is an array - handle both direct array and paginated object
+    const documentsArray = Array.isArray(documents) 
+        ? documents 
+        : (documents?.data && Array.isArray(documents.data) ? documents.data : []);
+
+    // Handle upload success - refresh documents list
+    const handleUploadSuccess = () => {
+        toast({
+            title: 'Success',
+            description: 'Document uploaded successfully!',
+            duration: 3000,
+        });
+        // Reload the page data by fetching fresh props from the server
+        router.get(window.location.href, {}, { preserveState: false });
+    };
 
     // Filter documents
     const filteredDocuments = documentsArray.filter((doc) => {
-        if (categoryFilter !== 'all' && doc.category !== categoryFilter) return false;
+        if (categoryFilter !== 'all' && doc.document_category !== categoryFilter) return false;
         if (statusFilter !== 'all' && doc.status !== statusFilter) return false;
         if (departmentFilter !== 'all' && doc.department !== departmentFilter) return false;
         if (searchTerm) {
@@ -584,10 +608,10 @@ export default function DocumentsIndex({
                                                         </span>
                                                     </div>
                                                 </td>
-                                                <td className="py-3 px-2">{doc.department}</td>
+                                                <td className="py-3 px-2">{doc.department || '-'}</td>
                                                 <td className="py-3 px-2">
-                                                    <Badge className={getCategoryBadgeColor(doc.category)}>
-                                                        {doc.category}
+                                                    <Badge className={getCategoryBadgeColor(doc.document_category)}>
+                                                        {doc.document_category}
                                                     </Badge>
                                                 </td>
                                                 <td className="py-3 px-2">{doc.document_type}</td>
@@ -602,12 +626,12 @@ export default function DocumentsIndex({
                                                     </div>
                                                 </td>
                                                 <td className="py-3 px-2">{doc.uploaded_by}</td>
-                                                <td className="py-3 px-2">{doc.upload_date}</td>
+                                                <td className="py-3 px-2">{new Date(doc.uploaded_at).toLocaleDateString()}</td>
                                                 <td className="py-3 px-2">{getStatusBadge(doc.status)}</td>
                                                 <td className="py-3 px-2">
                                                     <div className="flex items-center gap-2">
-                                                        {doc.expiry_date || 'N/A'}
-                                                        {getExpiryWarning(doc.days_until_expiry)}
+                                                        {doc.expires_at || 'N/A'}
+                                                        {doc.expires_at && getExpiryWarning(Math.ceil((new Date(doc.expires_at).getTime() - new Date().getTime()) / (1000 * 3600 * 24)))}
                                                     </div>
                                                 </td>
                                                 <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
@@ -669,6 +693,7 @@ export default function DocumentsIndex({
             <DocumentUploadModal
                 open={isUploadModalOpen}
                 onClose={() => setIsUploadModalOpen(false)}
+                onSuccess={handleUploadSuccess}
             />
         </AppLayout>
     );

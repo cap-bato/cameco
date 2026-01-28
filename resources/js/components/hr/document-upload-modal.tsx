@@ -59,6 +59,7 @@ interface Employee {
 interface DocumentUploadModalProps {
     open: boolean;
     onClose: () => void;
+    onSuccess?: () => void;
     employees?: Employee[];
 }
 
@@ -152,7 +153,7 @@ function validateFile(file: File): string | null {
 // Component
 // ============================================================================
 
-export function DocumentUploadModal({ open, onClose, employees = [] }: DocumentUploadModalProps) {
+export function DocumentUploadModal({ open, onClose, onSuccess, employees = [] }: DocumentUploadModalProps) {
     // State
     const [formData, setFormData] = useState<FormData>({
         employee_id: '',
@@ -316,12 +317,13 @@ export function DocumentUploadModal({ open, onClose, employees = [] }: DocumentU
 
             setUploadProgress(100);
             
-            // Success - close modal after short delay
+            // Success - close modal and trigger refresh callback
             setTimeout(() => {
                 handleClose();
-                // Show success message
-                console.log('Document uploaded successfully');
-                window.location.reload(); // Reload to show new document
+                // Call the success callback to refresh documents list
+                if (onSuccess) {
+                    onSuccess();
+                }
             }, 500);
 
         } catch (error) {
