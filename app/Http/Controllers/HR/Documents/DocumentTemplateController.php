@@ -16,110 +16,29 @@ class DocumentTemplateController extends Controller
      */
     public function index(Request $request)
     {
-        // Mock data for testing
-        $templates = collect([
-            [
-                'id' => 1,
-                'name' => 'Certificate of Employment',
-                'category' => 'employment',
-                'description' => 'Standard COE template with employment details',
-                'version' => '1.2',
-                'variables' => ['employee_name', 'position', 'date_hired', 'current_date'],
-                'status' => 'active',
-                'created_by' => 'HR Admin',
-                'created_at' => now()->subMonths(6)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subWeeks(2)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 2,
-                'name' => 'BIR Form 2316',
-                'category' => 'government',
-                'description' => 'Annual tax certificate template',
-                'version' => '2.0',
-                'variables' => ['employee_name', 'tin', 'tax_year', 'gross_compensation', 'tax_withheld'],
-                'status' => 'active',
-                'created_by' => 'Payroll Manager',
-                'created_at' => now()->subMonths(12)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subMonths(1)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 3,
-                'name' => 'Monthly Payslip',
-                'category' => 'payroll',
-                'description' => 'Monthly compensation statement',
-                'version' => '1.5',
-                'variables' => ['employee_name', 'employee_number', 'pay_period', 'basic_salary', 'deductions', 'net_pay'],
-                'status' => 'active',
-                'created_by' => 'Payroll Manager',
-                'created_at' => now()->subMonths(8)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subDays(15)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 4,
-                'name' => 'SSS E-1 Form',
-                'category' => 'government',
-                'description' => 'SSS employment report template',
-                'version' => '1.0',
-                'variables' => ['employee_name', 'ss_number', 'date_hired', 'salary'],
-                'status' => 'active',
-                'created_by' => 'HR Staff',
-                'created_at' => now()->subMonths(4)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subMonths(4)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 5,
-                'name' => 'Employment Contract',
-                'category' => 'contracts',
-                'description' => 'Standard employment contract template',
-                'version' => '3.1',
-                'variables' => ['employee_name', 'position', 'start_date', 'salary', 'department', 'reporting_to'],
-                'status' => 'active',
-                'created_by' => 'HR Manager',
-                'created_at' => now()->subYear()->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subMonths(3)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 6,
-                'name' => 'Clearance Form',
-                'category' => 'separation',
-                'description' => 'Exit clearance checklist',
-                'version' => '1.1',
-                'variables' => ['employee_name', 'separation_date', 'department', 'position'],
-                'status' => 'active',
-                'created_by' => 'HR Manager',
-                'created_at' => now()->subMonths(9)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subMonths(5)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 7,
-                'name' => 'Inactive Notice Memo',
-                'category' => 'communication',
-                'description' => 'Memo template for inactivity notices',
-                'version' => '1.0',
-                'variables' => ['employee_name', 'absent_days', 'last_work_date', 'contact_deadline'],
-                'status' => 'archived',
-                'created_by' => 'HR Admin',
-                'created_at' => now()->subMonths(18)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subMonths(12)->format('Y-m-d H:i:s'),
-            ],
-        ]);
-
-        // Apply filters
-        if ($request->filled('status')) {
-            $templates = $templates->where('status', $request->status);
-        }
-
-        if ($request->filled('category')) {
-            $templates = $templates->where('category', $request->category);
-        }
-
-        if ($request->filled('search')) {
-            $search = strtolower($request->search);
-            $templates = $templates->filter(function ($template) use ($search) {
-                return str_contains(strtolower($template['name']), $search) ||
-                       str_contains(strtolower($template['description']), $search);
+        // Fetch templates from database
+        $templates = \App\Models\DocumentTemplate::where('is_active', true)
+            ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
+            ->when($request->filled('category'), fn($q) => $q->where('template_type', $request->category))
+            ->when($request->filled('search'), fn($q) => 
+                $q->where('name', 'like', '%' . $request->search . '%')
+                  ->orWhere('description', 'like', '%' . $request->search . '%')
+            )
+            ->get()
+            ->map(function($template) {
+                return [
+                    'id' => $template->id,
+                    'name' => $template->name,
+                    'category' => $template->template_type,
+                    'description' => $template->description,
+                    'version' => 'v' . $template->version,
+                    'variables' => $template->variables ?? [],
+                    'status' => $template->status,
+                    'created_by' => $template->createdBy->name ?? 'System',
+                    'created_at' => $template->created_at->format('Y-m-d H:i:s'),
+                    'updated_at' => $template->updated_at->format('Y-m-d H:i:s'),
+                ];
             });
-        }
 
         // Get employees list for document generation
         $employees = \App\Models\Employee::with('profile:id,first_name,last_name')
@@ -142,7 +61,7 @@ class DocumentTemplateController extends Controller
         );
 
         return Inertia::render('HR/Documents/Templates/Index', [
-            'templates' => $templates->values(),
+            'templates' => $templates,
             'employees' => $employees,
             'filters' => $request->only(['status', 'category', 'search']),
             'categories' => [
@@ -355,86 +274,29 @@ class DocumentTemplateController extends Controller
      */
     public function apiList(Request $request)
     {
-        // Get templates list
-        $templates = collect([
-            [
-                'id' => 1,
-                'name' => 'Certificate of Employment',
-                'category' => 'employment',
-                'description' => 'Standard COE template with employment details',
-                'version' => '1.2',
-                'variables' => ['employee_name', 'position', 'date_hired', 'current_date'],
-                'status' => 'active',
-                'created_by' => 'HR Admin',
-                'created_at' => now()->subMonths(6)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subWeeks(2)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 2,
-                'name' => 'BIR Form 2316',
-                'category' => 'government',
-                'description' => 'Annual tax certificate template',
-                'version' => '2.0',
-                'variables' => ['employee_name', 'tin', 'tax_year', 'gross_compensation', 'tax_withheld'],
-                'status' => 'active',
-                'created_by' => 'Payroll Manager',
-                'created_at' => now()->subMonths(12)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subMonths(1)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 3,
-                'name' => 'Monthly Payslip',
-                'category' => 'payroll',
-                'description' => 'Monthly compensation statement',
-                'version' => '1.5',
-                'variables' => ['employee_name', 'employee_number', 'pay_period', 'basic_salary', 'deductions', 'net_pay'],
-                'status' => 'active',
-                'created_by' => 'Payroll Manager',
-                'created_at' => now()->subMonths(8)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subDays(15)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 4,
-                'name' => 'SSS E-1 Form',
-                'category' => 'government',
-                'description' => 'SSS employment report template',
-                'version' => '1.0',
-                'variables' => ['employee_name', 'ss_number', 'date_hired', 'salary'],
-                'status' => 'active',
-                'created_by' => 'HR Staff',
-                'created_at' => now()->subMonths(4)->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subMonths(4)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 5,
-                'name' => 'Employment Contract',
-                'category' => 'contracts',
-                'description' => 'Standard employment contract template',
-                'version' => '3.1',
-                'variables' => ['employee_name', 'position', 'start_date', 'salary', 'department', 'reporting_to'],
-                'status' => 'active',
-                'created_by' => 'HR Manager',
-                'created_at' => now()->subYear()->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subMonths(3)->format('Y-m-d H:i:s'),
-            ],
-        ]);
-
-        // Apply filters
-        if ($request->filled('status')) {
-            $templates = $templates->where('status', $request->status);
-        }
-
-        if ($request->filled('category')) {
-            $templates = $templates->where('category', $request->category);
-        }
-
-        if ($request->filled('search')) {
-            $search = strtolower($request->search);
-            $templates = $templates->filter(function ($template) use ($search) {
-                return str_contains(strtolower($template['name']), $search) ||
-                       str_contains(strtolower($template['description']), $search);
+        // Get templates list from database
+        $templates = \App\Models\DocumentTemplate::where('is_active', true)
+            ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
+            ->when($request->filled('category'), fn($q) => $q->where('template_type', $request->category))
+            ->when($request->filled('search'), fn($q) => 
+                $q->where('name', 'like', '%' . $request->search . '%')
+                  ->orWhere('description', 'like', '%' . $request->search . '%')
+            )
+            ->get()
+            ->map(function($template) {
+                return [
+                    'id' => $template->id,
+                    'name' => $template->name,
+                    'category' => $template->template_type,
+                    'description' => $template->description,
+                    'version' => 'v' . $template->version,
+                    'variables' => $template->variables ?? [],
+                    'status' => $template->status,
+                    'created_by' => $template->createdBy->name ?? 'System',
+                    'created_at' => $template->created_at->format('Y-m-d H:i:s'),
+                    'updated_at' => $template->updated_at->format('Y-m-d H:i:s'),
+                ];
             });
-        }
 
         $this->logAudit(
             'document_templates.api_list',
@@ -447,7 +309,7 @@ class DocumentTemplateController extends Controller
             'data' => $templates->values(),
             'meta' => [
                 'total_templates' => $templates->count(),
-                'active_templates' => $templates->where('status', 'active')->count(),
+                'active_templates' => $templates->where('status', 'approved')->count(),
             ]
         ]);
     }
@@ -551,29 +413,28 @@ class DocumentTemplateController extends Controller
     }
 
     /**
-     * Mock helper: Get template by ID
+     * Get template by ID from database
      */
     private function getTemplateById($id)
     {
-        $templates = [
-            1 => [
-                'id' => 1,
-                'name' => 'Certificate of Employment',
-                'content' => 'Certificate of Employment for {{employee_name}}...',
-            ],
-            2 => [
-                'id' => 2,
-                'name' => 'BIR Form 2316',
-                'content' => 'BIR Form 2316 for {{employee_name}}...',
-            ],
-            3 => [
-                'id' => 3,
-                'name' => 'Monthly Payslip',
-                'content' => 'Payslip for {{employee_name}} - {{pay_period}}...',
-            ],
-        ];
+        $template = \App\Models\DocumentTemplate::find($id);
+        
+        if (!$template) {
+            return null;
+        }
 
-        return $templates[$id] ?? null;
+        // Load template file content if it exists
+        $content = '';
+        if ($template->file_path && \Storage::exists($template->file_path)) {
+            $content = \Storage::get($template->file_path);
+        }
+
+        return [
+            'id' => $template->id,
+            'name' => $template->name,
+            'content' => $content ?: 'Template for {{employee_name}}',
+            'variables' => $template->variables ?? [],
+        ];
     }
 
     /**

@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\DocumentTemplate;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 
 class DocumentTemplateSeeder extends Seeder
 {
@@ -269,7 +270,7 @@ class DocumentTemplateSeeder extends Seeder
         foreach ($templates as $template) {
             // Check if template already exists by name
             if (!DocumentTemplate::where('name', $template['name'])->exists()) {
-                DocumentTemplate::create([
+                $documentTemplate = DocumentTemplate::create([
                     'name' => $template['name'],
                     'description' => $template['description'],
                     'template_type' => $template['template_type'],
@@ -281,8 +282,17 @@ class DocumentTemplateSeeder extends Seeder
                     'created_by' => $adminUser->id,
                     'approved_by' => $adminUser->id,
                     'approved_at' => now(),
-                    'file_path' => null, // Templates don't have actual files yet
+                    'file_path' => null,
                 ]);
+
+                // Create template file content
+                $templateContent = $this->generateTemplateContent($template['name'], $template['variables']);
+                $filePath = "templates/{$documentTemplate->id}/{$documentTemplate->id}_" . Str::slug($template['name']) . ".txt";
+                
+                \Storage::put($filePath, $templateContent);
+                
+                // Update template with file path
+                $documentTemplate->update(['file_path' => $filePath]);
 
                 $this->command->info("Created template: {$template['name']}");
             } else {
@@ -291,5 +301,93 @@ class DocumentTemplateSeeder extends Seeder
         }
 
         $this->command->info('Document templates seeded successfully!');
+    }
+
+    /**
+     * Generate template content with placeholder variables
+     */
+    private function generateTemplateContent($templateName, $variables)
+    {
+        $content = "=== {$templateName} ===\n\n";
+        $content .= "Document generated on: {{current_date}}\n\n";
+        
+        switch ($templateName) {
+            case 'Employment Contract':
+                $content .= "EMPLOYMENT CONTRACT\n\n";
+                $content .= "This Employment Contract (\"Agreement\") is entered into between:\n\n";
+                $content .= "EMPLOYER:\n";
+                $content .= "Company: {{company_name}}\n";
+                $content .= "Address: {{company_address}}\n\n";
+                $content .= "EMPLOYEE:\n";
+                $content .= "Name: {{employee_name}}\n";
+                $content .= "Address: {{employee_address}}\n";
+                $content .= "Position: {{position}}\n";
+                $content .= "Department: {{department}}\n\n";
+                $content .= "TERMS AND CONDITIONS:\n";
+                $content .= "1. Start Date: {{start_date}}\n";
+                $content .= "2. Employment Type: {{employment_type}}\n";
+                $content .= "3. Probation Period: {{probation_period}}\n";
+                $content .= "4. Salary: {{salary}}\n";
+                $content .= "5. Payment Frequency: {{payment_frequency}}\n";
+                $content .= "6. Reporting To: {{supervisor_name}}\n\n";
+                $content .= "Employee acknowledges receipt and understanding of this contract.\n";
+                break;
+                
+            case 'Certificate of Employment':
+                $content .= "CERTIFICATE OF EMPLOYMENT\n\n";
+                $content .= "TO WHOM IT MAY CONCERN:\n\n";
+                $content .= "This is to certify that {{employee_name}} of {{employee_address}}\n";
+                $content .= "is/was employed by {{company_name}} at {{company_address}} in the position\n";
+                $content .= "of {{position}} under the {{department}} Department.\n\n";
+                $content .= "Employment Details:\n";
+                $content .= "Employee Number: {{employee_number}}\n";
+                $content .= "Date Started: {{start_date}}\n";
+                $content .= "Date Ended: {{end_date}}\n";
+                $content .= "Employment Status: {{employment_status}}\n";
+                $content .= "Salary: {{salary}}\n\n";
+                $content .= "This certificate is issued at the request of the employee for whatever\n";
+                $content .= "purpose it may serve.\n\n";
+                $content .= "Issued on: {{current_date}}\n";
+                break;
+                
+            case 'Memo':
+                $content .= "MEMORANDUM\n\n";
+                $content .= "TO: {{recipient_name}}\n";
+                $content .= "FROM: {{sender_name}}\n";
+                $content .= "DATE: {{current_date}}\n";
+                $content .= "SUBJECT: {{subject}}\n\n";
+                $content .= "{{message_body}}\n";
+                break;
+                
+            case 'Warning Letter':
+                $content .= "WARNING LETTER\n\n";
+                $content .= "Date: {{current_date}}\n\n";
+                $content .= "TO: {{employee_name}}\n";
+                $content .= "Position: {{position}}\n";
+                $content .= "Department: {{department}}\n\n";
+                $content .= "SUBJECT: Disciplinary Action - {{violation_type}}\n\n";
+                $content .= "Dear {{employee_name}},\n\n";
+                $content .= "This letter serves as a formal warning regarding your recent conduct/performance.\n\n";
+                $content .= "Violation: {{violation_details}}\n\n";
+                $content .= "Date of Incident: {{incident_date}}\n\n";
+                $content .= "Expected Corrective Action:\n";
+                $content .= "{{corrective_action}}\n\n";
+                $content .= "Failure to comply may result in further disciplinary action up to and including\n";
+                $content .= "termination of employment.\n\n";
+                $content .= "Acknowledged by:\n\n";
+                $content .= "Employee: _______________     Date: _______________\n";
+                $content .= "Manager: ________________     Date: _______________\n";
+                break;
+                
+            default:
+                $content .= "Template: {{employee_name}}\n";
+                $content .= "Created: {{current_date}}\n";
+                foreach ($variables as $variable) {
+                    $content .= "- {{" . $variable . "}}\n";
+                }
+                break;
+        }
+
+        return $content;
     }
 }
