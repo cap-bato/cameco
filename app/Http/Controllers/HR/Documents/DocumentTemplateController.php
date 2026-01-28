@@ -121,6 +121,19 @@ class DocumentTemplateController extends Controller
             });
         }
 
+        // Get employees list for document generation
+        $employees = \App\Models\Employee::with('profile:id,first_name,last_name')
+            ->select('id', 'employee_number', 'profile_id')
+            ->orderBy('employee_number')
+            ->get()
+            ->map(fn($emp) => [
+                'id' => $emp->id,
+                'employee_number' => $emp->employee_number,
+                'first_name' => $emp->profile->first_name ?? '',
+                'last_name' => $emp->profile->last_name ?? '',
+                'department' => 'N/A',
+            ]);
+
         // Log security audit
         $this->logAudit(
             'document_templates.view',
@@ -130,6 +143,7 @@ class DocumentTemplateController extends Controller
 
         return Inertia::render('HR/Documents/Templates/Index', [
             'templates' => $templates->values(),
+            'employees' => $employees,
             'filters' => $request->only(['status', 'category', 'search']),
             'categories' => [
                 'employment' => 'Employment',

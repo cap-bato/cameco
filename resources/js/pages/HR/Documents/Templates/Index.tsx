@@ -89,6 +89,15 @@ interface TemplateStats {
 interface TemplatesIndexProps {
     templates?: Template[];
     stats?: TemplateStats;
+    employees?: Employee[];
+}
+
+interface Employee {
+    id: number;
+    employee_number: string;
+    first_name: string;
+    last_name: string;
+    department: string;
 }
 
 // ============================================================================
@@ -233,12 +242,13 @@ const mockStats: TemplateStats = {
 // Main Component
 // ============================================================================
 
-export default function TemplatesIndex({ templates: initialTemplates, stats: initialStats }: TemplatesIndexProps) {
+export default function TemplatesIndex({ templates: initialTemplates, stats: initialStats, employees: initialEmployees = [] }: TemplatesIndexProps) {
     const { toast } = useToast();
 
     // State management
     const [templates, setTemplates] = useState<Template[]>(initialTemplates || mockTemplates);
     const [stats, setStats] = useState<TemplateStats>(initialStats || mockStats);
+    const [employees, setEmployees] = useState(initialEmployees);
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
@@ -759,7 +769,7 @@ export default function TemplatesIndex({ templates: initialTemplates, stats: ini
                         setTemplateToGenerate(null);
                     }}
                     template={templateToGenerate}
-                    employees={[]} // TODO: Pass actual employees list from props
+                    employees={employees}
                 />
             )}
         </AppLayout>
