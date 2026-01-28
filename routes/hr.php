@@ -188,6 +188,11 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                     ->middleware('permission:hr.documents.upload')
                     ->name('process');
             });
+
+            // API Endpoints for Document Generation
+            Route::post('/api/templates/generate', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'apiGenerate'])
+                ->middleware('permission:hr.documents.view')
+                ->name('api.templates.generate');
             
             // Generic document routes (must come last)
             Route::get('/{document}', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'show'])

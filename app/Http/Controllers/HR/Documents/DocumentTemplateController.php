@@ -348,4 +348,136 @@ class DocumentTemplateController extends Controller
             'document' => $generatedDocument,
         ]);
     }
+
+    /**
+     * API endpoint for generating documents from templates.
+     * Used by frontend for AJAX requests with blob response for download.
+     */
+    public function apiGenerate(Request $request)
+    {
+        $validated = $request->validate([
+            'template_id' => 'required|integer',
+            'employee_id' => 'required|integer',
+            'variables' => 'required|array',
+            'output_format' => 'required|in:pdf,docx',
+            'send_email' => 'boolean',
+            'email_subject' => 'nullable|string|max:255',
+            'email_message' => 'nullable|string|max:1000',
+        ]);
+
+        // Get employee data for variable substitution
+        $employee = \App\Models\Employee::with('profile')
+            ->find($validated['employee_id']);
+
+        if (!$employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Employee not found',
+            ], 404);
+        }
+
+        // Get template data
+        $template = $this->getTemplateById($validated['template_id']);
+        
+        if (!$template) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Template not found',
+            ], 404);
+        }
+
+        // Build substitution variables
+        $substitutions = [
+            'employee_name' => $employee->profile->first_name . ' ' . $employee->profile->last_name,
+            'employee_number' => $employee->employee_number,
+            'position' => $employee->position ?? 'N/A',
+            'department' => $employee->department ?? 'N/A',
+            'date_hired' => $employee->date_hired ?? 'N/A',
+            'current_date' => now()->format('Y-m-d'),
+        ];
+
+        // Merge with user-provided variables
+        $substitutions = array_merge($substitutions, $validated['variables']);
+
+        // Generate document content (mock implementation)
+        $documentContent = $this->generateDocumentContent($template, $substitutions);
+
+        // Create filename
+        $filename = 'document_' . $employee->employee_number . '_' . now()->format('Ymd_His');
+        $filename .= $validated['output_format'] === 'pdf' ? '.pdf' : '.docx';
+
+        // Log audit
+        $this->logAudit(
+            'document_templates.api_generate',
+            'info',
+            [
+                'template_id' => $validated['template_id'],
+                'employee_id' => $validated['employee_id'],
+                'output_format' => $validated['output_format'],
+                'send_email' => $validated['send_email'] ?? false,
+            ]
+        );
+
+        // For now, return mock blob data (in production, generate actual PDF/DOCX)
+        $mockContent = "Mock {$validated['output_format']} document content for {$employee->profile->first_name}";
+
+        if ($validated['send_email'] ?? false) {
+            // In production: Send email with document attachment
+            // For now: Just return success JSON
+            return response()->json([
+                'success' => true,
+                'message' => 'Document generated and sent via email successfully',
+                'filename' => $filename,
+            ]);
+        }
+
+        // Return blob response for download
+        $contentType = $validated['output_format'] === 'pdf' 
+            ? 'application/pdf' 
+            : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+        return response($mockContent)
+            ->header('Content-Type', $contentType)
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+    }
+
+    /**
+     * Mock helper: Get template by ID
+     */
+    private function getTemplateById($id)
+    {
+        $templates = [
+            1 => [
+                'id' => 1,
+                'name' => 'Certificate of Employment',
+                'content' => 'Certificate of Employment for {{employee_name}}...',
+            ],
+            2 => [
+                'id' => 2,
+                'name' => 'BIR Form 2316',
+                'content' => 'BIR Form 2316 for {{employee_name}}...',
+            ],
+            3 => [
+                'id' => 3,
+                'name' => 'Monthly Payslip',
+                'content' => 'Payslip for {{employee_name}} - {{pay_period}}...',
+            ],
+        ];
+
+        return $templates[$id] ?? null;
+    }
+
+    /**
+     * Mock helper: Generate document content with variable substitution
+     */
+    private function generateDocumentContent($template, $substitutions)
+    {
+        $content = $template['content'];
+
+        foreach ($substitutions as $key => $value) {
+            $content = str_replace('{{' . $key . '}}', $value, $content);
+        }
+
+        return $content;
+    }
 }

@@ -228,7 +228,7 @@ export function GenerateDocumentModal({ open, onClose, template, employees = [] 
 
         try {
             const response = await axios.post(
-                '/api/hr/documents/templates/generate',
+                '/hr/documents/api/templates/generate',
                 {
                     template_id: template.id,
                     employee_id: selectedEmployee!.id,
