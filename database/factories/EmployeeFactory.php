@@ -54,7 +54,6 @@ class EmployeeFactory extends Factory
 
         return [
             'profile_id' => Profile::factory(),
-            'email' => $this->faker->unique()->safeEmail(),
             'employee_number' => $employeeNumber,
             'department_id' => $department?->id,
             'position_id' => $position?->id,

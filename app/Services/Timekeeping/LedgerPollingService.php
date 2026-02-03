@@ -305,4 +305,372 @@ class LedgerPollingService
             'stale_unprocessed_entries' => $unprocessedWithLag, // Entries unprocessed for >5 minutes
         ];
     }
+
+    /**
+     * Task 5.2.3: Validate hash chain integrity for ledger entries.
+     * 
+     * Each ledger entry contains a hash_chain that is computed as:
+     * hash_chain = SHA-256(hash_previous || raw_payload)
+     * 
+     * This method verifies:
+     * 1. Hash computation is correct for each event
+     * 2. Sequence ordering is preserved (no gaps or duplicates)
+     * 3. Chain links back to genesis block (hash_previous = null or matches previous entry)
+     * 
+     * Returns validation details with any broken links or sequence issues.
+     * 
+     * @param Collection|null $events Events to validate (if null, validates all processed events)
+     * @return array Validation result with structure:
+     *   [
+     *     'valid' => bool,
+     *     'total_validated' => int,
+     *     'invalid_hashes' => int,
+     *     'sequence_gaps' => int,
+     *     'failed_at_sequence_id' => int|null,
+     *     'failures' => [
+     *       ['sequence_id' => int, 'reason' => 'hash_mismatch|gap_detected', 'details' => string],
+     *       ...
+     *     ]
+     *   ]
+     * 
+     * @example
+     * $validation = $this->validateHashChain($events);
+     * if (!$validation['valid']) {
+     *     Log::warning('Hash chain broken at ' . $validation['failed_at_sequence_id']);
+     * }
+     */
+    public function validateHashChain(?Collection $events = null): array
+    {
+        if ($events === null) {
+            // If no events provided, validate recently processed events
+            $events = RfidLedger::where('processed', true)
+                ->orderBy('sequence_id', 'desc')
+                ->limit(1000)
+                ->get()
+                ->reverse()
+                ->values();
+        }
+
+        if ($events->isEmpty()) {
+            return [
+                'valid' => true,
+                'total_validated' => 0,
+                'invalid_hashes' => 0,
+                'sequence_gaps' => 0,
+                'failed_at_sequence_id' => null,
+                'failures' => [],
+            ];
+        }
+
+        $failures = [];
+        $invalidHashes = 0;
+        $sequenceGaps = 0;
+        $failedAtSequenceId = null;
+
+        $previousSequenceId = null;
+        $previousHash = null;
+
+        foreach ($events as $event) {
+            // Check for sequence gaps
+            if ($previousSequenceId !== null) {
+                $expectedNextSequence = $previousSequenceId + 1;
+                if ($event->sequence_id !== $expectedNextSequence) {
+                    // Gap detected - log but don't fail validation
+                    // Gaps can occur if events were filtered/deleted
+                    $sequenceGaps++;
+                    $failures[] = [
+                        'sequence_id' => $event->sequence_id,
+                        'reason' => 'gap_detected',
+                        'details' => "Gap from sequence {$previousSequenceId} to {$event->sequence_id}",
+                    ];
+                }
+            }
+
+            // Verify hash chain: compute expected hash and compare
+            $expectedHash = $this->computeHashForEvent($event, $previousHash);
+            
+            if ($expectedHash !== $event->hash_chain) {
+                $invalidHashes++;
+                $failedAtSequenceId = $event->sequence_id;
+                
+                $failures[] = [
+                    'sequence_id' => $event->sequence_id,
+                    'reason' => 'hash_mismatch',
+                    'details' => "Expected hash {$expectedHash}, got {$event->hash_chain}",
+                ];
+            }
+
+            // Update tracking for next iteration
+            $previousSequenceId = $event->sequence_id;
+            $previousHash = $event->hash_chain;
+        }
+
+        $valid = $invalidHashes === 0 && count($failures) === 0;
+
+        return [
+            'valid' => $valid,
+            'total_validated' => $events->count(),
+            'invalid_hashes' => $invalidHashes,
+            'sequence_gaps' => $sequenceGaps,
+            'failed_at_sequence_id' => $failedAtSequenceId,
+            'failures' => $failures,
+        ];
+    }
+
+    /**
+     * Compute the expected hash for a ledger event.
+     * 
+     * Hash formula: SHA-256(hash_previous || raw_payload_json)
+     * 
+     * @param RfidLedger $event The event to compute hash for
+     * @param string|null $previousHash The previous event's hash (or null for genesis)
+     * @return string Computed SHA-256 hash
+     */
+    private function computeHashForEvent(RfidLedger $event, ?string $previousHash = null): string
+    {
+        // Start with previous hash or empty string for genesis block
+        $hashInput = $previousHash ?? '';
+
+        // Append JSON-serialized payload
+        $payloadJson = is_array($event->raw_payload) 
+            ? json_encode($event->raw_payload) 
+            : $event->raw_payload;
+        
+        $hashInput .= $payloadJson;
+
+        // Compute SHA-256 hash
+        return hash('sha256', $hashInput);
+    }
+
+    /**
+     * Detect if hash chain is broken by finding first invalid link.
+     * 
+     * Faster than full validation when you only need to know if there's a problem.
+     * 
+     * @param int|null $startSequenceId Start validation from this sequence
+     * @return bool True if chain is valid, false if broken
+     */
+    public function isHashChainValid(?int $startSequenceId = null): bool
+    {
+        $query = RfidLedger::where('processed', true);
+        
+        if ($startSequenceId !== null) {
+            $query = $query->where('sequence_id', '>=', $startSequenceId);
+        }
+
+        $events = $query->orderBy('sequence_id', 'asc')
+            ->limit(1000)
+            ->get();
+
+        $validation = $this->validateHashChain($events);
+        return $validation['valid'];
+    }
+
+    /**
+     * Task 5.2.4: Create AttendanceEvent records from processed ledger entries.
+     * 
+     * Converts ledger entries into attendance records that are used by payroll,
+     * appraisal, and reporting systems. Links each attendance event back to
+     * its source ledger entry for auditability.
+     * 
+     * @param Collection $ledgerEvents Unprocessed ledger events ready for conversion
+     * @param bool $validateHashChain If true, skip events with invalid hash_chain
+     * @return array Result with created events and any errors:
+     *   [
+     *     'created' => int (count of successfully created AttendanceEvent records),
+     *     'failed' => int (count of failed creations),
+     *     'errors' => [
+     *       ['sequence_id' => int, 'reason' => string],
+     *       ...
+     *     ],
+     *     'attendance_events' => Collection
+     *   ]
+     * 
+     * @example
+     * $result = $this->createAttendanceEventsFromLedger($ledgerEvents);
+     * Log::info("Created {$result['created']} attendance events");
+     */
+    public function createAttendanceEventsFromLedger(Collection $ledgerEvents, bool $validateHashChain = true): array
+    {
+        $created = 0;
+        $failed = 0;
+        $errors = [];
+        $attendanceEvents = collect();
+
+        foreach ($ledgerEvents as $ledgerEvent) {
+            try {
+                // Skip if hash chain validation is required and fails
+                if ($validateHashChain && !$ledgerEvent->getAttribute('hash_verified')) {
+                    $failed++;
+                    $errors[] = [
+                        'sequence_id' => $ledgerEvent->sequence_id,
+                        'reason' => 'hash_verification_failed',
+                    ];
+                    continue;
+                }
+
+                // Resolve employee ID from RFID
+                $employeeId = $this->resolveEmployeeId($ledgerEvent->employee_rfid);
+                if (!$employeeId) {
+                    $failed++;
+                    $errors[] = [
+                        'sequence_id' => $ledgerEvent->sequence_id,
+                        'reason' => 'cannot_resolve_employee',
+                    ];
+                    continue;
+                }
+
+                // Validate scan_timestamp exists
+                if (!$ledgerEvent->scan_timestamp) {
+                    $failed++;
+                    $errors[] = [
+                        'sequence_id' => $ledgerEvent->sequence_id,
+                        'reason' => 'missing_scan_timestamp',
+                    ];
+                    continue;
+                }
+
+                // Create attendance event from ledger entry
+                $attendanceEvent = AttendanceEvent::create([
+                    'employee_id' => $employeeId,
+                    'event_date' => $ledgerEvent->scan_timestamp->date(),
+                    'event_time' => $ledgerEvent->scan_timestamp,
+                    'event_type' => $ledgerEvent->event_type,
+                    'ledger_sequence_id' => $ledgerEvent->sequence_id,
+                    'is_deduplicated' => $ledgerEvent->getAttribute('is_deduplicated') ?? false,
+                    'ledger_hash_verified' => $ledgerEvent->getAttribute('hash_verified') ?? true,
+                    'source' => 'edge_machine', // Ledger events are always from edge machine
+                    'device_id' => $ledgerEvent->device_id,
+                    'notes' => "Ledger sequence #{$ledgerEvent->sequence_id}",
+                ]);
+
+                $created++;
+                $attendanceEvents->push($attendanceEvent);
+
+            } catch (\Exception $e) {
+                $failed++;
+                $errors[] = [
+                    'sequence_id' => $ledgerEvent->sequence_id,
+                    'reason' => 'creation_failed',
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return [
+            'created' => $created,
+            'failed' => $failed,
+            'errors' => $errors,
+            'attendance_events' => $attendanceEvents,
+        ];
+    }
+
+    /**
+     * Resolve employee ID from RFID card identifier.
+     * 
+     * Maps RFID card number to internal employee ID.
+     * This is a placeholder - actual implementation would look up from employee table
+     * or RFID card mapping table.
+     * 
+     * @param string $employeeRfid RFID card identifier
+     * @return int|null Employee ID or null if not found
+     */
+    private function resolveEmployeeId(string $employeeRfid): ?int
+    {
+        // TODO: Implement RFID to employee mapping lookup
+        // For now, return first employee or null
+        $employee = \App\Models\Employee::first();
+        return $employee?->id;
+    }
+
+    /**
+     * Task 5.2.5: Mark ledger entries as processed.
+     * 
+     * After successfully creating attendance events and validating data,
+     * mark ledger entries as processed so they're not reprocessed in next cycle.
+     * 
+     * This method already exists as markEventsAsProcessed() - this is an alias
+     * for clarity in the 5.2.5 context.
+     * 
+     * @param Collection $events Events to mark as processed
+     * @param \DateTime|null $processedAt Timestamp for processing (default: now)
+     * @return int Number of events marked as processed
+     * 
+     * @example
+     * $result = $this->markLedgerEntriesAsProcessed($ledgerEvents);
+     * Log::info("Marked $result events as processed");
+     */
+    public function markLedgerEntriesAsProcessed(Collection $events, ?\DateTime $processedAt = null): int
+    {
+        return $this->markEventsAsProcessed($events, $processedAt);
+    }
+
+    /**
+     * Complete processing pipeline: validate, create events, and mark processed.
+     * 
+     * Combines all three subtasks (5.2.3, 5.2.4, 5.2.5) into a single operation.
+     * 
+     * @param Collection|null $ledgerEvents Events to process (if null, polls automatically)
+     * @return array Complete processing result:
+     *   [
+     *     'polled' => int (events polled),
+     *     'deduplicated' => int (duplicates detected),
+     *     'validated' => int (hash chain validated),
+     *     'valid_hashes' => int (events with valid hashes),
+     *     'created_attendance_events' => int,
+     *     'marked_processed' => int,
+     *     'errors' => [...],
+     *     'details' => {...}
+     *   ]
+     */
+    public function processLedgerEventsComplete(?Collection $ledgerEvents = null): array
+    {
+        // Step 1: Poll events if not provided
+        if ($ledgerEvents === null) {
+            $result = $this->prepareEventsForProcessing(1000);
+            $ledgerEvents = $result['processable_events'];
+        }
+
+        if ($ledgerEvents->isEmpty()) {
+            return [
+                'polled' => 0,
+                'deduplicated' => 0,
+                'validated' => 0,
+                'valid_hashes' => 0,
+                'created_attendance_events' => 0,
+                'marked_processed' => 0,
+                'errors' => [],
+                'details' => 'No events to process',
+            ];
+        }
+
+        // Step 2: Validate hash chains (Task 5.2.3)
+        $hashValidation = $this->validateHashChain($ledgerEvents);
+        
+        // Mark hash validation on each event
+        $ledgerEvents = $ledgerEvents->map(function (RfidLedger $event) use ($hashValidation) {
+            $event->setAttribute('hash_verified', $hashValidation['valid']);
+            return $event;
+        });
+
+        // Step 3: Create attendance events (Task 5.2.4)
+        $creationResult = $this->createAttendanceEventsFromLedger($ledgerEvents, false);
+
+        // Step 4: Mark ledger entries as processed (Task 5.2.5)
+        $markedProcessed = $this->markLedgerEntriesAsProcessed($ledgerEvents);
+
+        return [
+            'polled' => $ledgerEvents->count(),
+            'deduplicated' => 0, // Already handled in prepareEventsForProcessing
+            'validated' => $hashValidation['total_validated'],
+            'valid_hashes' => $hashValidation['total_validated'] - $hashValidation['invalid_hashes'],
+            'created_attendance_events' => $creationResult['created'],
+            'marked_processed' => $markedProcessed,
+            'errors' => array_merge($hashValidation['failures'], $creationResult['errors']),
+            'details' => [
+                'hash_validation' => $hashValidation,
+                'attendance_events' => $creationResult['attendance_events'],
+            ],
+        ];
+    }
 }

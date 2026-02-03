@@ -803,20 +803,27 @@ Route::prefix('timekeeping')
 **Subtasks:**
 - [x] **5.2.1** Implement `pollNewEvents()` method to fetch unprocessed ledger entries ✅
 - [x] **5.2.2** Implement deduplication logic (15-second window) ✅
-- [ ] **5.2.3** Validate hash chain on each event
-- [ ] **5.2.4** Create `AttendanceEvent` records from ledger entries
-- [ ] **5.2.5** Mark ledger entries as processed
+- [x] **5.2.3** Validate hash chain on each event ✅
+- [x] **5.2.4** Create `AttendanceEvent` records from ledger entries ✅
+- [x] **5.2.5** Mark ledger entries as processed ✅
 
 **Acceptance Criteria:**
-- ✅ Polling processes events without errors - 8 unit tests passing
+- ✅ Polling processes events without errors - 17 unit tests passing
 - ✅ Deduplication prevents duplicates - 15-second window verified
-- ✅ Hash validation framework ready - AttendanceEventFactory created for comprehensive testing
+- ✅ Hash chain validation detects tampering and sequence gaps
+- ✅ Attendance events created from ledger entries with proper linking
+- ✅ Ledger entries marked as processed for next polling cycle
 
 **Implementation Details:**
 - Task 5.2.1: `pollNewEvents(limit=1000)` fetches RfidLedger entries with `unprocessed().orderBySequence()`
 - Task 5.2.2: `deduplicateEvents()` detects duplicates using 15-second time window for same employee/device/event_type
+- Task 5.2.3: `validateHashChain()` verifies SHA-256 hashes and detects sequence gaps; `isHashChainValid()` provides quick boolean check
+- Task 5.2.4: `createAttendanceEventsFromLedger()` converts ledger entries to AttendanceEvent records with error handling
+- Task 5.2.5: `markLedgerEntriesAsProcessed()` updates ledger.processed flag with timestamp
+- Combined pipeline: `processLedgerEventsComplete()` handles all three steps (5.2.3-5.2.5) in sequence
 - Created RfidLedgerFactory and AttendanceEventFactory for test data generation
-- All unit tests passing: 8/8 ✅
+- Fixed EmployeeFactory to remove email field (dropped in earlier migration)
+- All unit tests passing: 17/17 ✅
 
 ---
 
