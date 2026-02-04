@@ -15,11 +15,19 @@ use App\Models\RfidDevice;
 use App\Models\LedgerHealthLog;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class AnalyticsController extends Controller
 {
     /**
+     * Cache TTL in seconds (5 minutes for analytics - Task 7.2.2).
+     */
+    private const CACHE_TTL = 300; // 5 minutes
+
+    /**
      * Display attendance analytics overview.
+     * 
+     * Task 7.2.2: Added caching with 5-minute TTL for analytics data.
      */
     public function overview(Request $request): Response
     {
@@ -28,69 +36,76 @@ class AnalyticsController extends Controller
         // Get date range based on period
         $dateRange = $this->getDateRangeForPeriod($period);
         
-        // Get total employees
-        $totalEmployees = Employee::where('status', 'active')->count();
-        
-        // Get attendance summaries for the period
-        $summaries = DailyAttendanceSummary::whereBetween('attendance_date', [
-            $dateRange['start'],
-            $dateRange['end']
-        ])->get();
-        
-        // Calculate summary metrics
-        $totalRecords = $summaries->count();
-        $presentCount = $summaries->where('is_present', true)->count();
-        $lateCount = $summaries->where('is_late', true)->count();
-        $absentCount = $summaries->where('is_absent', true)->count();
-        
-        $attendanceRate = $totalRecords > 0 ? ($presentCount / $totalRecords) * 100 : 0;
-        $lateRate = $totalRecords > 0 ? ($lateCount / $totalRecords) * 100 : 0;
-        $absentRate = $totalRecords > 0 ? ($absentCount / $totalRecords) * 100 : 0;
-        
-        // Calculate average hours and overtime
-        $avgHours = $summaries->avg('total_hours') ?? 0;
-        $totalOvertimeHours = $summaries->sum('overtime_hours') ?? 0;
-        
-        // Calculate compliance score (simplified)
-        $complianceScore = max(0, 100 - ($lateRate * 0.5) - ($absentRate * 2));
+        // Cache analytics data with 5-minute TTL (Task 7.2.2)
+        $cacheKey = 'analytics_overview_' . $period . '_' . $dateRange['start']->format('Ymd');
+        $analytics = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($dateRange, $period) {
+            // Get total employees
+            $totalEmployees = Employee::where('status', 'active')->count();
+            
+            // Get attendance summaries for the period with eager loading (Task 7.2.1)
+            $summaries = DailyAttendanceSummary::with([
+                'employee:id,employee_number,status',
+                'employee.department:id,name'
+            ])->whereBetween('attendance_date', [
+                $dateRange['start'],
+                $dateRange['end']
+            ])->get();
+            
+            // Calculate summary metrics
+            $totalRecords = $summaries->count();
+            $presentCount = $summaries->where('is_present', true)->count();
+            $lateCount = $summaries->where('is_late', true)->count();
+            $absentCount = $summaries->where('is_absent', true)->count();
+            
+            $attendanceRate = $totalRecords > 0 ? ($presentCount / $totalRecords) * 100 : 0;
+            $lateRate = $totalRecords > 0 ? ($lateCount / $totalRecords) * 100 : 0;
+            $absentRate = $totalRecords > 0 ? ($absentCount / $totalRecords) * 100 : 0;
+            
+            // Calculate average hours and overtime
+            $avgHours = $summaries->avg('total_hours') ?? 0;
+            $totalOvertimeHours = $summaries->sum('overtime_hours') ?? 0;
+            
+            // Calculate compliance score (simplified)
+            $complianceScore = max(0, 100 - ($lateRate * 0.5) - ($absentRate * 2));
 
-        $analytics = [
-            // Summary metrics
-            'summary' => [
-                'total_employees' => $totalEmployees,
-                'average_attendance_rate' => round($attendanceRate, 1),
-                'average_late_rate' => round($lateRate, 1),
-                'average_absent_rate' => round($absentRate, 1),
-                'average_hours_per_employee' => round($avgHours, 1),
-                'total_overtime_hours' => round($totalOvertimeHours, 0),
-                'compliance_score' => round($complianceScore, 1),
-            ],
+            return [
+                // Summary metrics
+                'summary' => [
+                    'total_employees' => $totalEmployees,
+                    'average_attendance_rate' => round($attendanceRate, 1),
+                    'average_late_rate' => round($lateRate, 1),
+                    'average_absent_rate' => round($absentRate, 1),
+                    'average_hours_per_employee' => round($avgHours, 1),
+                    'total_overtime_hours' => round($totalOvertimeHours, 0),
+                    'compliance_score' => round($complianceScore, 1),
+                ],
 
-            // Attendance trends (last 30 days)
-            'attendance_trends' => $this->getAttendanceTrends($period),
+                // Attendance trends (last 30 days)
+                'attendance_trends' => $this->getAttendanceTrends($period),
 
-            // Late arrival trends
-            'late_trends' => $this->getLateTrends($period),
+                // Late arrival trends
+                'late_trends' => $this->getLateTrends($period),
 
-            // Department comparison
-            'department_comparison' => $this->getDepartmentComparison(),
+                // Department comparison
+                'department_comparison' => $this->getDepartmentComparison(),
 
-            // Overtime analysis
-            'overtime_analysis' => $this->getOvertimeAnalysis(),
+                // Overtime analysis
+                'overtime_analysis' => $this->getOvertimeAnalysis(),
 
-            // Status distribution
-            'status_distribution' => [
-                ['status' => 'present', 'count' => $presentCount, 'percentage' => round($attendanceRate, 1)],
-                ['status' => 'late', 'count' => $lateCount, 'percentage' => round($lateRate, 1)],
-                ['status' => 'absent', 'count' => $absentCount, 'percentage' => round($absentRate, 1)],
-            ],
+                // Status distribution
+                'status_distribution' => [
+                    ['status' => 'present', 'count' => $presentCount, 'percentage' => round($attendanceRate, 1)],
+                    ['status' => 'late', 'count' => $lateCount, 'percentage' => round($lateRate, 1)],
+                    ['status' => 'absent', 'count' => $absentCount, 'percentage' => round($absentRate, 1)],
+                ],
 
-            // Top issues (based on real data)
-            'top_issues' => $this->getTopIssues($dateRange),
+                // Top issues (based on real data)
+                'top_issues' => $this->getTopIssues($dateRange),
 
-            // Compliance metrics
-            'compliance_metrics' => $this->getComplianceMetrics($summaries),
-        ];
+                // Compliance metrics
+                'compliance_metrics' => $this->getComplianceMetrics($summaries),
+            ];
+        });
 
         return Inertia::render('HR/Timekeeping/Overview', [
             'analytics' => $analytics,

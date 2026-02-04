@@ -631,6 +631,20 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 ->middleware('permission:hr.timekeeping.attendance.view')
                 ->name('employee.timeline');
 
+            // Performance Test Page (Task 7.2.4)
+            Route::get('/performance-test', function () {
+                return inertia('HR/Timekeeping/PerformanceTest');
+            })
+                ->middleware('permission:hr.timekeeping.attendance.view')
+                ->name('performance-test');
+
+            // Integration Test Page (Tasks 7.3.1 & 7.3.2)
+            Route::get('/integration-test', function () {
+                return inertia('HR/Timekeeping/IntegrationTest');
+            })
+                ->middleware('permission:hr.timekeeping.attendance.view')
+                ->name('integration-test');
+
             // ========================================
             // RFID Ledger API Routes (JSON Responses)
             // ========================================

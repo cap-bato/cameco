@@ -12,6 +12,7 @@ use App\Models\AttendanceEvent;
 use App\Models\Employee;
 use App\Models\RfidDevice;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class AttendanceController extends Controller
 {
@@ -20,10 +21,13 @@ class AttendanceController extends Controller
      */
     public function index(Request $request): Response
     {
-        // Build query for daily attendance summaries
+        // Build query for daily attendance summaries with eager loading (Task 7.2.1: Fix N+1)
         $query = DailyAttendanceSummary::with([
-            'employee:id,employee_number,profile_id,department_id',
-            'employee.profile:id,first_name,last_name'
+            'employee:id,employee_number,profile_id,department_id,status',
+            'employee.profile:id,first_name,last_name',
+            'employee.department:id,name',
+            'workSchedule:id,name,time_in,time_out',
+            'leaveRequest:id,leave_type'
         ])->orderBy('attendance_date', 'desc');
 
         // Apply date filter (default to current month)

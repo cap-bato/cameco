@@ -13,6 +13,7 @@ use App\Models\Employee;
 use App\Models\LedgerHealthLog;
 use App\Models\RfidDevice;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class LedgerController extends Controller
 {
