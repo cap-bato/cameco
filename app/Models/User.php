@@ -77,6 +77,17 @@ class User extends Authenticatable
     }
 
     /**
+     * One-to-one relation to Employee
+     * 
+     * Links user accounts to employee records for Employee Portal access.
+     * Used by employees to view their personal data, submit leave requests, etc.
+     */
+    public function employee()
+    {
+        return $this->hasOne(Employee::class);
+    }
+
+    /**
      * One-to-many relation to SecurityAuditLog
      */
     public function auditLogs()

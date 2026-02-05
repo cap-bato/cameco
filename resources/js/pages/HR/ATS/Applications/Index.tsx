@@ -15,7 +15,7 @@ import { ApplicationFilters } from '@/components/ats/application-filters';
 import { BulkActionsCard } from '@/components/ats/bulk-actions-card';
 import type { PageProps } from '@inertiajs/core';
 import type { Application, ApplicationSummary, ApplicationFilters as ApplicationFiltersType } from '@/types/ats-pages';
-import { Heading, HeadingSmall } from '@/components/heading';
+import axios from 'axios';
 
 interface ApplicationsIndexProps extends PageProps {
   applications: Application[];
@@ -29,16 +29,11 @@ const breadcrumbs = [
   { title: 'Applications', href: '/applications' },
 ];
 
-/**
- * Applications Index Page
- * Displays all applications with filters, search, and bulk actions
- */
 export default function ApplicationsIndex({
   applications,
   statistics,
   filters: initialFilters,
 }: ApplicationsIndexProps) {
-  // Local copy so quick actions can optimistically update UI without a round-trip
   const [apps, setApps] = useState<Application[]>(Array.isArray(applications) ? applications : []);
   const [statusFilter, setStatusFilter] = useState(initialFilters?.status || '');
   const [jobFilter, setJobFilter] = useState(initialFilters?.job || '');
@@ -50,6 +45,8 @@ export default function ApplicationsIndex({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isBulkLoading, setIsBulkLoading] = useState(false);
   const [bulkAction, setBulkAction] = useState<string | null>(null);
+
+  // Schedule Interview
   const [interviewApplication, setInterviewApplication] = useState<Application | undefined>(undefined);
   const [isInterviewModalOpen, setIsInterviewModalOpen] = useState(false);
   const [interviewFormData, setInterviewFormData] = useState({
@@ -59,42 +56,27 @@ export default function ApplicationsIndex({
     location_type: 'office' as 'office' | 'video_call' | 'phone',
   });
 
-  // Sync prop changes to state
   useEffect(() => {
     if (Array.isArray(applications)) {
       setApps(applications);
     }
   }, [applications]);
 
-  /**
-   * Filter applications based on status, job, and score range
-   */
   const getFilteredApplications = () => {
     return apps.filter((application) => {
-      // Filter by status
-      if (statusFilter && application.status !== statusFilter) {
-        return false;
-      }
+      if (statusFilter && application.status !== statusFilter) return false;
 
-      // Filter by job title (case-insensitive)
       if (jobFilter && typeof jobFilter === 'string' && jobFilter.trim()) {
         const query = jobFilter.toLowerCase();
         const jobTitle = application.job_title || '';
-        if (!jobTitle.toLowerCase().includes(query)) {
-          return false;
-        }
+        if (!jobTitle.toLowerCase().includes(query)) return false;
       }
 
-      // Filter by score range
       if (application.score !== null && application.score !== undefined) {
         const scoreFrom = scoreFromFilter ? parseInt(scoreFromFilter) : null;
         const scoreTo = scoreToFilter ? parseInt(scoreToFilter) : null;
-        if (scoreFrom && application.score < scoreFrom) {
-          return false;
-        }
-        if (scoreTo && application.score > scoreTo) {
-          return false;
-        }
+        if (scoreFrom && application.score < scoreFrom) return false;
+        if (scoreTo && application.score > scoreTo) return false;
       }
 
       return true;
@@ -103,10 +85,6 @@ export default function ApplicationsIndex({
 
   const filteredApplications = getFilteredApplications();
 
-  const handleFilterChange = () => {
-    // Filters are applied in real-time via getFilteredApplications()
-  };
-
   const handleResetFilters = () => {
     setStatusFilter('');
     setJobFilter('');
@@ -114,35 +92,37 @@ export default function ApplicationsIndex({
     setScoreToFilter('');
   };
 
-  const handleShortlistClick = (application: Application) => {
-    (async () => {
-      console.log('Shortlist application:', application.id);
-      // optimistic UI update
+  // Shortlist
+  const handleShortlistClick = async (application: Application) => {
+    try {
       setApps((prev) => prev.map((a) => (a.id === application.id ? { ...a, status: 'shortlisted' } : a)));
-
-      try {
-        // simulate server call
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        console.log('Application shortlisted on server:', application.id);
-      } catch (err) {
-        console.error('Failed to shortlist application:', application.id, err);
-        // rollback on failure (for now simply revert)
-        setApps((prev) => prev.map((a) => (a.id === application.id ? application : a)));
-      }
-    })();
+      await axios.post(`/hr/ats/applications/${application.id}/shortlist`);
+    } catch (err) {
+      console.error('Failed to shortlist:', err);
+      setApps((prev) => prev.map((a) => (a.id === application.id ? application : a)));
+    }
   };
 
+  // Reject
   const handleRejectClick = (application: Application) => {
     setActionApplication(application);
     setIsDeleteDialogOpen(true);
   };
 
   const handleConfirmReject = async () => {
+    if (!actionApplication) return;
     setIsDeleteLoading(true);
+
     try {
-      console.log('Reject application:', actionApplication?.id);
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      console.log('Application rejected successfully');
+      await axios.post(`/hr/ats/applications/${actionApplication.id}/reject`, { reason: 'Rejected via UI' });
+
+      setApps((prev) =>
+        prev.map((a) =>
+          a.id === actionApplication.id ? { ...a, status: 'rejected' } : a
+        )
+      );
+    } catch (err) {
+      console.error('Failed to reject application:', err);
     } finally {
       setIsDeleteLoading(false);
       setIsDeleteDialogOpen(false);
@@ -150,37 +130,51 @@ export default function ApplicationsIndex({
     }
   };
 
+  // Open Schedule Interview Modal
   const handleScheduleInterviewClick = (application: Application) => {
     setInterviewApplication(application);
     setIsInterviewModalOpen(true);
   };
 
-  const handleScheduleInterview = async () => {
+  // Submit Schedule Interview
+  const handleScheduleInterviewSubmit = async () => {
     if (!interviewApplication) return;
+
     try {
-      console.log('Schedule interview for application:', interviewApplication.id, interviewFormData);
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      console.log('Interview scheduled successfully');
-      setIsInterviewModalOpen(false);
-      // Optimistically update the status to interviewed
+      await axios.post(`/hr/ats/applications/${interviewApplication.id}/schedule-interview`, {
+        scheduled_date: interviewFormData.scheduled_date,
+        scheduled_time: interviewFormData.scheduled_time,
+        duration_minutes: interviewFormData.duration_minutes,
+        location_type: interviewFormData.location_type,
+        interviewer_name: 'HR Manager',
+      });
+
+      // Optimistic UI update
       setApps((prev) =>
         prev.map((a) =>
           a.id === interviewApplication.id ? { ...a, status: 'interviewed' } : a
         )
       );
+
+      setIsInterviewModalOpen(false);
+      setInterviewApplication(undefined);
+      setInterviewFormData({
+        scheduled_date: '',
+        scheduled_time: '',
+        duration_minutes: 60,
+        location_type: 'office',
+      });
     } catch (err) {
       console.error('Failed to schedule interview:', err);
     }
   };
 
+  // Bulk Actions
   const toggleSelectApplication = (id: number) => {
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
       return newSet;
     });
   };
@@ -194,18 +188,12 @@ export default function ApplicationsIndex({
   };
 
   const handleBulkShortlist = async () => {
-    if (selectedIds.size === 0) return;
+    if (!selectedIds.size) return;
     setIsBulkLoading(true);
     setBulkAction('shortlist');
     try {
-      console.log(`Bulk shortlist ${selectedIds.size} applications:`, Array.from(selectedIds));
-      // optimistic UI update
-      setApps((prev) =>
-        prev.map((a) => (selectedIds.has(a.id) ? { ...a, status: 'shortlisted' } : a))
-      );
-      // simulate server call
-      await new Promise((resolve) => setTimeout(resolve, 700));
-      console.log('Bulk shortlist completed on server');
+      setApps((prev) => prev.map((a) => (selectedIds.has(a.id) ? { ...a, status: 'shortlisted' } : a)));
+      await Promise.all(Array.from(selectedIds).map(id => axios.post(`/hr/ats/applications/${id}/shortlist`)));
       setSelectedIds(new Set());
     } catch (err) {
       console.error('Failed to bulk shortlist:', err);
@@ -216,18 +204,12 @@ export default function ApplicationsIndex({
   };
 
   const handleBulkReject = async () => {
-    if (selectedIds.size === 0) return;
+    if (!selectedIds.size) return;
     setIsBulkLoading(true);
     setBulkAction('reject');
     try {
-      console.log(`Bulk reject ${selectedIds.size} applications:`, Array.from(selectedIds));
-      // optimistic UI update
-      setApps((prev) =>
-        prev.map((a) => (selectedIds.has(a.id) ? { ...a, status: 'rejected' } : a))
-      );
-      // simulate server call
-      await new Promise((resolve) => setTimeout(resolve, 700));
-      console.log('Bulk reject completed on server');
+      setApps((prev) => prev.map((a) => (selectedIds.has(a.id) ? { ...a, status: 'rejected' } : a)));
+      await Promise.all(Array.from(selectedIds).map(id => axios.post(`/hr/ats/applications/${id}/reject`, { reason: 'Rejected via UI' })));
       setSelectedIds(new Set());
     } catch (err) {
       console.error('Failed to bulk reject:', err);
@@ -240,68 +222,26 @@ export default function ApplicationsIndex({
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Applications" />
-            <Head title="Applications" />
 
-            <div className="space-y-6 p-6">
-                {/* Header */}
-                <div>
-                    <Heading title="Applications" />
-                    <HeadingSmall title="Manage and track job applications" />
-                </div>
+      <div className="space-y-6 p-6">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">Applications</h1>
+          <p className="text-muted-foreground mt-2">Manage and track job applications</p>
+        </div>
 
         {/* Summary Cards */}
         {statistics && (
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Total</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">
-                  {statistics.total_applications}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Submitted</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-cyan-600">
-                  {statistics.submitted}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Shortlisted</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  {statistics.shortlisted}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Interviewed</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-purple-600">
-                  {statistics.interviewed}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Offered</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-emerald-600">
-                  {statistics.offered}
-                </div>
-              </CardContent>
-            </Card>
+            {['total_applications','submitted','shortlisted','interviewed','offered'].map((key) => (
+              <Card key={key}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">{key.replace('_',' ').toUpperCase()}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-600">{statistics[key as keyof ApplicationSummary]}</div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         )}
 
@@ -339,7 +279,7 @@ export default function ApplicationsIndex({
           onScoreFromChange={setScoreFromFilter}
           scoreToFilter={scoreToFilter}
           onScoreToChange={setScoreToFilter}
-          onApplyFilters={handleFilterChange}
+          onApplyFilters={() => {}}
           onResetFilters={handleResetFilters}
         />
 
@@ -350,9 +290,7 @@ export default function ApplicationsIndex({
             selectedIds={selectedIds}
             onSelectApplication={toggleSelectApplication}
             onSelectAll={toggleSelectAll}
-            onViewClick={(application) => {
-              window.location.href = `/hr/ats/applications/${application.id}`;
-            }}
+            onViewClick={(application) => window.location.href = `/hr/ats/applications/${application.id}`}
             onShortlistClick={handleShortlistClick}
             onRejectClick={handleRejectClick}
             onScheduleInterviewClick={handleScheduleInterviewClick}
@@ -364,30 +302,18 @@ export default function ApplicationsIndex({
         )}
       </div>
 
-      {/* Reject Confirmation Dialog */}
+      {/* Reject Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reject Application</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-sm text-muted-foreground">
-              Are you sure you want to reject this application from{' '}
-              <span className="font-semibold">
-                {actionApplication?.candidate_name || 'this candidate'}
-              </span>
-              ? This action cannot be undone.
-            </p>
-          </div>
+          <p className="py-4 text-sm text-muted-foreground">
+            Are you sure you want to reject {actionApplication?.candidate_name || 'this candidate'}? This action cannot be undone.
+          </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleConfirmReject}
-              disabled={isDeleteLoading}
-            >
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
+            <Button type="button" variant="destructive" onClick={handleConfirmReject} disabled={isDeleteLoading}>
               {isDeleteLoading ? 'Rejecting...' : 'Reject'}
             </Button>
           </DialogFooter>
@@ -400,78 +326,37 @@ export default function ApplicationsIndex({
           <DialogHeader>
             <DialogTitle>Schedule Interview</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-sm text-muted-foreground mb-4">
-              Candidate: <span className="font-semibold">{interviewApplication?.candidate_name}</span>
-            </p>
-            
-            <div>
-              <label className="text-sm font-medium">Interview Date</label>
-              <input
-                type="date"
-                value={interviewFormData.scheduled_date}
-                onChange={(e) =>
-                  setInterviewFormData({ ...interviewFormData, scheduled_date: e.target.value })
-                }
-                className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
-              />
-            </div>
 
-            <div>
-              <label className="text-sm font-medium">Interview Time</label>
-              <input
-                type="time"
-                value={interviewFormData.scheduled_time}
-                onChange={(e) =>
-                  setInterviewFormData({ ...interviewFormData, scheduled_time: e.target.value })
-                }
-                className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
-              />
-            </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Candidate: <span className="font-semibold">{interviewApplication?.candidate_name}</span>
+          </p>
 
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Date</label>
+              <input type="date" className="mt-1 w-full border px-3 py-2 rounded" value={interviewFormData.scheduled_date} onChange={(e) => setInterviewFormData({...interviewFormData, scheduled_date: e.target.value})}/>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Time</label>
+              <input type="time" className="mt-1 w-full border px-3 py-2 rounded" value={interviewFormData.scheduled_time} onChange={(e) => setInterviewFormData({...interviewFormData, scheduled_time: e.target.value})}/>
+            </div>
             <div>
               <label className="text-sm font-medium">Duration (minutes)</label>
-              <input
-                type="number"
-                value={interviewFormData.duration_minutes}
-                onChange={(e) =>
-                  setInterviewFormData({
-                    ...interviewFormData,
-                    duration_minutes: parseInt(e.target.value) || 60,
-                  })
-                }
-                className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
-                min="15"
-                step="15"
-              />
+              <input type="number" className="mt-1 w-full border px-3 py-2 rounded" min={15} step={15} value={interviewFormData.duration_minutes} onChange={(e) => setInterviewFormData({...interviewFormData, duration_minutes: parseInt(e.target.value)||60})}/>
             </div>
-
             <div>
-              <label className="text-sm font-medium">Location Type</label>
-              <select
-                value={interviewFormData.location_type}
-                onChange={(e) =>
-                  setInterviewFormData({
-                    ...interviewFormData,
-                    location_type: e.target.value as 'office' | 'video_call' | 'phone',
-                  })
-                }
-                className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
-              >
+              <label className="text-sm font-medium">Location</label>
+              <select className="mt-1 w-full border px-3 py-2 rounded" value={interviewFormData.location_type} onChange={(e) => setInterviewFormData({...interviewFormData, location_type: e.target.value as 'office' | 'video_call' | 'phone'})}>
                 <option value="office">Office</option>
                 <option value="video_call">Video Call</option>
                 <option value="phone">Phone</option>
               </select>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsInterviewModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleScheduleInterview}
-              disabled={!interviewFormData.scheduled_date || !interviewFormData.scheduled_time}
-            >
+            <Button type="button" variant="outline" onClick={() => setIsInterviewModalOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={handleScheduleInterviewSubmit} disabled={!interviewFormData.scheduled_date || !interviewFormData.scheduled_time}>
               Schedule Interview
             </Button>
           </DialogFooter>

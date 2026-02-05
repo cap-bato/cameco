@@ -7,7 +7,7 @@ import { InterviewScheduleModal } from './interview-schedule-modal';
 import { X, Plus } from 'lucide-react';
 import { hasAvailableSlots, getAvailableTimeSlots } from '@/utils/office-hours';
 import type { Interview } from '@/types/ats-pages';
-
+import axios from 'axios';
 interface CalendarMonthViewProps {
   interviews: Interview[];
   currentDate: Date;
@@ -36,6 +36,11 @@ export function CalendarMonthView({
   const [selectedDateForModal, setSelectedDateForModal] = useState<Date | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedDateForScheduling, setSelectedDateForScheduling] = useState<Date | null>(null);
+
+    const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
+    const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(null);
+    const [selectedJobTitle, setSelectedJobTitle] = useState<string>('');
+    const [selectedInterviewer, setSelectedInterviewer] = useState<string>('');
 
   const openAllInterviewsModal = (date: Date) => {
     setSelectedDateForModal(date);
@@ -469,22 +474,44 @@ export function CalendarMonthView({
         </div>
       )}
 
-      {/* Schedule Interview Modal */}
-      {selectedDateForScheduling && (
-        <InterviewScheduleModal
-          isOpen={showScheduleModal}
-          onClose={closeScheduleModal}
-          onSubmit={async (data) => {
-            // Handle scheduling logic here
-            console.log('Schedule interview:', data);
-          }}
-          candidateName=""
-          applicationId={0}
-          selectedDate={selectedDateForScheduling}
-          interviews={interviews}
-          availableTimeSlots={getAvailableTimeSlots(selectedDateForScheduling, interviews)}
-        />
-      )}
+{selectedDateForScheduling && (
+  <InterviewScheduleModal
+    isOpen={showScheduleModal}
+    onClose={closeScheduleModal}
+    onSubmit={async (data) => {
+      try {
+        // Prepare payload matching the controller validation
+        const payload = {
+          scheduled_date: data.scheduled_date,
+          scheduled_time: data.scheduled_time,
+          duration_minutes: data.duration_minutes ?? 30,
+          location_type: data.location_type,
+          interviewer_name: selectedInterviewer,   // required
+        };
+
+        // Send request to backend
+        const response = await axios.post('/hr/ats/interviews', payload);
+
+        console.log('Interview scheduled:', response.data.interview);
+
+        // Optionally update local state or refetch interviews here
+
+        // Close the modal
+        closeScheduleModal();
+      } catch (error: any) {
+        console.error('Failed to schedule interview:', error);
+        if (error.response?.data?.errors) {
+          console.error('Validation errors:', error.response.data.errors);
+        }
+      }
+    }}
+    candidateName=""
+    applicationId={0}
+    selectedDate={selectedDateForScheduling}
+    interviews={interviews}
+    availableTimeSlots={getAvailableTimeSlots(selectedDateForScheduling, interviews)}
+  />
+)}
     </div>
   );
 }

@@ -4,11 +4,14 @@
 
 ```mermaid
 graph TB
-    subgraph External["External Sources (No System Access)"]
+    subgraph External["External Sources"]
         Supervisors[Supervisors<br/>Submit Paper Schedules]
-        Employees[Employees<br/>Submit Leave Requests]
         Applicants[Job Applicants<br/>Facebook/In-Person]
         RFID[RFID Card Taps<br/>Timekeeping]
+    end
+    
+    subgraph EmployeeAccess["Employee Self-Service"]
+        EmployeePortal[Employee Portal<br/>View & Submit Requests]
     end
     
     subgraph System["SyncingSteel HRIS - On-Premise System"]
@@ -50,9 +53,12 @@ graph TB
     
     %% External to System
     Supervisors -->|Paper Records| HRStaff
-    Employees -->|Leave Requests| HRStaff
     Applicants -->|Applications| HRStaff
     RFID -->|Card Tap Events| EventBus
+    
+    %% Employee Portal to System
+    EmployeePortal -->|Leave Requests| Modules
+    EmployeePortal -->|View Data| Modules
     
     %% Admin Layer
     Superadmin -.->|Emergency Access| Modules
@@ -168,26 +174,46 @@ graph TB
 
 ---
 
+### 6. 👤 Employee (Self-Service Portal)
+**Focus**: Personal information access and leave management
+
+- 📊 View personal information and employment details
+- ⏰ View time logs and attendance records
+- 💰 View and download payslips
+- 📅 Check leave balances and history
+- ✉️ Submit leave requests directly
+- 📄 Track request status and approvals
+- 🔔 Receive notifications and alerts
+
+**[View Employee Portal Guide →](./06-employee-portal.md)**
+
+---
+
 ## Key Processes
 
 ### 🔄 Leave Request Flow
 ```mermaid
 graph LR
-    Employee[Employee Submits<br/>Paper/Email] --> HRStaff[HR Staff<br/>Inputs to System]
-    HRStaff --> Duration{Duration?}
-    Duration -->|1-2 days| AutoApprove[Auto-Approved<br/>by System]
-    Duration -->|3-5 days| HRManager[HR Manager<br/>Approves]
-    Duration -->|6+ days| Both[HR Manager +<br/>Office Admin]
-    AutoApprove --> Notify[Employee<br/>Notified]
+    Employee[Employee Submits<br/>via Portal] --> System[HRIS System<br/>Validates Request]
+    System --> Policy{Meets Policy<br/>Thresholds?}
+    Policy -->|Standard Request| HRStaff[HR Staff<br/>Approves/Rejects]
+    Policy -->|Exceeds Threshold| HRManager[HR Manager<br/>Approves/Rejects]
+    Policy -->|Major Request| Both[HR Manager +<br/>Office Admin]
+    HRStaff --> Notify[Employee<br/>Notified]
     HRManager --> Notify
     Both --> Notify
     
+    HRStaff -.Coverage Warning.-> Review[HR Staff Reviews<br/>Workforce Impact]
+    Review --> HRStaff
+    
     style Employee fill:#ffecb3
     style HRStaff fill:#c8e6c9
-    style AutoApprove fill:#b2dfdb
-    style HRManager fill:#fff9c4
-    style Both fill:#ffccbc
+    style System fill:#e1f5fe
+    style Policy fill:#fff9c4
+    style HRManager fill:#ffccbc
+    style Both fill:#ff9800,color:#fff
     style Notify fill:#d1c4e9
+    style Review fill:#fff3e0
 ```
 
 **[View Detailed Process →](./processes/leave-request-approval.md)**
@@ -454,7 +480,6 @@ graph TB
 - 💳 E-wallet payment support
 - 👤 Biometric attendance (facial recognition/fingerprint)
 - 🖥️ Supervisor portal for direct schedule submission
-- 👨‍💼 Employee self-service portal
 
 ---
 

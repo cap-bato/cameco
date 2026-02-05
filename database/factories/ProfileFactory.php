@@ -16,8 +16,8 @@ class ProfileFactory extends Factory
      */
     public function definition(): array
     {
-        $gender = $this->faker->randomElement(['Male', 'Female']);
-        $firstName = $gender === 'Male' ? $this->faker->firstNameMale() : $this->faker->firstNameFemale();
+        $gender = $this->faker->randomElement(['male', 'female', 'other']);
+        $firstName = $gender === 'male' ? $this->faker->firstNameMale() : $this->faker->firstNameFemale();
         $lastName = $this->faker->lastName();
         
         // Philippine-specific address components
@@ -46,7 +46,7 @@ class ProfileFactory extends Factory
             'suffix' => $this->faker->optional(0.1)->randomElement(['Jr.', 'Sr.', 'II', 'III']),
             'date_of_birth' => $this->faker->dateTimeBetween('-60 years', '-22 years')->format('Y-m-d'),
             'gender' => $gender,
-            'civil_status' => $this->faker->randomElement(['Single', 'Married', 'Divorced', 'Widowed']),
+            'civil_status' => $this->faker->randomElement(['single', 'married', 'divorced', 'widowed', 'separated']),
             'phone' => $this->faker->optional(0.6)->numerify('(02) 8###-####'),
             'mobile' => '+63 ' . $this->faker->numerify('9## ### ####'),
             'current_address' => $this->faker->buildingNumber() . ' ' . 

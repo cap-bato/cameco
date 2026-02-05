@@ -27,6 +27,7 @@ use App\Http\Controllers\HR\Appraisal\AppraisalCycleController;
 use App\Http\Controllers\HR\Appraisal\AppraisalController;
 use App\Http\Controllers\HR\Appraisal\PerformanceMetricsController;
 use App\Http\Controllers\HR\Appraisal\RehireRecommendationController;
+use App\Http\Controllers\HR\Employee\EmployeeDocumentController;
 use App\Http\Middleware\EnsureHRAccess;
 // use App\Http\Middleware\EnsureProfileComplete; for future useronboarding workflow
 
@@ -49,6 +50,38 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
         // Employee Management
         Route::resource('employees', EmployeeController::class);
         Route::post('/employees/{id}/restore', [EmployeeController::class, 'restore'])->name('employees.restore');
+
+        // Employee-Specific Document API Routes (for Employee Profile → Documents Tab)
+        // These routes are scoped to a single employee context
+        Route::prefix('api/hr/employees/{employeeId}/documents')->name('api.employees.documents.')->group(function () {
+            Route::get('/', [EmployeeDocumentController::class, 'index'])
+                ->middleware('permission:hr.documents.view')
+                ->name('index');
+            
+            Route::post('/', [EmployeeDocumentController::class, 'store'])
+                ->middleware('permission:hr.documents.upload')
+                ->name('store');
+            
+            Route::get('/{documentId}', [EmployeeDocumentController::class, 'show'])
+                ->middleware('permission:hr.documents.view')
+                ->name('show');
+            
+            Route::put('/{documentId}/approve', [EmployeeDocumentController::class, 'approve'])
+                ->middleware('permission:hr.documents.approve')
+                ->name('approve');
+            
+            Route::put('/{documentId}/reject', [EmployeeDocumentController::class, 'reject'])
+                ->middleware('permission:hr.documents.reject')
+                ->name('reject');
+            
+            Route::delete('/{documentId}', [EmployeeDocumentController::class, 'destroy'])
+                ->middleware('permission:hr.documents.delete')
+                ->name('destroy');
+            
+            Route::get('/{documentId}/download', [EmployeeDocumentController::class, 'download'])
+                ->middleware('permission:hr.documents.download')
+                ->name('download');
+        });
 
         // Department Management
         Route::get('/departments', [DepartmentController::class, 'index'])->name('departments.index');
@@ -78,6 +111,15 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::delete('/requests/{id}', [LeaveRequestController::class, 'destroy'])->name('requests.destroy');
             Route::get('/balances', [LeaveBalanceController::class, 'index'])->name('balances');
             Route::get('/policies', [LeavePolicyController::class, 'index'])->name('policies');
+            
+            // Leave Policy CRUD (HR Manager only)
+            Route::middleware('permission:hr.leave-policies.create')->group(function () {
+                Route::post('/policies', [LeavePolicyController::class, 'store'])->name('policies.store');
+            });
+            Route::middleware('permission:hr.leave-policies.update')->group(function () {
+                Route::put('/policies/{policy}', [LeavePolicyController::class, 'update'])->name('policies.update');
+                Route::delete('/policies/{policy}', [LeavePolicyController::class, 'destroy'])->name('policies.destroy');
+            });
         });
 
         // Reports
@@ -86,15 +128,101 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/leave', [ReportController::class, 'leave'])->name('leave');
         });
 
-        // Document Management
+        // Document Management Module
         Route::prefix('documents')->name('documents.')->group(function () {
-            Route::get('/templates', [EmployeeController::class, 'documentTemplates'])->name('templates.index');
-            Route::get('/templates/create', [EmployeeController::class, 'createDocumentTemplate'])->name('templates.create');
-            Route::post('/templates', [EmployeeController::class, 'storeDocumentTemplate'])->name('templates.store');
-            Route::get('/generate/{template}', [EmployeeController::class, 'generateDocument'])->name('generate.create');
-            Route::post('/generate/{template}', [EmployeeController::class, 'storeDocument'])->name('generate.store');
-            Route::get('/list', [EmployeeController::class, 'listDocuments'])->name('list');
-            Route::get('/{document}/download', [EmployeeController::class, 'downloadDocument'])->name('download');
+            // Employee Documents
+            Route::get('/', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'index'])
+                ->middleware('permission:hr.documents.view')
+                ->name('index');
+            
+            Route::get('/upload', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'create'])
+                ->middleware('permission:hr.documents.upload')
+                ->name('create');
+            
+            Route::post('/', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'store'])
+                ->middleware('permission:hr.documents.upload')
+                ->name('store');
+            
+            Route::get('/bulk-upload', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'bulkUploadForm'])
+                ->middleware('permission:hr.documents.bulk-upload')
+                ->name('bulk-upload');
+            
+            Route::post('/bulk-upload', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'bulkUpload'])
+                ->middleware('permission:hr.documents.bulk-upload')
+                ->name('bulk-upload.store');
+            
+            // Document Templates (must come before generic {document} route)
+            Route::prefix('templates')->name('templates.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'index'])
+                    ->middleware('permission:hr.documents.view')
+                    ->name('index');
+                
+                Route::get('/create', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'create'])
+                    ->middleware('permission:hr.documents.templates.manage')
+                    ->name('create');
+                
+                Route::post('/', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'store'])
+                    ->middleware('permission:hr.documents.templates.manage')
+                    ->name('store');
+                
+                Route::get('/{template}/edit', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'edit'])
+                    ->middleware('permission:hr.documents.templates.manage')
+                    ->name('edit');
+                
+                Route::put('/{template}', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'update'])
+                    ->middleware('permission:hr.documents.templates.manage')
+                    ->name('update');
+                
+                Route::post('/{template}/generate', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'generate'])
+                    ->middleware('permission:hr.documents.view')
+                    ->name('generate');
+            });
+            
+            // API Endpoints for templates
+            Route::get('/api/templates', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'apiList'])
+                ->middleware('permission:hr.documents.view')
+                ->name('api.templates');
+            
+            // Document Requests (must come before generic {document} route)
+            Route::prefix('requests')->name('requests.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'index'])
+                    ->middleware('permission:hr.documents.view')
+                    ->name('index');
+                
+                Route::post('/{request}/process', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'process'])
+                    ->middleware('permission:hr.documents.upload')
+                    ->name('process');
+            });
+
+            // API Endpoints for Document Generation
+            Route::get('/api/templates', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'apiList'])
+                ->middleware('permission:hr.documents.view')
+                ->name('api.templates.list');
+            
+            Route::post('/api/templates/generate', [\App\Http\Controllers\HR\Documents\DocumentTemplateController::class, 'apiGenerate'])
+                ->middleware('permission:hr.documents.view')
+                ->name('api.templates.generate');
+            
+            // Generic document routes (must come last)
+            Route::get('/{document}', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'show'])
+                ->middleware('permission:hr.documents.view')
+                ->name('show');
+            
+            Route::get('/{document}/download', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'download'])
+                ->middleware('permission:hr.documents.download')
+                ->name('download');
+            
+            Route::post('/{document}/approve', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'approve'])
+                ->middleware('permission:hr.documents.approve')
+                ->name('approve');
+            
+            Route::post('/{document}/reject', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'reject'])
+                ->middleware('permission:hr.documents.reject')
+                ->name('reject');
+            
+            Route::delete('/{document}', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'destroy'])
+                ->middleware('permission:hr.documents.delete')
+                ->name('destroy');
         });
 
         // Appraisal & Performance Management Module

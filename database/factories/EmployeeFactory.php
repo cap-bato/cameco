@@ -59,11 +59,8 @@ class EmployeeFactory extends Factory
             'department_id' => $department?->id,
             'position_id' => $position?->id,
             'employment_type' => $employmentType,
-            // write both legacy and normalized date columns so factories work across DBs
             'date_hired' => $dateHired->format('Y-m-d'),
-            'date_employed' => $dateHired->format('Y-m-d'),
             'regularization_date' => $regularizationDate?->format('Y-m-d'),
-            'date_regularized' => $regularizationDate?->format('Y-m-d'),
             'immediate_supervisor_id' => null, // Will be set separately if needed
             'status' => $this->faker->randomElement([
                 'active', 'active', 'active', 'active', 'active', 'active', 'active', 'active', 'active', // 85% active

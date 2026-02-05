@@ -24,7 +24,9 @@ import {
     ClipboardCheck,
     Clock,
     Upload,
-    TrendingUp
+    TrendingUp,
+    FileSignature,
+    FileQuestion
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
@@ -109,6 +111,28 @@ export function NavHR() {
         return has;
     });
     console.log('After filter - filteredLeaveItems:', filteredLeaveItems);
+
+    const documentManagementItemsAll = [
+        {
+            title: 'All Documents',
+            icon: FileText,
+            href: '/hr/documents',
+            permission: 'hr.documents.view',
+        },
+        {
+            title: 'Templates',
+            icon: FileSignature,
+            href: '/hr/documents/templates',
+            permission: 'hr.documents.templates.manage',
+        },
+        {
+            title: 'Requests',
+            icon: FileQuestion,
+            href: '/hr/documents/requests',
+            permission: 'hr.documents.view',
+        },
+    ];
+    const documentManagementItems = documentManagementItemsAll.filter(item => hasPermission(item.permission));
 
     const recruitmentItemsAll = [
         {
@@ -246,6 +270,7 @@ export function NavHR() {
 
     const isEmployeeManagementActive = page.url.startsWith('/hr/employees') || page.url.startsWith('/hr/departments') || page.url.startsWith('/hr/positions') || page.url === '/hr/dashboard';
     const isLeaveManagementActive = page.url.startsWith('/hr/leave');
+    const isDocumentManagementActive = page.url.startsWith('/hr/documents');
     const isReportsActive = page.url.startsWith('/hr/reports');
     const isRecruitmentActive = page.url.startsWith('/hr/ats');
     const isWorkforceManagementActive = page.url.startsWith('/hr/workforce');
@@ -303,6 +328,40 @@ export function NavHR() {
                         <CollapsibleContent className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2">
                             <SidebarMenuSub className="space-y-1">
                                 {filteredLeaveItems.map((item) => (
+                                    <SidebarMenuSubItem key={item.title}>
+                                        <SidebarMenuSubButton
+                                            asChild
+                                            isActive={page.url.startsWith(item.href)}
+                                        >
+                                            <Link href={item.href} prefetch>
+                                                <item.icon className="h-4 w-4" />
+                                                <span>{item.title}</span>
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
+                                ))}
+                            </SidebarMenuSub>
+                        </CollapsibleContent>
+                    </SidebarMenuItem>
+                </Collapsible>
+            </SidebarGroup>
+            )}
+
+            {/* Document Management Section */}
+            {documentManagementItems.length > 0 && (
+            <SidebarGroup className="px-2 py-0">
+                <Collapsible defaultOpen={isDocumentManagementActive} className="group/collapsible">
+                    <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                            <SidebarMenuButton tooltip="Document Management">
+                                <FileText />
+                                <span>Documents</span>
+                                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                            </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2">
+                            <SidebarMenuSub className="space-y-1">
+                                {documentManagementItems.map((item) => (
                                     <SidebarMenuSubItem key={item.title}>
                                         <SidebarMenuSubButton
                                             asChild

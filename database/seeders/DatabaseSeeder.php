@@ -80,6 +80,11 @@ class DatabaseSeeder extends Seeder
             $this->call(\Database\Seeders\WorkforceManagementPermissionsSeeder::class);
         }
 
+        // Seed Document Management permissions
+        if (class_exists(\Database\Seeders\DocumentManagementPermissionsSeeder::class)) {
+            $this->call(\Database\Seeders\DocumentManagementPermissionsSeeder::class);
+        }
+
         // Seed Payroll permissions
         if (class_exists(\Database\Seeders\PayrollPermissionsSeeder::class)) {
             $this->call(\Database\Seeders\PayrollPermissionsSeeder::class);
@@ -88,6 +93,16 @@ class DatabaseSeeder extends Seeder
         // Seed Payroll Officer account
         if (class_exists(\Database\Seeders\PayrollOfficerAccountSeeder::class)) {
             $this->call(\Database\Seeders\PayrollOfficerAccountSeeder::class);
+        }
+
+        // Seed Office Admin role and permissions (must run after RolesAndPermissionsSeeder)
+        if (class_exists(\Database\Seeders\OfficeAdminSeeder::class)) {
+            $this->call(\Database\Seeders\OfficeAdminSeeder::class);
+        }
+
+        // Seed Employee role and permissions (must run after RolesAndPermissionsSeeder)
+        if (class_exists(\Database\Seeders\EmployeeRoleSeeder::class)) {
+            $this->call(\Database\Seeders\EmployeeRoleSeeder::class);
         }
 
         if (class_exists(\Database\Seeders\HRStaffAccountSeeder::class)) {
@@ -155,6 +170,11 @@ class DatabaseSeeder extends Seeder
         // Seed Workforce Management data
         if (class_exists(\Database\Seeders\WorkforceSeeder::class)) {
             $this->call(\Database\Seeders\WorkforceSeeder::class);
+        }
+
+        // Seed Document Management templates
+        if (class_exists(\Database\Seeders\DocumentTemplateSeeder::class)) {
+            $this->call(\Database\Seeders\DocumentTemplateSeeder::class);
         }
 
     }

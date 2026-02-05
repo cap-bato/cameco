@@ -30,6 +30,7 @@ class Profile extends Model
         'mother_date_of_birth',
         'phone',
         'mobile',
+        'email',
         'current_address',
         'permanent_address',
         'emergency_contact_name',

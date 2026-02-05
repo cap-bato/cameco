@@ -21,32 +21,34 @@ import { ApplicationInterviewsTab } from '@/components/ats/application-interview
 import { ApplicationTimelineTab } from '@/components/ats/application-timeline-tab';
 import { ApplicationNotesTab } from '@/components/ats/application-notes-tab';
 import type { PageProps } from '@inertiajs/core';
-import type { Application, Interview, ApplicationStatusHistory, CandidateNote } from '@/types/ats-pages';
+import type { Application, Interview, ApplicationStatusHistory, CandidateNote, ScheduleInterviewData } from '@/types/ats-pages';
 import { formatDate } from '@/lib/date-utils';
+import axios from 'axios';
+import { router } from '@inertiajs/react';
 
 interface ApplicationShowProps extends PageProps {
-  application: Application;
+  application: Application & { candidate_email?: string; candidate_phone?: string };
   interviews: Interview[];
   status_history: ApplicationStatusHistory[];
   notes: CandidateNote[];
+  can_schedule_interview: boolean;
+  can_generate_offer: boolean;
 }
 
 const breadcrumbs = [
   { title: 'Dashboard', href: '/dashboard' },
   { title: 'Recruitment', href: '#' },
-  { title: 'Applications', href: '/applications' },
+  { title: 'Applications', href: '/hr/ats/applications' },
   { title: 'View Application', href: '#' },
 ];
 
-/**
- * Application Detail/Show Page
- * Displays full application information with interviews, timeline, and notes
- */
 export default function ApplicationShow({
   application,
   interviews,
   status_history,
   notes,
+  can_schedule_interview,
+  can_generate_offer,
 }: ApplicationShowProps) {
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
@@ -54,41 +56,61 @@ export default function ApplicationShow({
   const [isAddNoteModalOpen, setIsAddNoteModalOpen] = useState(false);
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
 
-  const handleUpdateStatus = async (data: { status: string; notes?: string }) => {
-    console.log('Update application status:', application.id, data);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    console.log('Status updated successfully');
-  };
+  /** Status update */
+const handleUpdateStatus = async (data: { status: string; notes?: string }) => {
+  try {
+    await axios.post(`/hr/ats/applications/${application.id}/update-status`, data);
+    router.reload(); // refresh page to reflect status
+  } catch (err: any) {
+    console.error('Failed to update status:', err.response?.data || err.message);
+  }
+};
 
-  const handleRejectApplication = async (data: { reason: string }) => {
-    console.log('Reject application:', application.id, data);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    console.log('Application rejected successfully');
-  };
+/** Reject application */
+const handleRejectApplication = async (data: { reason: string }) => {
+  try {
+    await axios.post(`/hr/ats/applications/${application.id}/reject`, data);
+    router.visit('/hr/ats/applications'); // redirect back to listing
+  } catch (err: any) {
+    console.error('Failed to reject application:', err.response?.data || err.message);
+  }
+};
 
-  const handleScheduleInterview = async (data: { scheduled_date: string; scheduled_time: string; duration_minutes: number; location_type: string }) => {
-    console.log('Schedule interview for application:', application.id, data);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    console.log('Interview scheduled successfully');
-  };
+/** Schedule interview */
+const handleScheduleInterview = async (data: ScheduleInterviewData) => {
+  try {
+    await axios.post(`/hr/ats/applications/${application.id}/schedule-interview`, data);
+    router.reload(); // refresh interviews tab
+  } catch (err: any) {
+    console.error('Failed to schedule interview:', err.response?.data || err.message);
+  }
+};
 
-  const handleAddNote = async (data: { note: string; is_private: boolean }) => {
-    console.log('Add note for application:', application.id, data);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    console.log('Note added successfully');
-  };
+/** Add note */
+const handleAddNote = async (data: { note: string; is_private: boolean }) => {
+  try {
+    await axios.post(`/hr/ats/applications/${application.id}/notes`, data);
+    router.reload(); // refresh notes tab
+  } catch (err: any) {
+    console.error('Failed to add note:', err.response?.data || err.message);
+  }
+};
 
-  const handleOfferSubmit = async (data: { template: string; customMessage?: string }) => {
-    console.log('Generating offer for application:', application.id, data);
-    // Simulate server-side generation
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    console.log('Offer generated successfully for application:', application.id);
+/** Generate offer */
+const handleOfferSubmit = async (data: { template: string; customMessage?: string }) => {
+  try {
+    await axios.post(`/hr/ats/applications/${application.id}/generate-offer`, data);
+    router.reload(); // refresh page to reflect "offered" status
+  } catch (err: any) {
+    console.error('Failed to generate offer:', err.response?.data || err.message);
+  } finally {
     setIsOfferModalOpen(false);
-  };
+  }
+};
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title={`Application - ${application.candidate_name}`} />
+      <Head title={`Application - ${application.candidate_name ?? 'Candidate'}`} />
 
       <div className="space-y-6 p-6">
         {/* Back Button */}
@@ -103,8 +125,14 @@ export default function ApplicationShow({
             <div className="flex items-start justify-between gap-6">
               <div className="space-y-4">
                 <div>
-                  <h1 className="text-3xl font-bold">{application.candidate_name}</h1>
+                  <h1 className="text-3xl font-bold">{application.candidate_name ?? 'Unknown Candidate'}</h1>
                   <p className="text-muted-foreground mt-2">{application.job_title}</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Email: {application.candidate_email ?? 'N/A'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Phone: {application.candidate_phone ?? 'N/A'}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -127,21 +155,20 @@ export default function ApplicationShow({
 
               {/* Actions */}
               <div className="flex flex-col gap-2">
-                <Button onClick={() => setIsStatusModalOpen(true)}>
-                  Update Status
-                </Button>
-                {(application.status === 'shortlisted' || application.status === 'interviewed') && (
+                <Button onClick={() => setIsStatusModalOpen(true)}>Update Status</Button>
+
+                {can_schedule_interview && (
                   <Button onClick={() => setIsInterviewModalOpen(true)} variant="outline">
-                    <Calendar className="mr-2 h-4 w-4" />
-                    Schedule Interview
+                    <Calendar className="mr-2 h-4 w-4" /> Schedule Interview
                   </Button>
                 )}
-                {application.status === 'interviewed' && (
+
+                {can_generate_offer && (
                   <Button onClick={() => setIsOfferModalOpen(true)} variant="outline">
-                    <FileText className="mr-2 h-4 w-4" />
-                    Generate Offer
+                    <FileText className="mr-2 h-4 w-4" /> Generate Offer
                   </Button>
                 )}
+
                 {application.status !== 'rejected' && application.status !== 'withdrawn' && (
                   <Button
                     onClick={() => setIsRejectModalOpen(true)}
@@ -164,29 +191,23 @@ export default function ApplicationShow({
               Interviews {interviews.length > 0 && `(${interviews.length})`}
             </TabsTrigger>
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="notes">
-              Notes {notes.length > 0 && `(${notes.length})`}
-            </TabsTrigger>
+            <TabsTrigger value="notes">Notes {notes.length > 0 && `(${notes.length})`}</TabsTrigger>
           </TabsList>
 
-          {/* Details Tab */}
           <TabsContent value="details" className="space-y-4">
             <ApplicationDetailsTab application={application} />
           </TabsContent>
 
-          {/* Interviews Tab */}
           <TabsContent value="interviews" className="space-y-4">
             <ApplicationInterviewsTab interviews={interviews} />
           </TabsContent>
 
-          {/* Timeline Tab */}
           <TabsContent value="timeline" className="space-y-4">
             <ApplicationTimelineTab statusHistory={status_history} />
           </TabsContent>
 
-          {/* Notes Tab */}
           <TabsContent value="notes" className="space-y-4">
-            <ApplicationNotesTab 
+            <ApplicationNotesTab
               notes={notes}
               onAddNoteClick={() => setIsAddNoteModalOpen(true)}
             />
@@ -194,47 +215,43 @@ export default function ApplicationShow({
         </Tabs>
       </div>
 
-      {/* Status Update Modal */}
+      {/* Modals */}
       <ApplicationStatusModal
         isOpen={isStatusModalOpen}
         onClose={() => setIsStatusModalOpen(false)}
         onSubmit={handleUpdateStatus}
         currentStatus={application.status}
-        candidateName={application.candidate_name}
+        candidateName={application.candidate_name ?? 'Candidate'}
       />
 
-      {/* Reject Application Modal */}
       <RejectApplicationModal
         isOpen={isRejectModalOpen}
         onClose={() => setIsRejectModalOpen(false)}
         onSubmit={handleRejectApplication}
-        candidateName={application.candidate_name}
+        candidateName={application.candidate_name ?? 'Candidate'}
       />
 
-      {/* Interview Schedule Modal */}
       <InterviewScheduleModal
         isOpen={isInterviewModalOpen}
         onClose={() => setIsInterviewModalOpen(false)}
         onSubmit={handleScheduleInterview}
-        candidateName={application.candidate_name || 'Candidate'}
+        candidateName={application.candidate_name ?? 'Candidate'}
         applicationId={application.id}
       />
 
-      {/* Add Note Modal */}
       <AddNoteModal
         isOpen={isAddNoteModalOpen}
         onClose={() => setIsAddNoteModalOpen(false)}
         onSubmit={handleAddNote}
-        itemName={application.candidate_name || 'Candidate'}
+        itemName={application.candidate_name ?? 'Candidate'}
         context="for application #"
       />
 
-      {/* Offer Generation Modal */}
       <OfferGenerationModal
         isOpen={isOfferModalOpen}
         onClose={() => setIsOfferModalOpen(false)}
         onSubmit={handleOfferSubmit}
-        candidateName={application.candidate_name}
+        candidateName={application.candidate_name ?? 'Candidate'}
       />
     </AppLayout>
   );

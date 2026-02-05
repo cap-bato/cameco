@@ -14,6 +14,7 @@ This directory contains comprehensive workflow documentation for all user roles 
 3. **[HR Manager Workflow](./03-hr-manager-workflow.md)** - Approval workflows and oversight
 4. **[HR Staff Workflow](./04-hr-staff-workflow.md)** - Day-to-day HR operations and data entry
 5. **[Payroll Officer Workflow](./05-payroll-officer-workflow.md)** - Payroll processing and government compliance
+6. **[Employee Portal](./06-employee-portal.md)** - Self-service portal for employees
 
 - **[Hiring & Interview](./processes/hiring-interview-process.md)** - ATS pipeline from posting to job offer
 - **[Employee Onboarding](./processes/employee-onboarding.md)** - From hire to active employee and probation monitoring
@@ -39,6 +40,7 @@ This directory contains comprehensive workflow documentation for all user roles 
 - **I am an HR Manager** → [View my workflows](./03-hr-manager-workflow.md)
 - **I am HR Staff** → [View my workflows](./04-hr-staff-workflow.md)
 - **I am a Payroll Officer** → [View my workflows](./05-payroll-officer-workflow.md)
+- **I am an Employee** → [View Employee Portal guide](./06-employee-portal.md)
 
 ### By Task
 - **Setting up the system** → [Office Admin Workflow](./02-office-admin-workflow.md)
@@ -93,23 +95,23 @@ mmdc -i 01-superadmin-workflow.md -o superadmin-workflow.png
 
 ## 📋 Access Control Matrix
 
-| Module | Superadmin | Office Admin | HR Manager | HR Staff | Payroll Officer |
-|--------|------------|--------------|------------|----------|-----------------|
-| System Management | Full | ❌ | ❌ | ❌ | ❌ |
-| Company Setup | Emergency | Full | ❌ | ❌ | ❌ |
-| Business Rules | Emergency | Full | ❌ | ❌ | ❌ |
-| Employee Mgmt | Emergency | View | View | Full | View |
-| ATS/Recruitment | Emergency | View | Approve | Full | ❌ |
-| Onboarding | Emergency | View | Approve | Full | ❌ |
-| Workforce Mgmt | Emergency | View | Review | Full | ❌ |
-| Timekeeping | Emergency | View | View | Full | View |
-| Appraisal | Emergency | View | Approve | Full | ❌ |
-| Leave Mgmt | Emergency | Final Approval | Approve | Input | ❌ |
-| Payroll | Emergency | View | View | ❌ | Full |
-| Govt Compliance | Emergency | View | ❌ | ❌ | Full |
-| Payments | Emergency | View | ❌ | ❌ | Full |
+| Module | Superadmin | Office Admin | HR Manager | HR Staff | Payroll Officer | Employee |
+|--------|------------|--------------|------------|----------|-----------------|----------|
+| System Management | Full | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Company Setup | Emergency | Full | ❌ | ❌ | ❌ | ❌ |
+| Business Rules | Emergency | Full | ❌ | ❌ | ❌ | ❌ |
+| Employee Mgmt | Emergency | View | View | Full | View | Self Only |
+| ATS/Recruitment | Emergency | View | Approve | Full | ❌ | ❌ |
+| Onboarding | Emergency | View | Approve | Full | ❌ | ❌ |
+| Workforce Mgmt | Emergency | View | Review | Full | ❌ | ❌ |
+| Timekeeping | Emergency | View | View | Full | View | Self Only |
+| Appraisal | Emergency | View | Approve | Full | ❌ | Self Only |
+| Leave Mgmt | Emergency | Final Approval | Approve | Support | ❌ | Submit/View |
+| Payroll | Emergency | View | View | ❌ | Full | Self Only |
+| Govt Compliance | Emergency | View | ❌ | ❌ | Full | ❌ |
+| Payments | Emergency | View | ❌ | ❌ | Full | ❌ |
 
-**Legend**: Full = Full Access | View = View Only | Approve = Approval Rights | Emergency = Emergency Access Only
+**Legend**: Full = Full Access | View = View Only | Approve = Approval Rights | Emergency = Emergency Access Only | Self Only = View/Edit Own Data Only | Submit/View = Submit Requests & View Status
 
 ## Immutable Ledger & Replay Monitoring
 

@@ -19,7 +19,6 @@ class Employee extends Model
         'user_id',
         'profile_id',
         'employee_number',
-        'email',
         'department_id',
         'position_id',
         'employment_type',

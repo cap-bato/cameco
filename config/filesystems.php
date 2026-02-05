@@ -60,6 +60,14 @@ return [
             'report' => false,
         ],
 
+        'employee_documents' => [
+            'driver' => 'local',
+            'root' => storage_path('app/employee-documents'),
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
+
     ],
 
     /*
