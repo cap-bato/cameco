@@ -1,10 +1,9 @@
 import { Head } from '@inertiajs/react';
-import { useState, useEffect } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -94,21 +93,61 @@ export default function IntegrationTest() {
         { title: 'Integration Test', href: '/hr/timekeeping/integration-test' },
     ];
 
-    const mockEmployees = [
+    const mockEmployees = useMemo(() => [
         { id: 'EMP-001', name: 'Juan Dela Cruz', rfid: 'RFID-001' },
         { id: 'EMP-002', name: 'Maria Santos', rfid: 'RFID-002' },
         { id: 'EMP-003', name: 'Pedro Reyes', rfid: 'RFID-003' },
         { id: 'EMP-004', name: 'Ana Lopez', rfid: 'RFID-004' },
         { id: 'EMP-005', name: 'Carlos Garcia', rfid: 'RFID-005' },
-    ];
+    ], []);
 
-    const simulateRfidScan = async () => {
+    const scanIdCounter = useRef(0);
+    const generateScanId = useCallback(() => {
+        scanIdCounter.current++;
+        return `scan-${scanIdCounter.current}`;
+    }, []);
+
+    const updateStepStatus = useCallback(
+        (
+            index: number, 
+            status: 'pending' | 'running' | 'success' | 'error',
+            details?: string,
+            duration?: number
+        ) => {
+            setTestSteps(prev => {
+                const newSteps = [...prev];
+                newSteps[index] = {
+                    ...newSteps[index],
+                    status,
+                    timestamp: new Date().toISOString(),
+                    details,
+                    duration,
+                };
+                return newSteps;
+            });
+        },
+        []
+    );
+
+    const addTestResult = useCallback((message: string) => {
+        setTestResults(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+    }, []);
+
+    const simulateStep = useCallback(async (stepIndex: number, details: string, durationMs: number) => {
+        updateStepStatus(stepIndex, 'running', details);
+        await new Promise(resolve => setTimeout(resolve, durationMs));
+        updateStepStatus(stepIndex, 'success', details, durationMs);
+    }, [updateStepStatus]);
+
+    const simulateRfidScan = useCallback(async () => {
+        let startTime = 0;
+        let endTime = 0;
         setIsRunningTest(true);
+        startTime = Date.now();
         setTestResults([]);
         
         const employee = mockEmployees.find(e => e.id === selectedEmployee);
         const device = devices.find(d => d.id === selectedDevice);
-        const startTime = Date.now();
 
         // Reset all steps
         const steps = [...testSteps];
@@ -129,7 +168,7 @@ export default function IntegrationTest() {
                 await simulateStep(1, 'Device offline - event queued locally', 150);
                 
                 const queuedScan: SimulatedScan = {
-                    id: `scan-${Date.now()}`,
+                    id: generateScanId(),
                     employeeRfid: employee?.rfid || 'UNKNOWN',
                     employeeName: employee?.name || 'Unknown',
                     deviceId: selectedDevice,
@@ -158,9 +197,9 @@ export default function IntegrationTest() {
             await simulateStep(1, `Event written to ledger with sequence ID`, 200);
 
             // Step 3: Hash Chain Verification
-            const prevHash = `prev-hash-${Date.now() - 1000}`;
-            const currHash = `curr-hash-${Date.now()}`;
-            await simulateStep(2, `Hash verified: ${currHash.slice(0, 16)}...`, 150);
+            const prevHash = `prev-hash-${startTime}`;
+            const currHash = `curr-hash-${startTime + 1000}`;
+            await simulateStep(2, `Hash verified: ${currHash.slice(0, 16)}... (prev: ${prevHash.slice(0, 16)}...)`, 150);
 
             // Step 4: Event Processing
             await simulateStep(3, 'Event processed by Laravel job', 300);
@@ -171,10 +210,11 @@ export default function IntegrationTest() {
             // Step 6: UI Display
             await simulateStep(5, 'Event displayed in real-time ledger stream', 100);
 
-            const totalDuration = Date.now() - startTime;
+            endTime = Date.now();
+            const totalDuration = endTime - startTime;
             
             const successScan: SimulatedScan = {
-                id: `scan-${Date.now()}`,
+                id: generateScanId(),
                 employeeRfid: employee?.rfid || 'UNKNOWN',
                 employeeName: employee?.name || 'Unknown',
                 deviceId: selectedDevice,
@@ -201,39 +241,10 @@ export default function IntegrationTest() {
         }
 
         setIsRunningTest(false);
-    };
-
-    const simulateStep = async (stepIndex: number, details: string, durationMs: number) => {
-        updateStepStatus(stepIndex, 'running', details);
-        await new Promise(resolve => setTimeout(resolve, durationMs));
-        updateStepStatus(stepIndex, 'success', details, durationMs);
-    };
-
-    const updateStepStatus = (
-        index: number, 
-        status: 'pending' | 'running' | 'success' | 'error',
-        details?: string,
-        duration?: number
-    ) => {
-        setTestSteps(prev => {
-            const newSteps = [...prev];
-            newSteps[index] = {
-                ...newSteps[index],
-                status,
-                timestamp: new Date().toISOString(),
-                details,
-                duration,
-            };
-            return newSteps;
-        });
-    };
-
-    const addTestResult = (message: string) => {
-        setTestResults(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
-    };
+    }, [testSteps, selectedEmployee, selectedDevice, selectedEventType, devices, mockEmployees, simulateStep, generateScanId, addTestResult, updateStepStatus]);
 
     // Offline device handling (Task 7.3.2)
-    const toggleDeviceStatus = (deviceId: string) => {
+    const toggleDeviceStatus = useCallback((deviceId: string) => {
         setDevices(prev => prev.map(d => 
             d.id === deviceId 
                 ? { 
@@ -246,9 +257,9 @@ export default function IntegrationTest() {
 
         const device = devices.find(d => d.id === deviceId);
         addTestResult(`${device?.isOffline ? '✅ Device back online' : '⚠️ Device went offline'}: ${deviceId}`);
-    };
+    }, [devices, addTestResult]);
 
-    const syncOfflineQueue = (deviceId: string) => {
+    const syncOfflineQueue = useCallback((deviceId: string) => {
         const device = devices.find(d => d.id === deviceId);
         if (!device || !device.queuedEvents) return;
 
@@ -271,9 +282,9 @@ export default function IntegrationTest() {
         setTimeout(() => {
             addTestResult(`✅ Successfully synced ${device.queuedEvents} events from ${deviceId}`);
         }, 1000);
-    };
+    }, [devices, addTestResult]);
 
-    const getStatusIcon = (status: string) => {
+    const getStatusIcon = useCallback((status: string) => {
         switch (status) {
             case 'pending': return <Clock className="h-4 w-4 text-muted-foreground" />;
             case 'running': return <Activity className="h-4 w-4 text-blue-500 animate-pulse" />;
@@ -281,7 +292,7 @@ export default function IntegrationTest() {
             case 'error': return <XCircle className="h-4 w-4 text-red-500" />;
             default: return <Clock className="h-4 w-4" />;
         }
-    };
+    }, []);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -355,7 +366,7 @@ export default function IntegrationTest() {
 
                                     <div className="space-y-2">
                                         <Label>Event Type</Label>
-                                        <Select value={selectedEventType} onValueChange={(v: any) => setSelectedEventType(v)}>
+                                        <Select value={selectedEventType} onValueChange={(v: 'time_in' | 'time_out') => setSelectedEventType(v)}>
                                             <SelectTrigger>
                                                 <SelectValue />
                                             </SelectTrigger>
@@ -398,7 +409,7 @@ export default function IntegrationTest() {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="space-y-3">
-                                        {testSteps.map((step, index) => (
+                                        {testSteps.map((step) => (
                                             <div key={step.id} className="flex items-start gap-3">
                                                 <div className="mt-0.5">
                                                     {getStatusIcon(step.status)}

@@ -11,6 +11,11 @@ import { EventReplayControl } from '@/components/timekeeping/event-replay-contro
 import { DeviceStatusDashboard } from '@/components/timekeeping/device-status-dashboard';
 import { ChevronDown, ChevronUp, Filter, RefreshCw, Download } from 'lucide-react';
 
+// Declare route as a global function
+declare global {
+    function route(name: string, params?: Record<string, string | number>): string;
+}
+
 interface AttendanceEvent {
     id: number;
     sequence_id: number;
@@ -48,16 +53,6 @@ interface LedgerHealthStatus {
     alerts: Array<{ severity: string; message: string; timestamp: string }>;
 }
 
-interface DeviceStatus {
-    device_id: string;
-    device_name: string;
-    location: string;
-    status: 'online' | 'offline' | 'maintenance';
-    last_heartbeat: string;
-    events_today: number;
-    uptime_percentage: number;
-}
-
 interface PaginatedLogs {
     data: AttendanceEvent[];
     current_page: number;
@@ -86,8 +81,7 @@ export default function TimekeepingLedger() {
         prev_page_url: null,
     };
     const ledgerHealth = (page.props as { ledgerHealth?: LedgerHealthStatus }).ledgerHealth || null;
-    const devices = (page.props as { devices?: DeviceStatus[] }).devices || [];
-    const appliedFilters = (page.props as { filters?: any }).filters || {};
+    const appliedFilters = (page.props as { filters?: Record<string, unknown> }).filters || {};
     
     // State for UI controls
     const [showFilterPanel, setShowFilterPanel] = useState(true);
@@ -169,36 +163,6 @@ export default function TimekeepingLedger() {
         };
     }, [ledgerHealth]);
 
-    // Handler for replay visible events change
-    const handleReplayVisibleEventsChange = useCallback((events: { 
-        id: number;
-        sequenceId: number;
-        employeeId: string;
-        employeeName: string;
-        eventType: 'time_in' | 'time_out' | 'break_start' | 'break_end';
-        timestamp: string;
-        deviceId: string;
-        deviceLocation: string;
-    }[]) => {
-        const convertedEvents = events.map(event => ({
-            ...event,
-            employeePhoto: undefined,
-            rfidCard: '****-****',
-            verified: true,
-            hashChain: undefined,
-            latencyMs: undefined
-        }));
-        setReplayEvents(convertedEvents);
-    }, []);
-
-    // Handler to toggle replay mode
-    const handleToggleLiveReplayMode = () => {
-        setReplayMode(!replayMode);
-        if (!replayMode) {
-            setAutoRefresh(false); // Disable auto-refresh when entering replay mode
-        }
-    };
-
     // Convert controller logs to TimeLogEntry format for the stream
     const convertedLogs = useMemo(() => {
         return logs.data.map(log => ({
@@ -223,7 +187,7 @@ export default function TimekeepingLedger() {
         setFilters(newFilters);
         
         // Convert filters to query params and reload
-        const queryParams: any = {};
+        const queryParams: Record<string, string | number> = {};
         
         if (newFilters.customDateFrom) {
             queryParams.date_from = newFilters.customDateFrom;
@@ -328,18 +292,7 @@ export default function TimekeepingLedger() {
     };
 
     return (
-        <AppLayout
-            header={
-                <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    RFID Ledger
-                </h2>
-            }
-            breadcrumbs={[
-                { title: 'HR', href: '/hr' },
-                { title: 'Timekeeping', href: '/hr/timekeeping' },
-                { title: 'Ledger', href: '/hr/timekeeping/ledger' },
-            ]}
-        >
+        <AppLayout>
             <Head title="RFID Ledger - Timekeeping" />
 
             <div className="py-6 space-y-6">
@@ -441,6 +394,7 @@ export default function TimekeepingLedger() {
                                             variant="outline"
                                             size="sm"
                                             className="h-8 gap-2"
+                                            onClick={() => handleExport('json')}
                                         >
                                             <Download className="h-3 w-3" />
                                             <span className="text-xs">Export</span>
@@ -535,9 +489,6 @@ export default function TimekeepingLedger() {
                     )}
                 </Card>
             </div>
-        </AppLayout>
-    );
-}
         </AppLayout>
     );
 }

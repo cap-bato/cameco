@@ -226,22 +226,19 @@ export function VirtualizedTimeLogsStream({
     // Convert TimeLogEntry to EventDetailData
     const selectedEventDetail: EventDetailData | undefined = selectedLog ? {
         id: selectedLog.id,
-        sequence_id: selectedLog.sequenceId,
-        employee_id: selectedLog.employeeId,
-        employee_name: selectedLog.employeeName,
-        employee_department: 'Unknown', // Would need to be passed from props
-        event_type: selectedLog.eventType,
+        sequenceId: selectedLog.sequenceId,
+        employeeId: selectedLog.employeeId,
+        employeeName: selectedLog.employeeName,
+        employeeDepartment: 'Unknown', // Would need to be passed from props
+        eventType: selectedLog.eventType,
         timestamp: selectedLog.timestamp,
-        device_id: selectedLog.deviceId,
-        device_location: selectedLog.deviceLocation,
-        rfid_card: selectedLog.rfidCard,
-        hash_chain: selectedLog.hashChain || '',
-        hash_verified: selectedLog.verified,
-        latency_ms: selectedLog.latencyMs || 0,
-        source: 'edge_machine',
-        processed: true,
-        processed_at: selectedLog.timestamp,
-        notes: null,
+        deviceId: selectedLog.deviceId,
+        deviceLocation: selectedLog.deviceLocation,
+        rfidCard: selectedLog.rfidCard,
+        hashChain: selectedLog.hashChain || '',
+        verified: selectedLog.verified,
+        latencyMs: selectedLog.latencyMs || 0,
+        processedAt: selectedLog.timestamp,
     } : undefined;
 
     return (
@@ -276,7 +273,7 @@ export function VirtualizedTimeLogsStream({
                                     transform: `translateY(${offsetY}px)`,
                                 }}
                             >
-                                {visibleLogs.map((log, index) => (
+                                {visibleLogs.map((log) => (
                                     <TimeLogItem
                                         key={log.id}
                                         log={log}
@@ -311,8 +308,8 @@ export function VirtualizedTimeLogsStream({
             {/* Event detail modal */}
             {selectedEventDetail && (
                 <EventDetailModal
-                    isOpen={isDetailModalOpen}
-                    onClose={() => setIsDetailModalOpen(false)}
+                    open={isDetailModalOpen}
+                    onOpenChange={setIsDetailModalOpen}
                     event={selectedEventDetail}
                 />
             )}
@@ -321,43 +318,50 @@ export function VirtualizedTimeLogsStream({
 }
 
 /**
+ * Generate mock time logs (helper function called outside component render)
+ * This function is NOT called during component render to avoid React purity violations.
+ */
+const generateMockLogs = (count: number): TimeLogEntry[] => {
+    const eventTypes: EventType[] = ['time_in', 'time_out', 'break_start', 'break_end', 'overtime_start', 'overtime_end'];
+    const devices = ['GATE-01', 'GATE-02', 'CAFETERIA-01', 'WAREHOUSE-01', 'OFFICE-01'];
+    const locations = ['Main Entrance', 'Loading Dock', 'Cafeteria', 'Warehouse Floor', 'Office Entrance'];
+    const employees = [
+        'Juan Dela Cruz', 'Maria Santos', 'Pedro Reyes', 'Ana Lopez', 'Carlos Garcia',
+        'Rosa Fernandez', 'Miguel Torres', 'Sofia Morales', 'Diego Ramirez', 'Linda Martinez',
+        'Roberto Diaz', 'Carmen Gonzalez', 'Antonio Hernandez', 'Isabel Rodriguez', 'Francisco Perez',
+    ];
+
+    const now = new Date();
+    const logs: TimeLogEntry[] = [];
+
+    for (let i = 0; i < count; i++) {
+        const timestamp = new Date(now.getTime() - (count - i) * 60000); // 1 minute intervals
+        const employee = employees[Math.floor(Math.random() * employees.length)];
+        const deviceIndex = Math.floor(Math.random() * devices.length);
+
+        logs.push({
+            id: 10000 + i,
+            sequenceId: 10000 + i,
+            employeeId: `EMP-2024-${String(i % 100 + 1).padStart(3, '0')}`,
+            employeeName: employee,
+            rfidCard: `****-${String(1000 + i % 1000).padStart(4, '0')}`,
+            eventType: eventTypes[Math.floor(Math.random() * eventTypes.length)],
+            timestamp: timestamp.toISOString(),
+            deviceId: devices[deviceIndex],
+            deviceLocation: locations[deviceIndex],
+            verified: Math.random() > 0.05, // 95% verified
+            hashChain: `sha256_${Math.random().toString(36).substring(2, 15)}`,
+            latencyMs: Math.floor(Math.random() * 800) + 50, // 50-850ms
+        });
+    }
+
+    return logs;
+};
+
+/**
  * Hook to generate large mock dataset for testing (Task 7.2.4)
+ * Caches the result using useMemo to avoid regeneration on every render.
  */
 export function useGenerateMockLogs(count: number = 1000): TimeLogEntry[] {
-    return useMemo(() => {
-        const eventTypes: EventType[] = ['time_in', 'time_out', 'break_start', 'break_end', 'overtime_start', 'overtime_end'];
-        const devices = ['GATE-01', 'GATE-02', 'CAFETERIA-01', 'WAREHOUSE-01', 'OFFICE-01'];
-        const locations = ['Main Entrance', 'Loading Dock', 'Cafeteria', 'Warehouse Floor', 'Office Entrance'];
-        const employees = [
-            'Juan Dela Cruz', 'Maria Santos', 'Pedro Reyes', 'Ana Lopez', 'Carlos Garcia',
-            'Rosa Fernandez', 'Miguel Torres', 'Sofia Morales', 'Diego Ramirez', 'Linda Martinez',
-            'Roberto Diaz', 'Carmen Gonzalez', 'Antonio Hernandez', 'Isabel Rodriguez', 'Francisco Perez',
-        ];
-
-        const now = new Date();
-        const logs: TimeLogEntry[] = [];
-
-        for (let i = 0; i < count; i++) {
-            const timestamp = new Date(now.getTime() - (count - i) * 60000); // 1 minute intervals
-            const employee = employees[Math.floor(Math.random() * employees.length)];
-            const deviceIndex = Math.floor(Math.random() * devices.length);
-
-            logs.push({
-                id: 10000 + i,
-                sequenceId: 10000 + i,
-                employeeId: `EMP-2024-${String(i % 100 + 1).padStart(3, '0')}`,
-                employeeName: employee,
-                rfidCard: `****-${String(1000 + i % 1000).padStart(4, '0')}`,
-                eventType: eventTypes[Math.floor(Math.random() * eventTypes.length)],
-                timestamp: timestamp.toISOString(),
-                deviceId: devices[deviceIndex],
-                deviceLocation: locations[deviceIndex],
-                verified: Math.random() > 0.05, // 95% verified
-                hashChain: `sha256_${Math.random().toString(36).substring(2, 15)}`,
-                latencyMs: Math.floor(Math.random() * 800) + 50, // 50-850ms
-            });
-        }
-
-        return logs;
-    }, [count]);
+    return useMemo(() => generateMockLogs(count), [count]);
 }

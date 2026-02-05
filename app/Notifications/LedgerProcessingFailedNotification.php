@@ -83,9 +83,9 @@ class LedgerProcessingFailedNotification extends Notification implements ShouldQ
             ->line("An issue has been detected with the RFID attendance ledger processing:")
             ->line("**Error:** {$this->errorMessage}")
             ->line("**Severity:** {$label}")
-            ->line("**Timestamp:** {$this->context['timestamp'] ?? now()}")
-            ->line("**Job:** {$this->context['job'] ?? 'Unknown'}")
-            ->line("**Retry Attempts:** {$this->context['attempts'] ?? 'N/A'} / {$this->context['max_tries'] ?? 'N/A'}")
+            ->line("**Timestamp:** " . ($this->context['timestamp'] ?? now()))
+            ->line("**Job:** " . ($this->context['job'] ?? 'Unknown'))
+            ->line("**Retry Attempts:** " . ($this->context['attempts'] ?? 'N/A') . " / " . ($this->context['max_tries'] ?? 'N/A'))
             ->action('View Ledger Health Dashboard', url('/hr/timekeeping/ledger/health'))
             ->line('Please check the ledger health dashboard for more details and take corrective action if needed.')
             ->line('If this is a critical issue, payroll processing may be blocked until resolved.');

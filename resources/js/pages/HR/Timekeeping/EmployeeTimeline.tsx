@@ -11,12 +11,16 @@ import { EmployeeTimelineView } from '@/components/timekeeping/employee-timeline
 import { 
     ArrowLeft, 
     Calendar, 
-    User, 
     Briefcase, 
     Building,
     AlertTriangle,
     CheckCircle2
 } from 'lucide-react';
+
+// Declare route as a global function
+declare global {
+    function route(name: string, params?: Record<string, string | number>): string;
+}
 
 interface Employee {
     id: number;
@@ -98,10 +102,6 @@ export default function EmployeeTimeline({
             .slice(0, 2);
     };
 
-    function route(arg0: string): string | import("@inertiajs/core").UrlMethodPair | undefined {
-        throw new Error('Function not implemented.');
-    }
-
     return (
         <AppLayout>
             <Head title={`${employee.name} - Timeline`} />
@@ -135,10 +135,7 @@ export default function EmployeeTimeline({
                         />
                         <Button asChild>
                             <Link 
-                                href={route('hr.timekeeping.employee.timeline', { 
-                                    employeeId: employee.id,
-                                    date: selectedDate 
-                                })}
+                                href={route('hr.timekeeping.employee.timeline', { employeeId: employee.id })}
                             >
                                 <Calendar className="h-4 w-4 mr-2" />
                                 View Date
@@ -273,7 +270,7 @@ export default function EmployeeTimeline({
                 <EmployeeTimelineView
                     employeeId={employee.employee_id}
                     employeeName={employee.name}
-                    employeePhoto={employee.photo}
+                    employeePhoto={employee.photo ?? undefined}
                     date={date}
                     events={events}
                 />
