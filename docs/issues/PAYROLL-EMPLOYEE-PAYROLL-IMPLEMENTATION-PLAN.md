@@ -1047,13 +1047,44 @@ class EmployeePayrollInfo extends Model
   - Government contribution tracking (affects_sss, affects_philhealth, affects_pagibig)
   - Display ordering and payslip control
 
-**Subtask 1.2.3: Create EmployeeSalaryComponent model**
+**Subtask 1.2.3: Create EmployeeSalaryComponent model** ✅ COMPLETED
 - **File:** `app/Models/EmployeeSalaryComponent.php`
 - **Action:** CREATE
+- **Status:** Model created successfully
+- **Completion Date:** February 17, 2026
+- **Relationships:** belongsTo(Employee), belongsTo(SalaryComponent), belongsTo(User) createdBy/updatedBy
+- **Scopes:** active(), forEmployee(id), forComponent(id), currentlyActive(), byFrequency(freq), ordered()
+- **Accessors:** formatted_amount, calculation_value, days_remaining
+- **Methods:** isCurrentlyActive()
+- **Features Implemented:**
+  - Soft deletes enabled
+  - Decimal precision for amounts, percentages, units
+  - Date range validation for active assignments
+  - Frequency-based assignment management (per_payroll, monthly, quarterly, semi_annual, annually, one_time)
+  - Auto-calculation of days remaining until end_date
+  - Comprehensive calculation value display (amount, percentage, or units)
+  - Auto-set created_by and updated_by via boot method
 
-**Subtask 1.2.4: Create EmployeeAllowance model**
+**Subtask 1.2.4: Create EmployeeAllowance model** ✅ COMPLETED
 - **File:** `app/Models/EmployeeAllowance.php`
 - **Action:** CREATE
+- **Status:** Model created successfully
+- **Completion Date:** February 17, 2026
+- **Relationships:** belongsTo(Employee), belongsTo(User) createdBy/updatedBy
+- **Scopes:** active(), forEmployee(id), byType(type), currentlyActive(), taxable(), deminimis(), byFrequency(freq), ordered()
+- **Accessors:** formatted_amount, tax_treatment, status_label, type_display, days_remaining
+- **Methods:** isCurrentlyActive(), isWithinDeminimisLimit()
+- **Features Implemented:**
+  - Soft deletes enabled
+  - Decimal precision for amounts and de minimis limits
+  - Date range validation for active allowances
+  - Frequency-based allowances (monthly, semi_monthly, one_time)
+  - De minimis benefit tracking with monthly/annual limits
+  - Tax treatment indicators (taxable, de minimis, non-taxable)
+  - Allowance type support: rice, cola, transportation, meal, housing, communication, utilities, laundry, uniform, medical, educational, special_project
+  - Human-readable type display with proper labeling
+  - Status tracking: Active, Inactive, Pending, Ended
+  - Auto-set created_by and updated_by via boot method
 
 **Subtask 1.2.5: Create EmployeeDeduction model**
 - **File:** `app/Models/EmployeeDeduction.php`
