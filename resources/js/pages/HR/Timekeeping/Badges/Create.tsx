@@ -24,13 +24,22 @@ interface Employee {
     };
 }
 
+interface BadgeSubmitResult {
+    employeeName: string;
+    employeeId: string;
+    cardUid: string;
+    cardType: string;
+    expiresAt: string;
+    issuedAt: string;
+}
+
 export default function CreateBadge() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitResult, setSubmitResult] = useState<{
         success: boolean;
         message: string;
-        badgeData?: any;
+        badgeData?: BadgeSubmitResult;
     } | null>(null);
 
     // Mock employees data for Phase 1
@@ -130,7 +139,7 @@ export default function CreateBadge() {
                 setTimeout(() => {
                     setSubmitResult(null);
                 }, 5000);
-            } catch (error) {
+            } catch {
                 setSubmitResult({
                     success: false,
                     message: 'Failed to issue badge. Please try again.',
