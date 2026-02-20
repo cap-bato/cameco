@@ -5,6 +5,11 @@ namespace App\Http\Controllers\Payroll\Payments;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use App\Models\PayrollPayment;
+use App\Models\CashDistributionBatch;
+use App\Models\PaymentMethod;
+use App\Models\Department;
+use App\Models\PayrollPeriod;
 
 class CashPaymentController extends Controller
 {
@@ -13,51 +18,49 @@ class CashPaymentController extends Controller
      */
     public function index(Request $request)
     {
-        $periodId = $request->input('period_id', 'all');
-        $departmentId = $request->input('department_id', 'all');
-        $envelopeStatus = $request->input('envelope_status', 'all');
-        $distributionStatus = $request->input('distribution_status', 'all');
-        $searchQuery = $request->input('search', '');
+        $cashMethodId = PaymentMethod::where('method_type', 'cash')->value('id');
 
-        // Get all cash employees
-        $allCashEmployees = $this->getMockCashEmployees();
+        $cashEmployees = PayrollPayment::with(['employee.profile', 'employee.department', 'employee.position'])
+            ->where('payment_method_id', $cashMethodId)
+            ->when($request->period_id !== 'all', fn($q) => $q->where('payroll_period_id', $request->period_id))
+            ->when($request->status !== 'all', fn($q) => $q->where('status', $request->status))
+            ->when($request->department_id !== 'all', fn($q) => $q->whereHas('employee', fn($eq) =>
+                $eq->where('department_id', $request->department_id)
+            ))
+            ->when($request->search, fn($q, $s) => $q->whereHas('employee', fn($eq) =>
+                $eq->where('full_name', 'ilike', "%{$s}%")
+                    ->orWhere('employee_number', 'ilike', "%{$s}%")
+            ))
+            ->get()
+            ->map(function ($payment) {
+                /** @var PayrollPayment $payment */
+                return $this->formatCashEmployee($payment);
+            });
 
-        // Apply filters
-        $cashEmployees = $this->applyFilters($allCashEmployees, [
-            'period_id' => $periodId,
-            'department_id' => $departmentId,
-            'envelope_status' => $envelopeStatus,
-            'distribution_status' => $distributionStatus,
-            'search' => $searchQuery,
-        ]);
+        $batches = CashDistributionBatch::with(['payrollPeriod', 'preparedBy', 'distributedBy'])
+            ->when($request->period_id !== 'all', fn($q) => $q->where('payroll_period_id', $request->period_id))
+            ->latest()
+            ->get();
 
-        // Generate summary
-        $summary = $this->generateCashPaymentSummary($allCashEmployees);
+        $summary = $this->buildCashSummary($cashEmployees, $batches);
 
-        // Get distributions
-        $distributions = $this->getMockDistributions();
+        $unclaimedCash = PayrollPayment::with('employee.profile')
+            ->where('payment_method_id', $cashMethodId)
+            ->where('status', 'unclaimed')
+            ->get()
+            ->map(function ($payment) {
+                /** @var PayrollPayment $payment */
+                return $this->formatUnclaimedCash($payment);
+            });
 
-        // Get unclaimed cash
-        $unclaimedCash = $this->getMockUnclaimedCash();
-
-        // Get filter options
-        $payrollPeriods = $this->getMockPayrollPeriods();
-        $departments = $this->getMockDepartments();
-
-        // Return query params to frontend so it can maintain filter state
         return Inertia::render('Payroll/Payments/Cash/Index', [
             'cash_employees' => $cashEmployees,
             'summary' => $summary,
-            'payroll_periods' => $payrollPeriods,
-            'distributions' => $distributions,
+            'batches' => $batches,
             'unclaimed_cash' => $unclaimedCash,
-            'query_params' => [
-                'period_id' => $periodId,
-                'department_id' => $departmentId,
-                'envelope_status' => $envelopeStatus,
-                'distribution_status' => $distributionStatus,
-                'search' => $searchQuery,
-            ],
+            'payroll_periods' => $this->getPayrollPeriods(),
+            'departments' => Department::select('id', 'name')->orderBy('name')->get(),
+            'query_params' => $request->only(['period_id', 'department_id', 'status', 'search']),
         ]);
     }
 
@@ -301,14 +304,92 @@ class CashPaymentController extends Controller
     }
 
     /**
-     * Get mock payroll periods
+     * Get payroll periods from database
      */
-    private function getMockPayrollPeriods()
+    private function getPayrollPeriods()
     {
+        return PayrollPeriod::select('id', 'period_name')->orderByDesc('payment_date')->get();
+    }
+
+    /**
+     * Format a PayrollPayment record as a CashEmployee for the frontend
+     */
+    private function formatCashEmployee(PayrollPayment $payment)
+    {
+        $employee = $payment->employee;
+
         return [
-            ['id' => 1, 'name' => 'November 2025 - 1st Half'],
-            ['id' => 2, 'name' => 'November 2025 - 2nd Half'],
-            ['id' => 3, 'name' => 'October 2025'],
+            'id' => $payment->id,
+            'employee_id' => $employee->id,
+            'employee_number' => $employee->employee_number,
+            'employee_name' => $employee->full_name,
+            'department' => $employee->department?->name ?? 'Unknown',
+            'department_id' => $employee->department_id,
+            'position' => $employee->position?->name ?? 'Unknown',
+            'email' => $employee->profile?->email ?? '',
+            'phone' => $employee->profile?->phone_number ?? '',
+            'payroll_period_id' => $payment->payroll_period_id,
+            'net_pay' => $payment->net_amount,
+            'formatted_net_pay' => '₱' . number_format($payment->net_amount, 2),
+            'gross_pay' => $payment->gross_amount,
+            'formatted_gross_pay' => '₱' . number_format($payment->gross_amount, 2),
+            'payment_status' => $payment->status,
+            'payment_status_label' => ucfirst(str_replace('_', ' ', $payment->status)),
+            'payment_method' => 'cash',
+            'payment_reference' => $payment->payment_reference,
+            'paid_at' => $payment->paid_at,
+            'created_at' => $payment->created_at->toDateTimeString(),
+        ];
+    }
+
+    /**
+     * Format a PayrollPayment record as UnclaimedCash for the frontend
+     */
+    private function formatUnclaimedCash(PayrollPayment $payment)
+    {
+        $employee = $payment->employee;
+
+        return [
+            'id' => $payment->id,
+            'payroll_payment_id' => $payment->id,
+            'employee_id' => $employee->id,
+            'employee_number' => $employee->employee_number,
+            'employee_name' => $employee->full_name,
+            'period_name' => $payment->payrollPeriod?->name ?? 'Unknown Period',
+            'amount' => $payment->net_amount,
+            'formatted_amount' => '₱' . number_format($payment->net_amount, 2),
+            'days_unclaimed' => now()->diffInDays($payment->created_at),
+            'envelope_prepared_at' => $payment->created_at->toDateString(),
+            'distribution_scheduled_for' => null,
+            'status' => 'pending_collection',
+            'status_label' => 'Pending Collection',
+            'status_color' => 'yellow',
+            'notes' => 'Cash envelope awaiting employee collection',
+        ];
+    }
+
+    /**
+     * Build cash payment summary from employees and batches data
+     */
+    private function buildCashSummary($cashEmployees, $batches)
+    {
+        $totalAmount = collect($cashEmployees)->sum('net_pay');
+        $totalBatches = count($batches);
+        $completedBatches = collect($batches)->where('status', 'completed')->count();
+        $pendingAmount = 0;
+        $distributedAmount = collect($cashEmployees)->where('payment_status', 'paid')->sum('net_pay');
+
+        return [
+            'total_cash_employees' => count($cashEmployees),
+            'total_cash_amount' => $totalAmount,
+            'formatted_total_cash' => '₱' . number_format($totalAmount, 2),
+            'envelopes_prepared' => $totalBatches,
+            'envelopes_distributed' => $completedBatches,
+            'envelopes_unclaimed' => collect($cashEmployees)->where('payment_status', 'unclaimed')->count(),
+            'amount_distributed' => $distributedAmount,
+            'formatted_amount_distributed' => '₱' . number_format($distributedAmount, 2),
+            'amount_unclaimed' => $totalAmount - $distributedAmount,
+            'formatted_amount_unclaimed' => '₱' . number_format($totalAmount - $distributedAmount, 2),
         ];
     }
 

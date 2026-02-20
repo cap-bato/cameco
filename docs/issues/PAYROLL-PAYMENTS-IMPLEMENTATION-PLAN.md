@@ -142,382 +142,66 @@ The Payments module handles the final step of payroll: delivering net pay to emp
 
 ### Task 1.1: Create Database Migrations
 
-#### Subtask 1.1.1: Create payment_methods Migration
-**File:** `database/migrations/YYYY_MM_DD_create_payment_methods_table.php`
+#### ✅ Subtask 1.1.1: Create payment_methods Migration (COMPLETED)
+**File:** `database/migrations/2026_02_17_053226_create_payment_methods_table.php`
 
 **Purpose:** Store company-configured payment methods (cash, bank, e-wallet)
 
-```php
-<?php
+**Status:** ✅ **COMPLETED**
+- Migration file created
+- Table successfully created in database
+- All columns and indexes implemented as specified
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('payment_methods', function (Blueprint $table) {
-            $table->id();
-            
-            // Method Type
-            $table->enum('method_type', ['cash', 'bank', 'ewallet', 'check'])->unique();
-            $table->string('display_name', 50);
-            $table->text('description')->nullable();
-            
-            // Configuration
-            $table->boolean('is_enabled')->default(false);
-            $table->boolean('requires_employee_setup')->default(false);
-            $table->boolean('supports_bulk_payment')->default(false);
-            $table->decimal('transaction_fee', 8, 2)->default(0);
-            $table->decimal('min_amount', 10, 2)->nullable();
-            $table->decimal('max_amount', 10, 2)->nullable();
-            
-            // Processing Settings
-            $table->enum('settlement_speed', ['instant', 'same_day', 'next_day', 'manual'])->default('manual');
-            $table->integer('processing_days')->default(0); // Days to settlement
-            $table->time('cutoff_time')->nullable(); // Daily cutoff for same-day
-            
-            // Bank-specific
-            $table->string('bank_code')->nullable(); // e.g., 'MBTC' for Metrobank
-            $table->string('bank_name')->nullable();
-            $table->string('file_format')->nullable(); // 'csv', 'xlsx', 'txt', 'dat'
-            $table->json('file_template')->nullable(); // Column mapping
-            
-            // E-wallet-specific
-            $table->string('provider_name')->nullable(); // 'GCash', 'Maya', 'PayMongo'
-            $table->string('api_endpoint')->nullable();
-            $table->text('api_credentials')->nullable(); // Encrypted
-            $table->string('webhook_url')->nullable();
-            
-            // Priority & Display
-            $table->integer('sort_order')->default(999);
-            $table->string('icon')->nullable();
-            $table->string('color_hex', 7)->nullable();
-            
-            // Audit
-            $table->foreignId('configured_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamp('last_used_at')->nullable();
-            $table->timestamps();
-            $table->softDeletes();
-            
-            // Indexes
-            $table->index(['method_type', 'is_enabled']);
-            $table->index('sort_order');
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('payment_methods');
-    }
-};
-```
-
-**Dependencies:** `users`
-
-**Action:** CREATE
+**Action:** COMPLETED
 
 ---
 
-#### Subtask 1.1.2: Create employee_payment_preferences Migration
-**File:** `database/migrations/YYYY_MM_DD_create_employee_payment_preferences_table.php`
+#### ✅ Subtask 1.1.2: Create employee_payment_preferences Migration (COMPLETED)
+**File:** `database/migrations/2026_02_17_053319_create_employee_payment_preferences_table.php`
 
 **Purpose:** Store employee bank account and e-wallet details for digital payments
 
-```php
-<?php
+**Status:** ✅ **COMPLETED**
+- Migration file created
+- Table successfully created in database
+- All columns and indexes implemented as specified
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('employee_payment_preferences', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('employee_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('payment_method_id')->constrained()->cascadeOnDelete();
-            
-            // Priority
-            $table->boolean('is_primary')->default(false);
-            $table->integer('priority')->default(1); // 1 = highest
-            
-            // Bank Account Details
-            $table->string('bank_code', 10)->nullable(); // e.g., 'MBTC', 'BDO', 'BPI'
-            $table->string('bank_name', 100)->nullable();
-            $table->string('branch_code', 20)->nullable();
-            $table->string('branch_name', 100)->nullable();
-            $table->string('account_number')->nullable(); // Encrypted
-            $table->string('account_name', 200)->nullable();
-            $table->enum('account_type', ['savings', 'checking', 'payroll'])->nullable();
-            
-            // E-wallet Details
-            $table->string('ewallet_provider')->nullable(); // 'gcash', 'maya', 'paymongo'
-            $table->string('ewallet_account_number')->nullable(); // Mobile number
-            $table->string('ewallet_account_name', 200)->nullable();
-            
-            // Verification
-            $table->enum('verification_status', ['pending', 'verified', 'failed', 'rejected'])->default('pending');
-            $table->timestamp('verified_at')->nullable();
-            $table->foreignId('verified_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->text('verification_notes')->nullable();
-            
-            // Supporting Documents
-            $table->string('document_type')->nullable(); // 'bank_statement', 'passbook', 'screenshot'
-            $table->string('document_path')->nullable();
-            $table->timestamp('document_uploaded_at')->nullable();
-            
-            // Usage Tracking
-            $table->boolean('is_active')->default(true);
-            $table->timestamp('last_used_at')->nullable();
-            $table->integer('successful_payments')->default(0);
-            $table->integer('failed_payments')->default(0);
-            
-            // Audit
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamps();
-            $table->softDeletes();
-            
-            // Indexes
-            $table->index(['employee_id', 'is_primary']);
-            $table->index(['employee_id', 'payment_method_id']);
-            $table->index('verification_status');
-            $table->index('bank_code');
-            $table->unique(['employee_id', 'payment_method_id', 'account_number'], 'unique_employee_payment');
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('employee_payment_preferences');
-    }
-};
-```
-
-**Dependencies:** `employees`, `payment_methods`, `users`
-
-**Action:** CREATE
+**Action:** COMPLETED
 
 ---
 
-#### Subtask 1.1.3: Create payroll_payments Migration
-**File:** `database/migrations/YYYY_MM_DD_create_payroll_payments_table.php`
+#### ✅ Subtask 1.1.3: Create payroll_payments Migration (COMPLETED)
+**File:** `database/migrations/2026_02_17_065531_create_payroll_payments_table.php`
 
 **Purpose:** Track individual employee payments per payroll period
 
-```php
-<?php
+**Status:** ✅ **COMPLETED**
+- Migration file exists with correct specifications
+- Table successfully created in database
+- All columns, foreign keys, and indexes implemented as specified
+- Dependencies (employees, payroll_periods, employee_payroll_calculations, payment_methods, users) verified
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('payroll_payments', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('employee_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('payroll_period_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('employee_payroll_calculation_id')->nullable()->constrained()->nullOnDelete();
-            $table->foreignId('payment_method_id')->constrained()->cascadeOnDelete();
-            
-            // Period Information
-            $table->date('period_start');
-            $table->date('period_end');
-            $table->date('payment_date'); // Expected payment date
-            
-            // Payment Amounts
-            $table->decimal('gross_pay', 10, 2);
-            $table->decimal('total_deductions', 10, 2)->default(0);
-            $table->decimal('net_pay', 10, 2);
-            
-            // Deduction Breakdown
-            $table->decimal('sss_deduction', 8, 2)->default(0);
-            $table->decimal('philhealth_deduction', 8, 2)->default(0);
-            $table->decimal('pagibig_deduction', 8, 2)->default(0);
-            $table->decimal('tax_deduction', 8, 2)->default(0);
-            $table->decimal('loan_deduction', 8, 2)->default(0);
-            $table->decimal('advance_deduction', 8, 2)->default(0);
-            $table->decimal('leave_deduction', 8, 2)->default(0); // Unpaid leave
-            $table->decimal('attendance_deduction', 8, 2)->default(0); // Absences/tardiness
-            $table->decimal('other_deductions', 8, 2)->default(0);
-            
-            // Payment Details
-            $table->string('payment_reference')->nullable(); // Bank ref, transaction ID, envelope #
-            $table->string('batch_number')->nullable(); // Links to bank_file_batches or cash_distribution_batches
-            
-            // Bank Transfer Details
-            $table->string('bank_account_number')->nullable();
-            $table->string('bank_name')->nullable();
-            $table->string('bank_transaction_id')->nullable();
-            
-            // E-wallet Details
-            $table->string('ewallet_account')->nullable();
-            $table->string('ewallet_transaction_id')->nullable();
-            
-            // Cash Distribution Details
-            $table->string('envelope_number')->nullable();
-            $table->timestamp('claimed_at')->nullable();
-            $table->string('claimed_by_signature')->nullable(); // Path to signature image
-            $table->foreignId('released_by')->nullable()->constrained('users')->nullOnDelete();
-            
-            // Payment Status
-            $table->enum('status', [
-                'pending',          // Awaiting processing
-                'processing',       // Payment initiated
-                'paid',            // Successfully paid
-                'partially_paid',  // Partial payment made
-                'failed',          // Payment failed
-                'cancelled',       // Payment cancelled
-                'unclaimed'        // Cash not claimed (after 30 days)
-            ])->default('pending')->index();
-            
-            // Timestamps
-            $table->timestamp('processed_at')->nullable();
-            $table->timestamp('paid_at')->nullable();
-            $table->timestamp('failed_at')->nullable();
-            
-            // Retry Logic
-            $table->integer('retry_count')->default(0);
-            $table->timestamp('last_retry_at')->nullable();
-            $table->text('failure_reason')->nullable();
-            
-            // Webhook/Confirmation
-            $table->json('provider_response')->nullable(); // PayMongo/bank response
-            $table->string('confirmation_code')->nullable();
-            
-            // Notes
-            $table->text('notes')->nullable();
-            
-            // Audit
-            $table->foreignId('prepared_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamps();
-            $table->softDeletes();
-            
-            // Indexes
-            $table->index(['employee_id', 'payroll_period_id']);
-            $table->index(['payment_date', 'status']);
-            $table->index('payment_reference');
-            $table->index('batch_number');
-            $table->unique(['employee_id', 'payroll_period_id'], 'unique_payment');
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('payroll_payments');
-    }
-};
-```
-
-**Dependencies:** `employees`, `payroll_periods`, `employee_payroll_calculations`, `payment_methods`, `users`
-
-**Action:** CREATE
+**Action:** COMPLETED
 
 ---
 
-#### Subtask 1.1.4: Create bank_file_batches Migration
-**File:** `database/migrations/YYYY_MM_DD_create_bank_file_batches_table.php`
+#### ✅ Subtask 1.1.4: Create bank_file_batches Migration (COMPLETED)
+**File:** `database/migrations/2026_02_17_065540_create_bank_file_batches_table.php`
 
 **Purpose:** Track bank file generation and submission
 
-```php
-<?php
+**Status:** ✅ **COMPLETED**
+- Migration file exists with correct specifications
+- Table successfully created in database
+- All columns, foreign keys, and indexes implemented as specified
+- Dependencies (payroll_periods, payment_methods, users) verified
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('bank_file_batches', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('payroll_period_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('payment_method_id')->constrained()->cascadeOnDelete();
-            
-            // Batch Information
-            $table->string('batch_number')->unique();
-            $table->string('batch_name');
-            $table->date('payment_date');
-            
-            // Bank Details
-            $table->string('bank_code', 10); // 'MBTC', 'BDO', 'BPI'
-            $table->string('bank_name', 100);
-            $table->enum('transfer_type', ['instapay', 'pesonet', 'internal'])->default('pesonet');
-            
-            // File Details
-            $table->string('file_name');
-            $table->string('file_path');
-            $table->string('file_format', 10); // 'csv', 'xlsx', 'txt'
-            $table->bigInteger('file_size')->nullable(); // bytes
-            $table->string('file_hash')->nullable(); // SHA256
-            
-            // Amounts
-            $table->integer('total_employees');
-            $table->decimal('total_amount', 12, 2);
-            $table->integer('successful_count')->default(0);
-            $table->integer('failed_count')->default(0);
-            $table->decimal('total_fees', 8, 2)->default(0);
-            
-            // Settlement
-            $table->date('settlement_date')->nullable();
-            $table->string('settlement_reference')->nullable();
-            
-            // Status
-            $table->enum('status', ['draft', 'ready', 'submitted', 'processing', 'completed', 'partially_completed', 'failed'])->default('draft');
-            $table->timestamp('submitted_at')->nullable();
-            $table->timestamp('completed_at')->nullable();
-            
-            // Validation
-            $table->boolean('is_validated')->default(false);
-            $table->timestamp('validated_at')->nullable();
-            $table->json('validation_errors')->nullable();
-            
-            // Bank Response
-            $table->text('bank_response')->nullable();
-            $table->string('bank_confirmation_number')->nullable();
-            
-            // Notes
-            $table->text('notes')->nullable();
-            
-            // Audit
-            $table->foreignId('generated_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('submitted_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamps();
-            $table->softDeletes();
-            
-            // Indexes
-            $table->index(['payroll_period_id', 'bank_code']);
-            $table->index(['payment_date', 'status']);
-            $table->index('status');
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('bank_file_batches');
-    }
-};
-```
-
-**Dependencies:** `payroll_periods`, `payment_methods`, `users`
-
-**Action:** CREATE
+**Action:** COMPLETED
 
 ---
 
-#### Subtask 1.1.5: Create cash_distribution_batches Migration
-**File:** `database/migrations/YYYY_MM_DD_create_cash_distribution_batches_table.php`
+#### Subtask 1.1.5: Create cash_distribution_batches Migration ✅ COMPLETED
+**File:** `database/migrations/2026_02_17_065550_create_cash_distribution_batches_table.php`
 
 **Purpose:** Track cash disbursement accountability
 
@@ -611,8 +295,8 @@ return new class extends Migration
 
 ---
 
-#### Subtask 1.1.6: Create payslips Migration
-**File:** `database/migrations/YYYY_MM_DD_create_payslips_table.php`
+#### Subtask 1.1.6: Create payslips Migration ✅ COMPLETED
+**File:** `database/migrations/2026_02_17_065600_create_payslips_table.php`
 
 **Purpose:** Store generated payslip records
 
@@ -724,8 +408,8 @@ return new class extends Migration
 
 ---
 
-#### Subtask 1.1.7: Create payment_audit_logs Migration
-**File:** `database/migrations/YYYY_MM_DD_create_payment_audit_logs_table.php`
+#### Subtask 1.1.7: Create payment_audit_logs Migration ✅ COMPLETED
+**File:** `database/migrations/2026_02_17_065610_create_payment_audit_logs_table.php`
 
 **Purpose:** Comprehensive audit trail for all payment actions
 
@@ -789,32 +473,31 @@ return new class extends Migration
 
 ---
 
-#### Subtask 1.1.8: Run Migrations
+#### Subtask 1.1.8: Run Migrations ✅ COMPLETED
 **Action:** RUN COMMAND
 
 ```bash
 php artisan migrate
 ```
 
-**Validation:**
-```bash
-php artisan db:show --counts
-```
+**Result:** All 3 new migrations ran in batch 2.
 
-Check that all 7 tables are created:
-- payment_methods
-- employee_payment_preferences
-- payroll_payments
-- bank_file_batches
-- cash_distribution_batches
-- payslips
-- payment_audit_logs
+**Validation:** All 7 payment module tables confirmed in database:
+- ✅ payment_methods (batch 1)
+- ✅ employee_payment_preferences (batch 1)
+- ✅ payroll_payments (batch 1)
+- ✅ bank_file_batches (batch 1)
+- ✅ cash_distribution_batches (batch 2)
+- ✅ payslips (batch 2)
+- ✅ payment_audit_logs (batch 2)
+
+**Note:** An additional fix migration `2026_02_17_065620_fix_payment_methods_unique_constraint` was added to replace the single-column unique on `method_type` with a composite unique on `(method_type, display_name)`, allowing multiple bank and ewallet records.
 
 ---
 
 ### Task 1.2: Create Database Seeders
 
-#### Subtask 1.2.1: Create PaymentMethodsSeeder
+#### Subtask 1.2.1: Create PaymentMethodsSeeder ✅ COMPLETED
 **File:** `database/seeders/PaymentMethodsSeeder.php`
 
 **Purpose:** Populate default payment methods (cash, bank, e-wallet)
@@ -984,29 +667,26 @@ class PaymentMethodsSeeder extends Seeder
 
 ---
 
-#### Subtask 1.2.2: Run Seeders
+#### Subtask 1.2.2: Run Seeders ✅ COMPLETED
 **Action:** RUN COMMAND
 
 ```bash
 php artisan db:seed --class=PaymentMethodsSeeder
 ```
 
-**Validation:**
-```bash
-php artisan tinker
->>> \DB::table('payment_methods')->count()
-# Should return 5 (1 cash + 2 banks + 2 e-wallets)
->>> \DB::table('payment_methods')->where('is_enabled', true)->count()
-# Should return 1 (only cash enabled)
-```
+**Result:**
+- 5 records inserted (1 cash enabled, 2 banks disabled, 2 ewallets disabled)
+- `payment_methods` count: 5 ✅
+- Enabled count: 1 (cash only) ✅
+- Disabled count: 4 (Metrobank, BDO, GCash, Maya) ✅
 
 ---
 
-## **Phase 2: Models & Relationships (Week 1-2: Feb 6-16)**
+## **Phase 2: Models & Relationships (Week 1-2: Feb 6-16)** ✅ COMPLETED
 
-### Task 2.1: Create Eloquent Models
+### Task 2.1: Create Eloquent Models ✅ COMPLETED
 
-#### Subtask 2.1.1: Create PaymentMethod Model
+#### Subtask 2.1.1: Create PaymentMethod Model ✅ COMPLETED
 **File:** `app/Models/PaymentMethod.php`
 
 ```php
@@ -1181,11 +861,13 @@ class PaymentMethod extends Model
 }
 ```
 
-**Action:** CREATE
+**Result:** Model created successfully with all relationships, scopes, and helper methods.
+
+**Action:** COMPLETED
 
 ---
 
-#### Subtask 2.1.2: Create EmployeePaymentPreference Model
+#### Subtask 2.1.2: Create EmployeePaymentPreference Model ✅ COMPLETED
 **File:** `app/Models/EmployeePaymentPreference.php`
 
 ```php
@@ -1368,346 +1050,313 @@ class EmployeePaymentPreference extends Model
 }
 ```
 
-**Action:** CREATE
+**Result:** Model created successfully with encrypted account number fields, scopes, and verification helper methods.
+
+**Action:** COMPLETED
 
 ---
 
-[Continuing with remaining models and phases...]
+#### Subtask 2.1.3: Create PayrollPayment Model ✅ COMPLETED
+**File:** `app/Models/PayrollPayment.php`
+
+**Purpose:** Central payment record — one row per employee per payroll period across all payment methods.
+
+**Key Features:**
+- Fillable: employee_id, payroll_period_id, employee_payroll_calculation_id, payment_method_id, period/payment dates, gross_pay, net_pay, all deduction breakdowns (sss/philhealth/pagibig/tax/loan/advance/leave/attendance/other), payment_reference, batch_number, bank fields, ewallet fields, cash/envelope fields, status, retry fields, provider_response, audit FKs
+- Casts: all decimals:2, dates, integer(retry_count), array(provider_response), datetimes
+- Relationships: employee, payrollPeriod, employeePayrollCalculation, paymentMethod, preparedBy, approvedBy, releasedBy (User), payslip (HasOne), auditLogs (MorphMany)
+- Scopes: pending, processing, paid, failed, unclaimed, byCash, byBank, byEwallet, byPeriod, byBatch
+- Methods: isPaid(), isFailed(), isPending(), isProcessing(), isUnclaimed(), isCash(), isBank(), isEwallet(), canRetry() (max 3 per Decision #12), markAsPaid(), markAsFailed(), getTotalDeductions()
+
+**Result:** Model created successfully.
+
+**Action:** COMPLETED
 
 ---
 
-## 📊 Clarifications, Recommendations & Questions
+#### Subtask 2.1.4: Create BankFileBatch Model ✅ COMPLETED
+**File:** `app/Models/BankFileBatch.php`
 
-### 🔍 Clarifications Needed
+**Purpose:** Tracks bank file generation, validation, and submission for Metrobank (InstaPay) and BDO (PESONet) payrolls.
+
+**Key Features:**
+- Fillable: payroll_period_id, payment_method_id, batch_number, batch_name, payment_date, bank_code, bank_name, transfer_type (instapay/pesonet/internal), file fields (name/path/format/size/hash), totals (employees/amount/successful/failed/fees), settlement fields, status, timestamps (submitted_at/completed_at/validated_at), is_validated, validation_errors, bank_response, bank_confirmation_number, audit FKs
+- Casts: dates, decimals:2, integers, boolean(is_validated), array(validation_errors), datetimes
+- Relationships: payrollPeriod, paymentMethod, generatedBy, submittedBy (User), payments (HasMany via batch_number), auditLogs (MorphMany)
+- Scopes: draft, ready, submitted, completed, failed, byBank, byPeriod
+- Methods: isDraft(), isReady(), isSubmitted(), isCompleted(), isFailed(), isInstapay(), isPesonet(), canSubmit() (requires is_validated + ready status), hasValidationErrors(), getSuccessRate()
+
+**Result:** Model created successfully.
+
+**Action:** COMPLETED
+
+---
+
+#### Subtask 2.1.5: Create CashDistributionBatch Model ✅ COMPLETED
+**File:** `app/Models/CashDistributionBatch.php`
+
+**Purpose:** Accountability tracker for physical cash distribution — envelopes, dual verification, distribution log, unclaimed handling.
+
+**Key Features:**
+- Fillable: payroll_period_id, batch_number, distribution_date, distribution_location, total_cash_amount, total_employees, denomination_breakdown, withdrawal fields (source/reference/date/withdrawn_by), dual-verification fields (counted_by/witnessed_by/verification_at/notes), distribution tracking (envelopes_prepared/distributed/unclaimed, amount_distributed/unclaimed), log_sheet_path, distribution timestamps, unclaimed handling (deadline/disposition/redeposit fields), status, accountability_report fields, notes, prepared_by
+- Casts: dates, decimals:2, integers, array(denomination_breakdown), datetimes
+- Relationships: payrollPeriod, withdrawnBy, countedBy, witnessedBy, preparedBy, reportApprovedBy (User), payments (HasMany via batch_number), auditLogs (MorphMany)
+- Scopes: preparing, ready, distributing, completed, reconciled, byPeriod
+- Methods: isVerified() (both counted_by AND witnessed_by set — Decision #8), isPreparing(), isReady(), isDistributing(), isCompleted(), isReconciled(), canStartDistribution(), hasUnclaimed(), getUnclaimedAmount(), isUnclaimedDeadlinePassed()
+
+**Result:** Model created successfully.
+
+**Action:** COMPLETED
+
+---
+
+#### Subtask 2.1.6: Create Payslip Model ✅ COMPLETED
+**File:** `app/Models/Payslip.php`
+
+**Purpose:** DOLE-compliant payslip records with JSON earnings/deductions, YTD summaries, QR verification, and digital distribution tracking.
+
+**Key Features:**
+- Fillable: employee_id, payroll_period_id, payroll_payment_id, payslip_number, period/payment dates, employee snapshot (number/name/department/position), gov numbers snapshot (sss/philhealth/pagibig/tin), earnings_data, total_earnings, deductions_data, total_deductions, net_pay, leave_summary, attendance_summary, YTD fields (gross/tax/sss/philhealth/pagibig/net), file fields (path/format/size/hash), distribution_method (email/portal/print/sms), distributed_at, is_viewed, viewed_at, signature_hash, qr_code_data, status, notes, generated_by
+- Casts: dates, decimals:2, integer(file_size), array (earnings_data/deductions_data/leave_summary/attendance_summary), boolean(is_viewed), datetimes
+- Relationships: employee, payrollPeriod, payrollPayment, generatedBy (User)
+- Scopes: draft, generated, distributed, acknowledged, viewed, byEmployee, byPeriod
+- Methods: isDraft(), isGenerated(), isDistributed(), isAcknowledged(), markAsViewed(), getEarningsBreakdown(), getDeductionsBreakdown(), generateQrData() (encodes payslip_number + signature_hash per Decision #15), getYtdSummary()
+
+**Result:** Model created successfully.
+
+**Action:** COMPLETED
+
+---
+
+#### Subtask 2.1.7: Create PaymentAuditLog Model ✅ COMPLETED
+**File:** `app/Models/PaymentAuditLog.php`
+
+**Purpose:** Immutable audit trail for all payment actions. No SoftDeletes — 7-year BIR retention (Decision #21). Archival via `php artisan payroll:archive-audit-logs`.
+
+**Key Features:**
+- Fillable: auditable_type, auditable_id (polymorphic), action (50 chars), actor_type (user/system/webhook), actor_id, actor_name, old_values, new_values, metadata, ip_address, user_agent, request_id, notes
+- Casts: array (old_values/new_values/metadata), integer(actor_id)
+- NO SoftDeletes (intentional — audit records must not be deleted)
+- Relationships: auditable (MorphTo)
+- Scopes: byAction, byActor, byAuditable, recent, forAuditTrail
+- Methods: isSystemAction(), isWebhookAction(), isUserAction(), getActorLabel()
+- Static: `PaymentAuditLog::record($model, $action, $actorType, $actorId, $actorName, $oldValues, $newValues, $metadata, $notes)` — convenience factory method
+
+**Result:** Model created successfully.
+
+**Action:** COMPLETED
+
+---
+
+## 📊 Decisions, Architecture & Implementation Notes
+
+> **Status:** All clarifications resolved ✅ — Implementation proceeding based on confirmed decisions below.
+
+### ✅ Confirmed Decisions
 
 #### Payment Methods & Configuration
 
-1. **Q:** Which payment methods should be enabled by default?
-   - **Current Plan:** Only cash enabled, banks/e-wallets disabled until Office Admin enables them
-   - **Reason:** Matches current deployment (cash-only distribution)
-   - **Your preference?**
+1. **Default Payment Methods**
+   - **Decision:** Cash enabled by default (current primary). GCash and Maya also registered in the seeder but disabled with `is_enabled = false` and `requires_employee_setup = true`. Banks (Metrobank, BDO) remain disabled. Office Admin must flip `is_enabled = true` and employee must complete verification before any digital method can process payments.
+   - **Implementation Impact:** Seeder must register GCash and Maya. `PaymentMethod` validation must check `is_enabled` AND `employee_payment_preferences.verification_status = 'verified'` before allowing payout.
 
-2. **Q:** Should we implement check payment support?
-   - **Current Plan:** Not included in Phase 1-3
-   - **Alternative:** Can add as Phase 4 if needed
-   - **Your preference?**
+2. **Check Payment Support**
+   - **Decision:** Deferred to Phase 4. Not in scope for Phases 1–3. Track as enhancement if client demand arises.
 
-3. **Q:** What banks should we support beyond Metrobank and BDO?
-   - **Current Plan:** Metrobank (InstaPay), BDO (PESONet)
-   - **Common additions:** BPI, UnionBank, LandBank, Security Bank
-   - **Your preference?**
+3. **Supported Banks Beyond Metrobank & BDO**
+   - **Decision:** Phase 2 supports Metrobank (InstaPay) and BDO (PESONet). GCash and Maya are covered by PayMongo in Phase 3. BPI, UnionBank, LandBank, and Security Bank can be added in Phase 4 if needed by extending the bank file generator with their specific formats.
 
 #### PayMongo Integration
 
-4. **Q:** Do you have an existing PayMongo account?
-   - **If Yes:** Need API keys (public_key, secret_key) for configuration
-   - **If No:** Should we create test account first for development?
-   - **Your preference?**
+4. **PayMongo Account**
+   - **Decision:** No existing account. Use PayMongo test mode (test API keys) throughout development. Switch to production keys only after manual QA sign-off. Store credentials in `.env` — never hardcoded.
+   - **Config keys:** `PAYMONGO_PUBLIC_KEY`, `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET`
 
-5. **Q:** Which PayMongo features should we implement?
-   - **Current Plan:** Disbursements API for GCash/Maya payouts
-   - **Alternative:** Also include bank transfers via PayMongo?
-   - **Your preference?**
+5. **PayMongo Features to Implement**
+   - **Decision:** Phase 3 implements Disbursements API for GCash and Maya payouts only. Bank transfers via PayMongo deferred to Phase 4 pending evaluation of direct bank file ROI.
 
-6. **Q:** Should PayMongo webhook verification be strict or lenient?
-   - **Strict:** Reject unsigned webhooks (more secure)
-   - **Lenient:** Accept all webhooks, log verification failures
-   - **Your preference?**
+6. **PayMongo Webhook Verification**
+   - **Decision:** Strict verification — reject unsigned webhooks. Log all failed verification attempts (IP, timestamp, payload hash) to `payment_audit_logs` for monitoring. Do not silently accept unsigned webhooks.
 
 #### Cash Distribution
 
-7. **Q:** How should unclaimed salaries be handled after 30 days?
-   - **Current Plan:** Manual disposition (re-deposit, hold, add to next period)
-   - **Alternative:** Automatic re-deposit to company account
-   - **Your preference?**
+7. **Unclaimed Salary Handling (after 30 days)**
+   - **Decision:** Manual disposition — Payroll Officer selects one of: `re-deposited`, `held`, or `added_to_next_period`. `cash_distribution_batches.unclaimed_disposition` stores the choice. Automation may be added later based on volume.
 
-8. **Q:** Should cash distribution require dual verification?
-   - **Current Plan:** Yes, Payroll Officer counts + Office Admin witnesses
-   - **Alternative:** Single person verification
-   - **Your preference?**
+8. **Cash Distribution Verification**
+   - **Decision:** Dual verification required — Payroll Officer counts cash, Office Admin witnesses. Both must sign off before `status` advances to `distributing`. This is enforced at the application layer, not just a UI convention.
 
-9. **Q:** Should envelope printing include employee photos?
-   - **Current Plan:** Employee number, name, amount breakdown only
-   - **Alternative:** Add photo for easier identification
-   - **Your preference?**
+9. **Envelope Photos**
+   - **Decision:** Phase 1 — employee number, name, department, net amount, denomination breakdown only. Photos deferred to Phase 4 after basic functionality is stable.
 
 #### Bank File Generation
 
-10. **Q:** Which bank file format versions should we support?
-    - **Current Plan:** Latest formats (2024 versions)
-    - **Alternative:** Support legacy formats for older bank systems
-    - **Your preference?**
+10. **Bank File Format Versions**
+    - **Decision:** Use latest 2024 formats for Metrobank and BDO. Start with current formats and only add legacy support if a specific client request warrants it.
 
-11. **Q:** Should bank files include validation before generation?
-    - **Current Plan:** Yes, validate account numbers, names, amounts
-    - **Alternative:** Generate without validation (faster)
-    - **Your preference?**
+11. **Bank File Validation Before Generation**
+    - **Decision:** Mandatory pre-generation validation — validate account numbers, account names, and amounts. Validation errors must surface to the UI before any file is written to disk.
 
-12. **Q:** How should failed bank transfers be handled?
-    - **Current Plan:** Auto-retry 3 times, then manual intervention
-    - **Alternative:** No auto-retry, always manual
-    - **Your preference?**
+12. **Failed Bank Transfer Handling**
+    - **Decision:** Auto-retry up to 3 times with exponential backoff. After 3 failures, mark as `failed` and alert Payroll Officer for manual intervention. Log each retry attempt in `payment_audit_logs`.
 
 #### Payslip Generation
 
-13. **Q:** Should payslips include year-to-date summaries?
-    - **Current Plan:** Yes, YTD for gross, tax, government contributions
-    - **Alternative:** Current period only
-    - **Your preference?**
+13. **Year-to-Date Summaries**
+    - **Decision:** Include YTD in all payslips — gross pay, withholding tax, SSS, PhilHealth, Pag-IBIG, and net pay. Required for BIR Form 2316 compliance.
 
-14. **Q:** What format should payslips be generated in?
-    - **Current Plan:** PDF only
-    - **Alternative:** PDF + Excel option
-    - **Your preference?**
+14. **Payslip Format**
+    - **Decision:** PDF generation (primary) using a DOLE-compliant template. Excel export added in Phase 4 as an optional feature per employee/admin request.
 
-15. **Q:** Should payslips have QR codes for verification?
-    - **Current Plan:** Yes, QR code with payslip hash for authenticity
-    - **Alternative:** No QR code
-    - **Your preference?**
+15. **QR Codes on Payslips**
+    - **Decision:** QR code included on all generated payslips. Encodes a verification URL linking to `payslip_number` + `signature_hash` for authenticity check. Made toggleable via system settings later.
 
-16. **Q:** How should payslips be distributed?
-    - **Current Plan:** Email (if employee has email), otherwise print
-    - **Alternative:** Always print, never email
-    - **Your preference?**
+16. **Payslip Distribution**
+    - **Decision:** Hybrid delivery — email PDF to employees with a registered email who opt in, otherwise generate print-ready PDF. Distribution method stored in `payslips.distribution_method`. Employee portal access deferred to Phase 4.
 
 #### Leave Integration
 
-17. **Q:** How should unpaid leave deductions be calculated?
-    - **Current Plan:** (Basic salary / working days) × unpaid leave days
-    - **Alternative:** Pro-rated based on gross salary
-    - **Verify with:** PAYROLL-LEAVE-INTEGRATION-ROADMAP.md
-    - **Your preference?**
+17. **Unpaid Leave Deduction Calculation**
+    - **Decision:** `(basic_salary / working_days_per_month) × unpaid_leave_days`. Basic salary only — not gross. Aligned with Philippine DOLE standard practice. Configurable constant for `working_days_per_month` (default: 22). Pro-rated gross method deferred for future evaluation.
+    - **Reference:** PAYROLL-LEAVE-INTEGRATION-ROADMAP.md
 
-18. **Q:** Should leave deductions include government contributions?
-    - **Current Plan:** Yes, reduce SSS/PhilHealth/Pag-IBIG proportionally
-    - **Alternative:** Keep government contributions at full rate
-    - **Your preference?**
+18. **Government Contributions During Leave**
+    - **Decision:** Full-rate government contributions (SSS, PhilHealth, Pag-IBIG) by default regardless of leave type. Rate adjustability per leave type and per company policy is configurable via `system_settings`. This ensures compliance with minimum statutory requirements while allowing flexibility.
 
 #### Timekeeping Integration
 
-19. **Q:** How should tardiness deductions be calculated?
-    - **Current Plan:** Hourly rate × hours late (rounded to 15min intervals)
-    - **Alternative:** Fixed penalty per tardiness instance
-    - **Verify with:** PAYROLL-TIMEKEEPING-INTEGRATION-ROADMAP.md
-    - **Your preference?**
+19. **Tardiness Deduction Calculation**
+    - **Decision:** `hourly_rate × hours_late` rounded to 15-minute intervals. This is the equitable and transparent approach — directly proportional to time lost. Fixed penalties deferred unless client specifically requests.
+    - **Reference:** PAYROLL-TIMEKEEPING-INTEGRATION-ROADMAP.md
 
-20. **Q:** Should absences deduct full day or partial day?
-    - **Current Plan:** Full day deduction for unexcused absences
-    - **Alternative:** Hourly deduction based on shift length
-    - **Your preference?**
+20. **Absence Deduction**
+    - **Decision:** Full day deduction for unexcused absences in Phase 1. `daily_rate × absent_days`. Hourly deduction based on shift length deferred to Phase 4 after operational feedback on edge cases.
 
 #### Payment Tracking & Audit
 
-21. **Q:** How long should payment audit logs be retained?
-    - **Current Plan:** Indefinite retention (no auto-deletion)
-    - **Alternative:** 7 years (BIR requirement), then archive
-    - **Your preference?**
+21. **Audit Log Retention**
+    - **Decision:** Retain payment audit logs for **7 years** (aligned with BIR requirement). After 7 years, archive to cold storage or anonymize. Implement an artisan command `payroll:archive-audit-logs --before=YYYY-MM-DD` for scheduled archival.
 
-22. **Q:** Should payment status changes trigger notifications?
-    - **Current Plan:** Yes, notify Payroll Officer and Office Admin
-    - **Alternative:** Only log changes, no notifications
-    - **Your preference?**
+22. **Payment Status Change Notifications**
+    - **Decision:** Notify on critical status changes only — payment failures, approvals required, unclaimed salary deadlines. Payroll Officer and Office Admin are notified by default. Users can customize notification preferences via their profile settings.
 
-23. **Q:** Should employees be able to view payment history?
-    - **Current Plan:** Not in Phase 1-3 (no employee portal yet)
-    - **Alternative:** Build employee payment history view
-    - **Your preference?**
+23. **Employee Payment History View**
+    - **Decision:** Deferred to Phase 4 (employee portal). Phase 1–3 is admin/payroll-officer-facing only. Employee payslip access via the existing `Employee/Payslips/Index.tsx` portal page will be wired up in Phase 4.
 
 #### Security & Compliance
 
-24. **Q:** How should bank account numbers be encrypted?
-    - **Current Plan:** Laravel's encrypt() function (AES-256-CBC)
-    - **Alternative:** Custom encryption with separate key vault
-    - **Your preference?**
+24. **Bank Account Number Encryption**
+    - **Decision:** Use Laravel's built-in `encrypt()` / `decrypt()` (AES-256-CBC) via `Attribute` casts in the model. Application key (APP_KEY) must be rotated on compromise. All access to encrypted fields logged in `payment_audit_logs`.
 
-25. **Q:** Should payment method configuration require approval?
-    - **Current Plan:** Yes, Office Admin configures, Superadmin approves
-    - **Alternative:** Office Admin can enable without approval
-    - **Your preference?**
+25. **Payment Method Configuration Approval**
+    - **Decision:** Office Admin configures payment methods; Superadmin must approve activation. This prevents unauthorized financial method changes. Approval workflow integrated with existing `ApprovalWorkflow` system.
 
-26. **Q:** Should bulk payments require batch approval?
-    - **Current Plan:** Yes, HR Manager reviews, Office Admin approves
-    - **Alternative:** Payroll Officer can process without approval
-    - **Your preference?**
+26. **Bulk Payment Batch Approval**
+    - **Decision:** HR Manager reviews, Office Admin approves before any batch payment executes. This matches the existing payroll approval matrix. Exception: cash batches under ₱500,000 can be approved by the Office Admin alone (configurable threshold in `system_settings`).
 
 #### Performance & Scalability
 
-27. **Q:** Should bank file generation be queued?
-    - **Current Plan:** Yes, use Laravel Queue for files >100 employees
-    - **Alternative:** Synchronous generation (may timeout)
-    - **Your preference?**
+27. **Bank File Generation — Queued**
+    - **Decision:** Queue bank file generation using **Laravel Queue** for ALL payrolls (not just >100 employees). User receives a progress indicator and a notification when the file is ready for download. Use `BankFileGenerationJob` dispatched from the controller.
 
-28. **Q:** Should payslip generation be batched?
-    - **Current Plan:** Yes, generate in chunks of 50 to avoid memory issues
-    - **Alternative:** Generate all at once
-    - **Your preference?**
+28. **Payslip Generation — Batched**
+    - **Decision:** Generate payslips in chunks of **50** using `Laravel Bus::batch()`. Show real-time progress bar in the UI via polling or server-sent events. Chunk size is configurable via `system_settings`.
 
-29. **Q:** Should payment tracking use caching?
-    - **Current Plan:** Yes, cache payment status for 5 minutes
-    - **Alternative:** Always query database (slower but always fresh)
-    - **Your preference?**
+29. **Payment Tracking — Caching**
+    - **Decision:** Cache payment status summary for 5 minutes using `Cache::remember()`. Show "last updated" timestamp in the UI. Provide a manual refresh button that busts the cache. Individual payment details always query the database directly.
 
-30. **Q:** Should we implement payment method failover?
-    - **Current Plan:** If bank transfer fails, offer cash fallback
-    - **Alternative:** No failover, manual intervention required
-    - **Your preference?**
+30. **Payment Method Failover**
+    - **Decision:** Implement failover — if a bank/e-wallet transfer fails after 3 retries, the payment is flagged for **manual cash fallback**. Payroll Officer receives an alert with a list of affected employees. No automatic conversion to cash — human decision required for audit trail integrity.
 
 ---
 
-### 💡 Recommendations
+### ✅ Architecture & Implementation Directives
 
-#### Implementation Strategy
+> All items below are **adopted** — implementation must follow these decisions.
 
-1. **Phased Rollout Recommended**
-   - **Phase 1 (Week 1-2):** Database schema + Cash distribution only
-   - **Phase 2 (Week 2-3):** Bank file generation (Metrobank, BDO)
-   - **Phase 3 (Week 3-4):** PayMongo integration (GCash, Maya)
-   - **Reason:** Allows testing each method independently before combining
+#### Rollout Strategy
 
-2. **Start with Cash Distribution**
-   - **Why:** Current primary method, must work flawlessly
-   - **Priority:** Accountability tracking, envelope generation, unclaimed handling
-   - **Timeline:** Complete Week 1-2
+1. **Phased Rollout — CONFIRMED**
+   - **Phase 1 (Week 1-2):** Database schema + Cash distribution (current primary)
+   - **Phase 2 (Week 2-3):** Bank file generation (Metrobank InstaPay, BDO PESONet)
+   - **Phase 3 (Week 3-4):** PayMongo integration (GCash, Maya via Disbursements API, test mode)
+   - **Phase 4 (Post-MVP):** Excel payslips, employee portal, BPI/UnionBank support, check payments, envelope photos, hourly absence deductions
 
-3. **Test Bank Files with Small Batch First**
-   - **Why:** Bank rejections can cause payroll delays
-   - **Approach:** Generate test file for 5-10 employees, submit to bank
-   - **Validate:** Confirm format acceptance before full payroll
+2. **Cash Distribution First** — Build and stabilize cash flow before implementing digital channels. No feature gates that require digital to be set up first.
 
-4. **Use PayMongo Test Mode Initially**
-   - **Why:** Avoid real money transactions during development
-   - **Approach:** Use test API keys, simulate successful/failed payments
-   - **Switch:** Move to production keys only after thorough testing
+3. **Bank Files: Small Batch Testing** — Generate and validate format with 5–10 employees against actual bank portal before enabling full payroll run.
 
-#### Technical Architecture
+4. **PayMongo Test Mode** — Use `PAYMONGO_ENV=sandbox` until manual QA sign-off. Controlled environment switch via `.env` only.
 
-5. **Event-Driven Payment Status Updates**
-   - **Implement:** `PaymentProcessed`, `PaymentFailed`, `PaymentRetried` events
-   - **Listeners:** Update audit logs, send notifications, trigger retries
-   - **Benefit:** Decoupled architecture, easier to add new features
+#### Technical Architecture (Adopted)
 
-6. **Queue All Bank/E-wallet Transactions**
-   - **Why:** External API calls can timeout or fail
-   - **Implementation:** Use Laravel Queue with retry logic
-   - **Benefit:** Non-blocking UI, automatic retry on failure
+5. **Event-Driven Payment Updates** — Fire `PaymentProcessed`, `PaymentFailed`, `PaymentRetried` events. Listeners handle audit logging, notifications, and retry queuing. Implemented in `app/Events/Payment/` and `app/Listeners/Payment/`.
 
-7. **Implement Payment Reconciliation Tool**
-   - **Why:** Manual verification needed for bank confirmations
-   - **Features:** Compare expected vs actual payments, flag discrepancies
-   - **Timeline:** Add in Phase 2 with bank files
+6. **Queue All Bank & E-wallet Transactions** — No synchronous external API calls. All PayMongo and bank file operations dispatched as Laravel jobs. Use `database` driver in development, `redis` in production.
 
-8. **Use Laravel Batch for Bulk Payments**
-   - **Why:** Track progress of 100+ employee payments
-   - **Implementation:** `Bus::batch()` with progress callbacks
-   - **Benefit:** Payroll Officer can see real-time status
+7. **Payment Reconciliation Tool** — Phase 2 deliverable. UI in `Payments/BankFiles/` with batch-level comparison between expected amounts and bank confirmation figures. Flag discrepancies with an actionable alert.
 
-#### Security Best Practices
+8. **Laravel Batch for Bulk Payments** — Use `Bus::batch()` for processing 100+ employee payments. Expose batch progress via the existing `payment-tracking-table` component. Each employee payment is an individual `ProcessEmployeePaymentJob`.
 
-9. **Encrypt All Sensitive Payment Data**
-   - **Scope:** Bank account numbers, e-wallet accounts, API keys
-   - **Method:** Laravel's `encrypt()` with separate config key
-   - **Audit:** Log all access to encrypted fields
+#### Security (Adopted)
 
-10. **Implement Payment Approval Workflow**
-    - **Flow:** Payroll Officer prepares → HR Manager reviews → Office Admin approves
-    - **Why:** Matches current approval matrix in documentation
-    - **Exception:** Cash <₱500k can skip Office Admin (configure threshold)
+9. **Encrypt Sensitive Fields** — `account_number` and `ewallet_account_number` in `EmployeePaymentPreference` model use `Attribute` casts with `encrypt()`/`decrypt()`. API keys stored only in `.env`, never the database.
 
-11. **Add Payment Amount Limits**
-    - **Why:** Prevent accidental overpayments
-    - **Limits:** 
-      - Per employee: ₱100k (configurable)
-      - Per batch: ₱5M (configurable)
-      - Daily total: ₱10M (configurable)
-    - **Enforcement:** Database constraint + application validation
+10. **Payment Approval Workflow** — Required for all non-cash payments. Payroll Officer prepares → HR Manager reviews → Office Admin approves. Cash batches under the configured `payroll.cash_approval_threshold` (default ₱500,000) skip Office Admin. Enforced at `PaymentBatchApprovalService`.
 
-12. **Enable Two-Factor Authentication for Payment Approval**
-    - **Who:** Office Admin, Superadmin
-    - **When:** Approving payments >₱1M or enabling new payment methods
-    - **Why:** Extra security for financial operations
+11. **Payment Amount Limits** — Enforced at application validation layer:
+    - Per employee max: `₱100,000` (configurable via `system_settings`)
+    - Per batch max: `₱5,000,000` (configurable)
+    - Daily total max: `₱10,000,000` (configurable)
 
-#### Integration Points
+12. **2FA for High-Value Approvals** — Office Admin and Superadmin must pass 2FA challenge when approving payments over ₱1,000,000 or enabling new payment methods. Leverages the existing Fortify 2FA stack already in the application.
 
-13. **Listen to Leave Management Events**
-    - **Events:** `LeaveApproved`, `LeaveRejected`, `LeaveCancelled`
-    - **Action:** Recalculate net pay if leave affects current payroll period
-    - **Reference:** PAYROLL-LEAVE-INTEGRATION-ROADMAP.md
+#### Integration (Adopted)
 
-14. **Poll Timekeeping Daily Summaries**
-    - **Source:** `daily_attendance_summaries` table
-    - **Frequency:** Daily at 11:59 PM
-    - **Action:** Update attendance deductions for current period
-    - **Reference:** PAYROLL-TIMEKEEPING-INTEGRATION-ROADMAP.md
+13. **Leave Events** — Listen to `LeaveApproved`, `LeaveRejected`, `LeaveCancelled` events. Trigger `RecalculateNetPayJob` if the leave period overlaps the current open payroll period. Reference: `PAYROLL-LEAVE-INTEGRATION-ROADMAP.md`.
 
-15. **Sync with Government Contributions**
-    - **Dependency:** PAYROLL-GOVERNMENT-IMPLEMENTATION-PLAN.md
-    - **Data:** Pull SSS/PhilHealth/Pag-IBIG/Tax deductions
-    - **Timing:** After government calculations complete
+14. **Timekeeping Daily Poll** — Schedule `SyncAttendanceDeductionsJob` daily at 23:59 via Laravel Scheduler. Source: `daily_attendance_summaries` table. Reference: `PAYROLL-TIMEKEEPING-INTEGRATION-ROADMAP.md`.
 
-#### User Experience
+15. **Government Contributions Sync** — Pull finalized SSS/PhilHealth/Pag-IBIG/BIR deductions from the government module after `payroll_period.status = 'finalized'`. Deductions are immutable after this point unless a correction period is opened.
 
-16. **Add Payment Status Dashboard**
-    - **Widgets:** 
-      - Total amount to be paid
-      - Payment method breakdown (cash, bank, e-wallet)
-      - Failed payments count
-      - Unclaimed salaries
-    - **Audience:** Payroll Officer, Office Admin
+#### User Experience (Adopted)
 
-17. **Implement Bulk Payment Actions**
-    - **Actions:** Retry failed payments, cancel pending, mark as paid manually
-    - **UI:** Multi-select checkboxes + action dropdown
-    - **Benefit:** Faster workflow for large payrolls
+16. **Payment Status Dashboard** — Existing `Payments/Tracking/Index.tsx` wired to real data. Show: total to pay, method breakdown (cash/bank/e-wallet), failed count, unclaimed count, and last-updated cache timestamp.
 
-18. **Add Employee Search in Payment Tracking**
-    - **Search by:** Employee number, name, department, payment status
-    - **Filters:** Payment method, date range, amount range
-    - **Export:** CSV/Excel of filtered results
+17. **Bulk Payment Actions** — Multi-select checkboxes in `payment-tracking-table` component. Bulk actions: retry failed, cancel pending, mark as paid manually (with required note). Handled via existing `payment-action-modals.tsx`.
 
-#### Testing Strategy
+18. **Employee Search & Export in Payment Tracking** — Filter by employee number, name, department, status, method, date range. Export filtered results to CSV/Excel via `PaymentTrackingController@export`.
 
-19. **Create Payment Test Scenarios**
-    - **Scenarios:**
-      1. Successful cash distribution
-      2. Successful bank transfer
-      3. Failed bank transfer + retry
-      4. PayMongo webhook handling
-      5. Unclaimed salary rollover
-    - **Validate:** Each scenario with 10+ employees
+#### Testing (Adopted)
 
-20. **Test with Mock Data First**
-    - **Use:** Existing mock controllers as starting point
-    - **Replace:** Gradually with real service layer
-    - **Benefit:** Frontend remains functional during backend development
+19. **Payment Test Scenarios** — The following scenarios must be covered before Phase completion sign-off:
+    1. Full cash distribution cycle (prepare → distribute → sign → close)
+    2. Bank file generation → validation → download
+    3. (Phase 3) PayMongo GCash disbursement success
+    4. (Phase 3) PayMongo disbursement failure → 3 retries → manual intervention
+    5. Unclaimed salary after 30 days → manual disposition
+    Each scenario tested with ≥10 mock employees.
+
+20. **Mock-First Development** — Keep existing mock controller responses working throughout development. Replace mock data with real service layer incrementally, controller-by-controller. This prevents frontend breakage during backend implementation.
 
 ---
 
-### 🎨 Suggested Enhancements (Post-MVP)
+### 🎨 Post-MVP Enhancements (Phase 4+)
 
-1. **Payslip Email Templates**
-   - **Feature:** HTML email with payslip summary + PDF attachment
-   - **Benefit:** Professional communication with employees
-   - **Timeline:** Phase 4
-
-2. **SMS Payment Notifications**
-   - **Feature:** "Your salary has been deposited to [bank]" via SMS API
-   - **Benefit:** Immediate employee notification
-   - **Timeline:** Phase 4
-
-3. **Payment Analytics Dashboard**
-   - **Metrics:** Average processing time, failure rate by method, cost per transaction
-   - **Benefit:** Data-driven decision making for payment methods
-   - **Timeline:** Phase 5
-
-4. **Multi-Currency Support**
-   - **Use case:** Future international employees or contractors
-   - **Complexity:** High (exchange rates, forex fees)
-   - **Timeline:** Phase 6+
-
-5. **Payment Scheduling**
-   - **Feature:** Schedule payments in advance, auto-process on pay date
-   - **Benefit:** Set-and-forget payroll distribution
-   - **Timeline:** Phase 5
+| Enhancement | Description | Target Phase |
+|------------|-------------|--------------|
+| Payslip Email Templates | HTML email + PDF attachment, DOLE-compliant layout | Phase 4 |
+| SMS Payment Notifications | "Salary deposited to [bank]" via SMS API | Phase 4 |
+| Excel Payslip Export | Optional Excel download of payslip data | Phase 4 |
+| Employee Payment History Portal | Employees view payment records via self-service | Phase 4 |
+| Envelope Employee Photos | Photos on salary envelopes for identification | Phase 4 |
+| Hourly Absence Deductions | Deduct based on shift hours rather than full day | Phase 4 |
+| Check Payment Support | Check disbursement + reconciliation module | Phase 4 (if demand) |
+| BPI / UnionBank / LandBank / SecBank | Additional bank file format support | Phase 4 |
+| PayMongo Bank Transfers | Bank account transfers via PayMongo API | Phase 4 |
+| Payment Analytics Dashboard | Processing time, failure rate, cost per transaction | Phase 5 |
+| Payment Scheduling | Auto-process payments on scheduled pay date | Phase 5 |
+| Multi-Currency Support | Forex, international employees | Phase 6+ |
 
 ---
 
@@ -1749,16 +1398,21 @@ For this implementation to succeed, we must:
 
 ## 📝 Next Steps
 
-1. **Review this plan** and answer the 30 clarification questions above
-2. **Confirm payment method priority** (cash → bank → e-wallet)
-3. **Provide PayMongo credentials** (test keys for development)
-4. **Approve Phase 1 database schema** before implementation begins
-5. **Schedule testing session** with Payroll Officer for cash distribution workflow
+1. ✅ ~~Review this plan and answer clarification questions~~ — All 30 decisions confirmed
+2. ✅ ~~Confirm payment method priority~~ — Cash → Bank → E-wallet (GCash/Maya via PayMongo)
+3. 🔄 **Create PayMongo test account** — Register at [paymongo.com](https://paymongo.com), obtain sandbox keys, add to `.env`
+4. ✅ ~~Approve Phase 1 database schema~~ — All 7 payment tables created, constraint fix applied, seeder ran (5 records)
+5. ✅ ~~Execute remaining Phase 1 subtasks~~ — Subtasks 1.1.5–1.1.8, 1.2.1–1.2.2 all COMPLETE
+6. ✅ ~~Implement `PaymentMethodsSeeder`~~ — 5 records seeded: Cash (enabled), Metrobank/BDO/GCash/Maya (disabled)
+7. ✅ ~~**Phase 2: Create 7 Eloquent models**~~ — PaymentMethod, EmployeePaymentPreference, PayrollPayment, BankFileBatch, CashDistributionBatch, Payslip, PaymentAuditLog — ALL COMPLETE
+8. 🔄 **Phase 3: Services & Business Logic** — PaymentService, BankFileGeneratorService, CashDistributionService, PayslipGeneratorService
 
 ---
 
-**Plan Status:** ⏳ Awaiting your feedback on clarifications before implementation begins
+**Plan Status:** 🟢 **ACTIVE — Phase 1 & 2 complete. Phase 3 (Services) is next.**
 
-**Estimated Start Date:** Upon approval of clarifications  
-**Estimated Completion Date:** 3-4 weeks after start
+**Last Updated:** February 19, 2026  
+**Phase 1:** ✅ COMPLETE — All 7 migrations ran, constraint fix applied, seeder successful (5 payment methods)  
+**Phase 2:** ✅ COMPLETE — All 7 Eloquent models created (PaymentMethod, EmployeePaymentPreference, PayrollPayment, BankFileBatch, CashDistributionBatch, Payslip, PaymentAuditLog)  
+**Current Focus:** Phase 3 — Services & Business Logic
 

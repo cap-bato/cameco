@@ -413,8 +413,8 @@ export default function PaymentTrackingIndex({
                                     <SelectContent>
                                         <SelectItem value="all">All Methods</SelectItem>
                                         {payment_methods.map((method) => (
-                                            <SelectItem key={method} value={method}>
-                                                {method.charAt(0).toUpperCase() + method.slice(1)}
+                                            <SelectItem key={method.id} value={method.method_type}>
+                                                {method.display_name}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>

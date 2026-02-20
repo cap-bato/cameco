@@ -28,15 +28,14 @@ export default function CashPaymentIndex({
     cash_employees,
     summary,
     payroll_periods,
-    distributions,
+    batches,
     unclaimed_cash,
     query_params,
 }: CashPaymentPageProps & { query_params?: Record<string, string> }) {
     // Initialize state from URL parameters - DO NOT trigger updates on init
     const [periodId, setPeriodId] = useState(query_params?.period_id || 'all');
     const [departmentId, setDepartmentId] = useState(query_params?.department_id || 'all');
-    const [envelopeStatus, setEnvelopeStatus] = useState(query_params?.envelope_status || 'all');
-    const [distributionStatus, setDistributionStatus] = useState(query_params?.distribution_status || 'all');
+    const [status, setStatus] = useState(query_params?.status || 'all');
     const [searchQuery, setSearchQuery] = useState(query_params?.search || '');
     const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
     const [activeTab, setActiveTab] = useState('employees');
@@ -62,26 +61,20 @@ export default function CashPaymentIndex({
             filtered = filtered.filter((emp) => emp.department === departmentId);
         }
 
-        // Apply envelope status filter
-        if (envelopeStatus !== 'all') {
-            filtered = filtered.filter((emp) => emp.envelope_status === envelopeStatus);
-        }
-
-        // Apply distribution status filter
-        if (distributionStatus !== 'all') {
-            filtered = filtered.filter((emp) => emp.distribution_status === distributionStatus);
+        // Apply payment status filter (mapped from payroll_payments.status)
+        if (status !== 'all') {
+            filtered = filtered.filter((emp) => emp.payment_status === status);
         }
 
         return filtered;
-    }, [searchQuery, departmentId, envelopeStatus, distributionStatus, cash_employees]);
+    }, [searchQuery, departmentId, status, cash_employees]);
 
     // Handle filter changes - create URL with current filter values
     const handleFilterChange = () => {
         const params: Record<string, string> = {};
         if (periodId !== 'all') params.period_id = periodId;
         if (departmentId !== 'all') params.department_id = departmentId;
-        if (envelopeStatus !== 'all') params.envelope_status = envelopeStatus;
-        if (distributionStatus !== 'all') params.distribution_status = distributionStatus;
+        if (status !== 'all') params.status = status;
         if (searchQuery.trim()) params.search = searchQuery;
 
         const queryString = new URLSearchParams(params).toString();
@@ -91,8 +84,7 @@ export default function CashPaymentIndex({
     const handleResetFilters = () => {
         setPeriodId('1');
         setDepartmentId('all');
-        setEnvelopeStatus('all');
-        setDistributionStatus('all');
+        setStatus('all');
         setSearchQuery('');
         router.get('/payroll/payments/cash', {}, { preserveScroll: true });
     };
@@ -253,37 +245,19 @@ export default function CashPaymentIndex({
 
                                 <div>
                                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                                        Envelope Status
+                                        Payment Status
                                     </label>
-                                    <Select value={envelopeStatus} onValueChange={setEnvelopeStatus}>
+                                    <Select value={status} onValueChange={setStatus}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="All statuses" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All Statuses</SelectItem>
                                             <SelectItem value="pending">Pending</SelectItem>
-                                            <SelectItem value="printed">Printed</SelectItem>
-                                            <SelectItem value="prepared">Prepared</SelectItem>
-                                            <SelectItem value="distributed">Distributed</SelectItem>
+                                            <SelectItem value="processing">Processing</SelectItem>
+                                            <SelectItem value="paid">Paid</SelectItem>
+                                            <SelectItem value="failed">Failed</SelectItem>
                                             <SelectItem value="unclaimed">Unclaimed</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div>
-                                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                                        Distribution Status
-                                    </label>
-                                    <Select value={distributionStatus} onValueChange={setDistributionStatus}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="All statuses" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Statuses</SelectItem>
-                                            <SelectItem value="pending">Pending</SelectItem>
-                                            <SelectItem value="distributed">Distributed</SelectItem>
-                                            <SelectItem value="unclaimed">Unclaimed</SelectItem>
-                                            <SelectItem value="claimed">Claimed</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -295,7 +269,7 @@ export default function CashPaymentIndex({
                                 <Button onClick={handleResetFilters} variant="outline" size="sm">
                                     Clear All Filters
                                 </Button>
-                                {(searchQuery || departmentId !== 'all' || envelopeStatus !== 'all' || distributionStatus !== 'all') && (
+                                {(searchQuery || departmentId !== 'all' || status !== 'all') && (
                                     <div className="text-sm text-gray-600 flex items-center">
                                         Showing {filteredEmployees.length} of {cash_employees.length} employees
                                     </div>
@@ -359,7 +333,7 @@ export default function CashPaymentIndex({
                     {/* Tab 3: Distribution Tracking */}
                     <TabsContent value="distribution" className="space-y-4">
                         <CashDistributionTracker
-                            distributions={distributions}
+                            distributions={batches}
                             unclaimedCash={unclaimed_cash}
                             employees={cash_employees}
                         />
