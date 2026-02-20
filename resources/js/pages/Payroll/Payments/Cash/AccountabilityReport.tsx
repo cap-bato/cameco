@@ -8,6 +8,7 @@ import type { CashEmployee, CashDistribution } from '@/types/payroll-pages';
 
 interface ReportData {
     period_id: string;
+    period_label: string;
     total_cash_employees: number;
     total_cash_amount: number;
     formatted_total: string;
@@ -42,7 +43,10 @@ export default function AccountabilityReport({
     };
 
     const handleDownloadPDF = () => {
-        alert('PDF download would be implemented here');
+        const prevTitle = document.title;
+        document.title = `Cash Accountability Report - ${report.period_label}`;
+        window.print();
+        document.title = prevTitle;
     };
 
     const distributedEmployees = employees.filter((e) => e.distribution_status === 'distributed');
@@ -57,7 +61,7 @@ export default function AccountabilityReport({
                 <div className="flex items-center justify-between print:mb-2 print:hidden">
                     <div className="space-y-2">
                         <h1 className="text-3xl font-bold tracking-tight">Cash Payment Accountability Report</h1>
-                        <p className="text-muted-foreground">Period: {report.period_id}</p>
+                        <p className="text-muted-foreground">Period: {report.period_label}</p>
                     </div>
                     <div className="flex gap-2 print:hidden">
                         <Button variant="outline" size="sm" onClick={() => router.get('/payroll/payments/cash')}>
@@ -78,7 +82,7 @@ export default function AccountabilityReport({
                 {/* Print Title */}
                 <div className="hidden print:block print:mb-2">
                     <h1 className="text-lg font-bold">Cash Payment Accountability Report</h1>
-                    <p className="text-sm text-gray-600">Period: {report.period_id}</p>
+                    <p className="text-sm text-gray-600">Period: {report.period_label}</p>
                 </div>
 
                 {/* Summary Cards */}

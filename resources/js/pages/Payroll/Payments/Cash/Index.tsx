@@ -30,6 +30,7 @@ export default function CashPaymentIndex({
     payroll_periods,
     batches,
     unclaimed_cash,
+    departments,
     query_params,
 }: CashPaymentPageProps & { query_params?: Record<string, string> }) {
     // Initialize state from URL parameters - DO NOT trigger updates on init
@@ -152,9 +153,9 @@ export default function CashPaymentIndex({
                             <Printer className="h-4 w-4 text-yellow-600" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{summary.envelopes_printed}</div>
+                            <div className="text-2xl font-bold">{summary.envelopes_prepared}</div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                {summary.envelopes_pending} pending
+                                {summary.envelopes_distributed} distributed
                             </p>
                         </CardContent>
                     </Card>
@@ -234,11 +235,11 @@ export default function CashPaymentIndex({
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All Departments</SelectItem>
-                                            <SelectItem value="Operations">Operations</SelectItem>
-                                            <SelectItem value="Sales">Sales</SelectItem>
-                                            <SelectItem value="Finance">Finance</SelectItem>
-                                            <SelectItem value="HR">HR</SelectItem>
-                                            <SelectItem value="IT">IT</SelectItem>
+                                            {departments?.map((dept) => (
+                                                <SelectItem key={dept.id} value={dept.name}>
+                                                    {dept.name}
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
