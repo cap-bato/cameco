@@ -42,20 +42,30 @@ export default function AccountabilityReport({
         window.print();
     };
 
-    const handleDownloadPDF = () => {
-        const prevTitle = document.title;
-        document.title = `Cash Accountability Report - ${report.period_label}`;
-        window.print();
-        document.title = prevTitle;
-    };
-
     const distributedEmployees = employees.filter((e) => e.distribution_status === 'distributed');
     const unclaimedEmployees = employees.filter((e) => e.distribution_status === 'unclaimed');
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Accountability Report" />
-            <style>{`@media print { nav { display: none !important; } }`}</style>
+            <style>{`
+                @media print {
+                    aside,
+                    header,
+                    nav,
+                    [data-sidebar],
+                    .sidebar {
+                        display: none !important;
+                    }
+                    main,
+                    .main-content,
+                    [data-main] {
+                        width: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                }
+            `}</style>
             <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-6 print:p-2 print:gap-3 print:rounded-none">
                 {/* Header */}
                 <div className="flex items-center justify-between print:mb-2 print:hidden">
@@ -68,9 +78,11 @@ export default function AccountabilityReport({
                             <ChevronLeft className="h-4 w-4 mr-2" />
                             Back
                         </Button>
-                        <Button size="sm" onClick={handleDownloadPDF} variant="outline">
-                            <Download className="h-4 w-4 mr-2" />
-                            PDF
+                        <Button size="sm" variant="outline" asChild>
+                            <a href={`/payroll/payments/cash/accountability-report/pdf?period_id=${report.period_id}`}>
+                                <Download className="h-4 w-4 mr-2" />
+                                Download PDF
+                            </a>
                         </Button>
                         <Button size="sm" onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700">
                             <Printer className="h-4 w-4 mr-2" />

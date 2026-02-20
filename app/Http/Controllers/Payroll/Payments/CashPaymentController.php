@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Payroll\Payments;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Inertia\Inertia;
 use App\Models\PayrollPayment;
 use App\Models\CashDistributionBatch;
@@ -165,7 +166,39 @@ class CashPaymentController extends Controller
     public function generateAccountabilityReport(Request $request)
     {
         $periodId = $request->input('period_id', 'all');
+        $data = $this->buildReportData($periodId);
 
+        return Inertia::render('Payroll/Payments/Cash/AccountabilityReport', [
+            'report'        => $data['report'],
+            'employees'     => $data['employees']->values(),
+            'distributions' => $data['distributions'],
+        ]);
+    }
+
+    /**
+     * Download accountability report as PDF
+     */
+    public function downloadAccountabilityReportPdf(Request $request): Response
+    {
+        $periodId = $request->input('period_id', 'all');
+        $data = $this->buildReportData($periodId);
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->loadView('payroll.payments.cash.accountability-report-pdf', [
+            'report'    => $data['report'],
+            'employees' => $data['employees']->values()->toArray(),
+        ]);
+        $pdf->setPaper('a4', 'portrait');
+
+        $filename = 'cash-accountability-report-' . now()->format('Y-m-d') . '.pdf';
+        return $pdf->download($filename);
+    }
+
+    /**
+     * Build report data for accountability report (shared by HTML and PDF)
+     */
+    private function buildReportData(string $periodId): array
+    {
         $cashMethodId = PaymentMethod::where('method_type', 'cash')->value('id');
 
         $payments = PayrollPayment::with(['employee.profile', 'employee.department', 'employee.position', 'payrollPeriod'])
@@ -219,11 +252,11 @@ class CashPaymentController extends Controller
                 'distributed_by'     => $batch->preparedBy?->name ?? null,
             ]);
 
-        return Inertia::render('Payroll/Payments/Cash/AccountabilityReport', [
+        return [
             'report'        => $report,
-            'employees'     => $employees->values(),
+            'employees'     => $employees,
             'distributions' => $distributions,
-        ]);
+        ];
     }
 
     /**
