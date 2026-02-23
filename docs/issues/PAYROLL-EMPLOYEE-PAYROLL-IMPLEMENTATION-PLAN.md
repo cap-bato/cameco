@@ -1086,17 +1086,77 @@ class EmployeePayrollInfo extends Model
   - Status tracking: Active, Inactive, Pending, Ended
   - Auto-set created_by and updated_by via boot method
 
-**Subtask 1.2.5: Create EmployeeDeduction model**
+**Subtask 1.2.5: Create EmployeeDeduction model** ✅ COMPLETED
 - **File:** `app/Models/EmployeeDeduction.php`
 - **Action:** CREATE
+- **Status:** Model created successfully
+- **Completion Date:** February 17, 2026
+- **Relationships:** belongsTo(Employee), belongsTo(User) createdBy/updatedBy
+- **Scopes:** active(), forEmployee(id), byType(type), currentlyActive(), byFrequency(freq), ordered()
+- **Accessors:** formatted_amount, status_label, type_display, days_remaining
+- **Methods:** isCurrentlyActive(), calculateDeductionForPeriod(periodType)
+- **Features Implemented:**
+  - Soft deletes enabled
+  - Decimal precision for amounts
+  - Date range validation for active deductions
+  - Frequency-based deductions (monthly, semi_monthly, one_time)
+  - 13 deduction types: insurance, union_dues, canteen, utilities, equipment, uniform, hmo, professional_fee, contribution, tax_adjustment, court_order, loan_deduction, other
+  - Human-readable type display with proper labeling
+  - Status tracking: Active, Inactive, Pending, Ended
+  - Period-based calculation for different payroll frequencies
+  - Auto-set created_by and updated_by via boot method
 
-**Subtask 1.2.6: Create EmployeeLoan model**
+**Subtask 1.2.6: Create EmployeeLoan model** ✅ COMPLETED
 - **File:** `app/Models/EmployeeLoan.php`
 - **Action:** CREATE
+- **Status:** Model created successfully
+- **Completion Date:** February 17, 2026
+- **Relationships:** belongsTo(Employee), hasMany(LoanDeduction), belongsTo(User) createdBy/updatedBy
+- **Scopes:** active(), forEmployee(id), byType(type), byStatus(status), completed(), defaulted(), ordered()
+- **Accessors:** formatted_principal, formatted_total, formatted_installment, formatted_balance, formatted_total_paid, type_label, status_label, repayment_progress, remaining_installments
+- **Methods:** isActive(), isCompleted(), isDefaulted(), getNextInstallmentNumber(), recordDeduction(), calculateOutstandingBalance(), getMonthsRemaining(), markAsDefaulted(), markAsCompleted()
+- **Features Implemented:**
+  - Soft deletes enabled
+  - Decimal precision for all monetary values
+  - Complete loan lifecycle management (active → completed/defaulted/cancelled)
+  - 6 loan types: sss_loan, pagibig_loan, pagibig_housing_loan, company_loan, personal_loan, emergency_loan
+  - Principal, interest, and total amount tracking
+  - Installment-based repayment management
+  - Balance tracking (remaining_balance, total_paid)
+  - Deduction date tracking (first_deduction_date, last_deduction_date, completion_date)
+  - Repayment progress calculation (percentage and remaining installments)
+  - External loan number support (for SSS/Pag-IBIG integration)
+  - Completion reason tracking
+  - Auto-deduction recording with balance updates
+  - Status transitions with completion dates
+  - Auto-set created_by and updated_by via boot method
 
-**Subtask 1.2.7: Create LoanDeduction model**
+**Subtask 1.2.7: Create LoanDeduction model** ✅ COMPLETED
 - **File:** `app/Models/LoanDeduction.php`
 - **Action:** CREATE
+- **Status:** Model created successfully
+- **Completion Date:** February 17, 2026
+- **Relationships:** belongsTo(EmployeeLoan), belongsTo(PayrollCalculation), belongsTo(User) createdBy/updatedBy
+- **Scopes:** deducted(), pending(), paid(), overdue(), partialPaid(), forLoan(id), byStatus(status), ordered()
+- **Accessors:** formatted_principal, formatted_interest, formatted_total, formatted_penalty, formatted_deducted, formatted_balance, status_label
+- **Methods:** isOverdue(), isPending(), isDeducted(), isPaid(), markAsDeducted(), markAsPaid(), markAsPartialPaid(), markAsOverdue(), waive(), getOutstandingAmount(), getDaysOverdue()
+- **Features Implemented:**
+  - Soft deletes enabled
+  - Decimal precision for all monetary and deduction tracking
+  - Installment-level deduction tracking with principal/interest breakdown
+  - Penalty amount support for overdue payments
+  - 7 status types: pending, deducted, paid, overdue, partial_paid, waived, cancelled
+  - Due date and paid date tracking
+  - Deducted timestamp for audit trail
+  - Reference number support for payment tracking
+  - Payroll calculation integration (for audit trail)
+  - Amount deducted vs amount paid tracking
+  - Balance after payment calculation
+  - Overdue status detection and days calculation
+  - Partial payment support for installments
+  - Waiver/forgiveness capability with reason tracking
+  - Outstanding amount calculation
+  - Auto-set created_by and updated_by via boot method
 
 **Subtask 1.2.8: Update Employee model** ✅ COMPLETED
 - **File:** `app/Models/Employee.php`
