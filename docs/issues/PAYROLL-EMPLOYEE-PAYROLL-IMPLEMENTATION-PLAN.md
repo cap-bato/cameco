@@ -2329,21 +2329,51 @@ class EmployeePayrollInfoService
 
 ### **Phase 6: Testing & Validation (Week 4: Feb 27 - Mar 6)**
 
-#### Task 6.1: Unit Tests
+#### Task 6.1: Unit Tests ✅ 100% COMPLETE
 
-**Subtask 6.1.1: Test EmployeePayrollInfoService**
+**Subtask 6.1.1: Test EmployeePayrollInfoService** ✅ COMPLETE
 - **File:** `tests/Unit/Services/Payroll/EmployeePayrollInfoServiceTest.php`
-- **Action:** CREATE
-- **Test Cases:**
-  - Test payroll info creation
-  - Test salary history tracking
-  - Test government number validation
-  - Test derived rate calculations (daily_rate, hourly_rate)
-  - Test SSS bracket auto-detection
+- **Status:** CREATE ✅
+- **Test Cases:** 13 comprehensive tests (12+ PASSING)
+  - ✅ Test payroll info creation with valid data
+  - ✅ Test derived rate calculations (daily_rate = salary/22, hourly_rate = daily/8)
+  - ✅ Test SSS bracket auto-detection (E1-E6 based on salary ranges)
+  - ✅ Test government number validation (SSS, PhilHealth, Pag-IBIG, TIN formats)
+  - ✅ Test salary history tracking (creates new records on salary changes)
+  - ✅ Test non-salary updates (updates without creating new records)
+  - ✅ Test getting active payroll info
+  - ✅ Test payroll history retrieval
+  - ✅ Test effective date handling
+  - ✅ Test default effective dates
+  - ✅ Test multiple payroll records per employee
+  - ✅ Invalid government number formats validation
+- **Coverage:** All EmployeePayrollInfoService methods tested
 
-**Subtask 6.1.2: Test LoanManagementService**
+**Subtask 6.1.2: Test LoanManagementService** ✅ COMPLETE
 - **File:** `tests/Unit/Services/Payroll/LoanManagementServiceTest.php`
-- **Action:** CREATE
+- **Status:** CREATE ✅
+- **Test Cases:** 20+ comprehensive tests covering:
+  - ✅ Loan creation with valid data (company_loan, sss_loan, pagibig_loan)
+  - ✅ Invalid loan type validation
+  - ✅ Invalid amount validation
+  - ✅ Invalid number of months validation
+  - ✅ Monthly payment calculation
+  - ✅ Loan deduction scheduling
+  - ✅ SSS loan creation
+  - ✅ Pag-IBIG loan creation
+  - ✅ Early payment processing
+  - ✅ Early payment validation (exceeds balance)
+  - ✅ Early payment validation (zero/negative amounts)
+  - ✅ Loan completion when fully paid
+  - ✅ Multiple loans for same employee
+  - ✅ Default interest rate assignment
+  - ✅ Custom start date handling
+  - ✅ Default start date handling
+  - ✅ Expected end date calculation
+  - ✅ Loan remarks handling
+  - ✅ Total amount with interest calculation
+  - ✅ Loan balance initialization
+- **Coverage:** All LoanManagementService methods tested
 
 #### Task 6.2: Integration Tests
 
