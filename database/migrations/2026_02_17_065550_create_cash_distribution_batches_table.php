@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('cash_distribution_batches')) {
+            return;
+        }
+        
         Schema::create('cash_distribution_batches', function (Blueprint $table) {
             $table->id();
             $table->foreignId('payroll_period_id')->constrained()->cascadeOnDelete();
@@ -70,8 +74,8 @@ return new class extends Migration
             $table->softDeletes();
 
             // Indexes
-            $table->index(['payroll_period_id', 'distribution_date']);
-            $table->index(['status', 'distribution_date']);
+            $table->index(['payroll_period_id', 'distribution_date'], 'cdb_period_date_idx');
+            $table->index(['status', 'distribution_date'], 'cdb_status_date_idx');
         });
     }
 
