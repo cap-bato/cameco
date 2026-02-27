@@ -66,8 +66,8 @@ class UpdateEmployeeRequest extends FormRequest
             // Government IDs
             'sss_number' => ['nullable', 'string', 'max:12'],
             'tin_number' => ['nullable', 'string', 'max:15'],
-            'philhealth_number' => ['nullable', 'string', 'max:14'],
-            'pagibig_number' => ['nullable', 'string', 'max:14'],
+            'philhealth_number' => ['nullable', 'string', 'max:20'],
+            'pagibig_number' => ['nullable', 'string', 'max:20'],
             
             // Profile Picture
             'profile_picture' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif', 'max:5120'], // 5MB max
