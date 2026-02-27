@@ -30,7 +30,7 @@ import type { PayslipsPageProps, PayslipPreviewData, PayslipGenerationRequest, P
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Payroll', href: '/payroll' },
-    { title: 'Payslips', href: '/payroll/payslips' },
+    { title: 'Payslips', href: '/payroll/payments/payslips' },
 ];
 
 export default function PayslipsIndex({
@@ -83,7 +83,7 @@ export default function PayslipsIndex({
 
     const applyFilters = () => {
         router.get(
-            '/payroll/payslips',
+            '/payroll/payments/payslips',
             {
                 search: search || undefined,
                 period_id: periodId !== 'all' ? periodId : undefined,
@@ -104,14 +104,14 @@ export default function PayslipsIndex({
         setDepartmentId('all');
         setStatus('all');
         setDistributionMethod('all');
-        router.get('/payroll/payslips', {}, {
+        router.get('/payroll/payments/payslips', {}, {
             preserveState: false,
             preserveScroll: true,
         });
     };
 
     const handleGenerate = (data: PayslipGenerationRequest) => {
-        router.post('/payroll/payslips/generate', {
+        router.post('/payroll/payments/payslips/generate', {
             period_id: data.period_id,
             employee_ids: data.employee_ids,
         }, {
@@ -122,7 +122,7 @@ export default function PayslipsIndex({
     };
 
     const handleDistribute = (data: PayslipDistributionRequest) => {
-        router.post('/payroll/payslips/distribute', {
+        router.post('/payroll/payments/payslips/distribute', {
             payslip_ids: data.payslip_ids,
             distribution_method: data.distribution_method,
             email_subject: data.email_subject,
@@ -136,11 +136,11 @@ export default function PayslipsIndex({
     };
 
     const handleDownload = (id: number) => {
-        router.get(`/payroll/payslips/${id}/download`);
+        router.get(`/payroll/payments/payslips/${id}/download`);
     };
 
     const handleEmail = (id: number) => {
-        router.post(`/payroll/payslips/${id}/email`);
+        router.post(`/payroll/payments/payslips/${id}/email`);
     };
 
     const handleView = (id: number) => {
@@ -170,7 +170,7 @@ export default function PayslipsIndex({
     };
 
     const handlePrint = (id: number) => {
-        router.get(`/payroll/payslips/${id}/print`);
+        router.get(`/payroll/payments/payslips/${id}/print`);
     };
 
     const handleBulkDistribute = () => {
@@ -178,13 +178,13 @@ export default function PayslipsIndex({
     };
 
     const handleBulkDownload = () => {
-        router.post('/payroll/payslips/bulk-download', {
+        router.post('/payroll/payments/payslips/bulk-download', {
             payslip_ids: selectedPayslips,
         });
     };
 
     const handleBulkEmail = () => {
-        router.post('/payroll/payslips/bulk-email', {
+        router.post('/payroll/payments/payslips/bulk-email', {
             payslip_ids: selectedPayslips,
         });
     };

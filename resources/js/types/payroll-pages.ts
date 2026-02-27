@@ -1270,8 +1270,9 @@ export interface BankPayrollFile {
     period_name: string; // "November 2025 - 2nd Half"
     
     // Bank Details
-    bank_name: string; // "BPI", "BDO", "Metrobank", "PNB", "RCBC", "Unionbank"
+    bank_name: string; // "BDO", "Metrobank" (only Phase 1 banks)
     bank_code: string | null;
+    transfer_type: 'instapay' | 'pesonet' | 'internal' | null;
     
     // File Information
     file_name: string;
@@ -1279,21 +1280,28 @@ export interface BankPayrollFile {
     file_format: 'csv' | 'txt' | 'excel' | 'fixed_width';
     file_size: number; // In bytes
     file_hash: string;
+    is_validated: boolean;
+    validated_at: string | null;
+    validation_errors: Array<{ employee_id: number; message: string }> | null;
     
     // Payroll Summary
     total_employees: number;
     total_amount: number;
+    successful_count: number | null;
+    failed_count: number | null;
+    total_fees: number;
+    settlement_date: string | null;
+    settlement_reference: string | null;
     
     // Status Tracking
-    status: 'generated' | 'uploaded' | 'processed' | 'confirmed' | 'failed';
+    status: 'draft' | 'ready' | 'submitted' | 'processing' | 'completed' | 'partially_completed' | 'failed';
     status_label: string;
-    status_color: 'gray' | 'blue' | 'green' | 'orange' | 'red';
+    status_color: 'gray' | 'blue' | 'yellow' | 'green' | 'orange' | 'red';
     
     // Timestamps
-    generated_at: string;
-    uploaded_at: string | null;
-    uploaded_by: string | null;
-    confirmation_number: string | null;
+    submitted_at: string | null;
+    submitted_by: string | null;
+    bank_confirmation_number: string | null;
     
     created_at: string;
     updated_at: string;
@@ -1301,6 +1309,13 @@ export interface BankPayrollFile {
 
 /**
  * Bank Option for Selection
+ * 
+ * Phase 1 (Current): Only 'BDO' and 'Metrobank' are seeded in payment_methods.
+ * The BankOption[] data returned by the controller must only contain these two banks.
+ * Future phases can add more banks (BPI, PNB, RCBC, Unionbank, etc.).
+ * 
+ * Note: No union type restriction on id/name here — kept flexible for future expansion.
+ * Bank validation occurs in the controller (see BankFilesController validation).
  */
 export interface BankOption {
     id: string;
@@ -1368,12 +1383,13 @@ export interface BankFileGenerationResponse {
 
 /**
  * Payslip (DOLE-Compliant)
- * Contains detailed breakdown of employee earnings, deductions, and net pay
+ * Contains detailed breakdown of employee earnings, deductions, and net pay.
+ * Earnings and deductions are stored as JSON in the DB for flexibility.
  */
 export interface Payslip {
     id: string | number;
     payslip_number: string; // PS-2025-10-00123
-    payroll_calculation_id: string | number;
+    payroll_payment_id: string | number; // FK to payroll_payments.id
     employee_id: string | number;
     payroll_period_id: string | number;
 
@@ -1382,6 +1398,12 @@ export interface Payslip {
     employee_name: string;
     position: string;
     department: string;
+    
+    // Employee Identification (DOLE-compliant display)
+    sss_number: string | null;
+    philhealth_number: string | null;
+    pagibig_number: string | null;
+    tin: string | null;
 
     // Period Information
     period_name: string;
@@ -1389,60 +1411,42 @@ export interface Payslip {
     period_end: string; // YYYY-MM-DD
     pay_date: string; // YYYY-MM-DD
 
-    // Earnings Breakdown
-    basic_salary: number;
-    overtime_pay: number;
-    night_differential: number;
-    holiday_pay: number;
-    allowances: number;
-    other_earnings: number;
+    // Earnings Breakdown (JSON structure for flexibility)
+    earnings_data: Record<string, number>; // {"basic_salary": 15000, "overtime": 1200, ...}
     gross_pay: number;
 
-    // Deductions Breakdown
-    sss_contribution: number;
-    philhealth_contribution: number;
-    pagibig_contribution: number;
-    withholding_tax: number;
-    loans: number;
-    other_deductions: number;
+    // Deductions Breakdown (JSON structure for flexibility)
+    deductions_data: Record<string, number>; // {"sss": 1125, "philhealth": 450, ...}
     total_deductions: number;
 
     // Net Pay
     net_pay: number;
 
-    // YTD (Year-to-Date) Totals
+    // YTD (Year-to-Date) Totals — split by category
     ytd_gross: number;
-    ytd_deductions: number;
+    ytd_sss: number;
+    ytd_philhealth: number;
+    ytd_pagibig: number;
+    ytd_tax: number;
     ytd_net: number;
 
-    // File Information
-    pdf_file_path: string | null;
-    pdf_file_size: number | null;
-    pdf_hash: string | null;
+    // File Information (stripped pdf_ prefix)
+    file_path: string | null;
+    file_size: number | null;
+    file_hash: string | null;
+    signature_hash: string | null; // digital signature
+    qr_code_data: string | null;   // QR code payload
 
-    // Distribution
-    distribution_method: 'email' | 'portal' | 'printed';
-    email_sent: boolean;
-    email_sent_at: string | null;
-    email_address: string | null;
-    downloaded_by_employee: boolean;
-    downloaded_at: string | null;
-    printed: boolean;
-    printed_at: string | null;
-    printed_by: string | null;
-
-    // Acknowledgment
-    acknowledged_by_employee: boolean;
-    acknowledged_at: string | null;
+    // Distribution Tracking
+    distribution_method: 'email' | 'portal' | 'print' | 'sms'; // changed 'printed' → 'print', added 'sms'
+    distributed_at: string | null; // when distributed
+    is_viewed: boolean;            // employee viewed via portal
+    viewed_at: string | null;
 
     // Generation Status
-    status: 'pending' | 'generated' | 'sent' | 'acknowledged' | 'failed';
+    status: 'draft' | 'generated' | 'distributed' | 'acknowledged';
     status_label: string;
     status_color: string;
-
-    generated_at: string;
-    generated_by: string | null;
-    generated_by_name: string | null;
 
     created_at: string;
     updated_at: string;
@@ -1474,17 +1478,18 @@ export interface PayslipsPageProps {
 
 /**
  * Payslips Summary Metrics
+ * Updated to match payslips.status enum in DB: draft, generated, distributed, acknowledged
  */
 export interface PayslipsSummary {
     total_payslips: number;
+    draft: number;
     generated: number;
-    pending: number;
-    sent: number;
+    distributed: number;   // was sent
     acknowledged: number;
-    failed: number;
     total_distribution_email: number;
     total_distribution_portal: number;
-    total_distribution_printed: number;
+    total_distribution_print: number;   // was total_distribution_printed
+    total_distribution_sms: number;     // new channel
 }
 
 /**
@@ -1494,8 +1499,8 @@ export interface PayslipsFilters {
     search: string;
     period_id: number | null;
     department_id: number | null;
-    status: string; // 'all' | 'pending' | 'generated' | 'sent' | 'acknowledged' | 'failed'
-    distribution_method: string; // 'all' | 'email' | 'portal' | 'printed'
+    status: string; // 'all' | 'draft' | 'generated' | 'distributed' | 'acknowledged'
+    distribution_method: string; // 'all' | 'email' | 'portal' | 'print' | 'sms'
     date_from: string | null;
     date_to: string | null;
 }
@@ -1507,7 +1512,7 @@ export interface PayslipGenerationRequest {
     period_id: number;
     employee_ids?: number[]; // If empty, generate for all employees
     regenerate?: boolean; // Force regenerate existing payslips
-    distribution_method: 'email' | 'portal' | 'printed';
+    distribution_method: 'email' | 'portal' | 'print' | 'sms';
 }
 
 /**
@@ -1531,7 +1536,7 @@ export interface PayslipGenerationResponse {
  */
 export interface PayslipDistributionRequest {
     payslip_ids: number[];
-    distribution_method: 'email' | 'portal' | 'printed';
+    distribution_method: 'email' | 'portal' | 'print' | 'sms';
     email_subject?: string;
     email_message?: string;
 }
@@ -1601,7 +1606,12 @@ export interface PaymentTrackingPageProps {
     summary: PaymentStatusSummary;
     payroll_periods: PayrollPeriod[];
     departments: Array<{ id: number; name: string }>;
-    payment_methods: string[];
+    payment_methods: Array<{
+        id: number;
+        method_type: 'bank' | 'cash' | 'ewallet';
+        display_name: string;
+        is_enabled: boolean;
+    }>;
     payment_statuses: string[];
     failed_payments: FailedPayment[];
 }
@@ -1645,13 +1655,13 @@ export interface PaymentTracking {
     formatted_net_pay: string;            // "₱25,000.00"
     
     // Payment Method and Status
-    payment_method: 'bank_transfer' | 'cash' | 'check';
+    payment_method: 'bank' | 'cash' | 'ewallet';
     payment_method_label: string;         // "Bank Transfer"
-    payment_method_icon: string;          // 'bank', 'cash', 'check'
+    payment_method_icon: 'bank' | 'cash' | 'ewallet';
     
-    payment_status: 'pending' | 'processing' | 'paid' | 'failed';
-    payment_status_label: string;         // "Pending", "Processing", "Paid", "Failed"
-    payment_status_color: string;         // 'yellow', 'blue', 'green', 'red'
+    payment_status: 'pending' | 'processing' | 'paid' | 'partially_paid' | 'failed' | 'cancelled' | 'unclaimed';
+    payment_status_label: string;         // "Pending", "Processing", "Paid", "Partially Paid", "Failed", "Cancelled", "Unclaimed"
+    payment_status_color: string;         // 'yellow', 'blue', 'green', 'orange', 'red', 'gray', 'red'
     
     // Bank Details (if applicable)
     bank_name?: string;                   // "BPI", "BDO"
@@ -1686,20 +1696,18 @@ export interface FailedPayment {
     net_pay: number;
     formatted_net_pay: string;
     
-    current_payment_method: 'bank_transfer' | 'cash' | 'check';
+    current_payment_method: 'bank' | 'cash' | 'ewallet';
     payment_method_label: string;
     
     failure_reason: string;               // "Insufficient balance", "Invalid account", etc.
-    failure_code: string;                 // Error code from bank
-    failure_timestamp: string;            // ISO datetime
+    failed_at: string;                    // ISO datetime (was failure_timestamp)
     
     retry_count: number;                  // Number of retry attempts
-    max_retries: number;                  // Maximum allowed retries
-    next_retry_date?: string;             // ISO date for next automatic retry
+    // Note: max_retries is a system constant (3), not per-record
     
     // Alternative Actions
     alternative_methods: Array<{
-        method: 'bank_transfer' | 'cash' | 'check';
+        method: 'bank' | 'cash' | 'ewallet';
         label: string;
         available: boolean;
     }>;
@@ -1720,8 +1728,15 @@ export interface CashPaymentPageProps {
     cash_employees: CashEmployee[];
     summary: CashPaymentSummary;
     payroll_periods: PayrollPeriod[];
-    distributions: CashDistribution[];
+    batches: CashDistributionBatch[];         // Renamed from distributions (batch-level, not per-employee)
     unclaimed_cash: UnclaimedCash[];
+    departments: Array<{ id: number; name: string }>; // Needed for filters
+    query_params: {
+        period_id: string | number;
+        department_id: string | number;
+        status: string;
+        search: string;
+    };
 }
 
 /**
@@ -1731,8 +1746,8 @@ export interface CashPaymentSummary {
     total_cash_employees: number;
     total_cash_amount: number;
     formatted_total_cash: string;
-    envelopes_printed: number;
-    envelopes_pending: number;
+    envelopes_prepared: number;       // was envelopes_printed
+    envelopes_distributed: number;    // was envelopes_pending (renamed conceptually)
     distributed_count: number;
     pending_distribution: number;
     unclaimed_count: number;
@@ -1741,6 +1756,9 @@ export interface CashPaymentSummary {
 
 /**
  * Employee eligible for cash payment
+ * Status (payment_status) is derived from payroll_payments.status.
+ * Note: Envelope printing/preparedness is tracked at batch level (CashDistributionBatch),
+ *       not per-employee. Use batch.envelopes_prepared, batch.envelopes_distributed for envelope state.
  */
 export interface CashEmployee {
     id: number;
@@ -1759,25 +1777,19 @@ export interface CashEmployee {
     payment_method: 'cash';
     payment_method_label: string;
     
-    // Envelope Status
-    envelope_status: 'pending' | 'printed' | 'prepared' | 'distributed' | 'unclaimed';
-    envelope_status_label: string;
-    envelope_status_color: 'gray' | 'yellow' | 'blue' | 'green' | 'red';
+    // Payment Status (consolidated from payroll_payments.status)
+    payment_status: 'pending' | 'processing' | 'paid' | 'failed' | 'unclaimed';
+    payment_status_label: string;
+    payment_status_color: 'gray' | 'blue' | 'orange' | 'green' | 'red';
     
-    envelope_printed_at?: string;
-    envelope_printed_by?: string;
+    // Cash Distribution & Accountability
+    distributed_at?: string;         // When cash was handed over (payroll_payments.paid_at)
+    distributed_by?: string;         // User name who distributed the cash
+    claimed_at?: string;             // When employee acknowledged receipt
+    claimed_by?: string;             // Can be tracked via payment_audit_logs
     
-    // Distribution Status
-    distribution_status: 'pending' | 'distributed' | 'unclaimed' | 'claimed';
-    distribution_status_label: string;
-    
-    distributed_at?: string;
-    distributed_by?: string;
-    claimed_at?: string;
-    claimed_by?: string;
-    
-    // Accountability
-    signature_capture_url?: string;  // Path to signature image
+    // Signature & Notes
+    signature_capture_url?: string;  // Employee signature on receipt (claimed_by_signature)
     distribution_notes?: string;
     contact_number?: string;
     email?: string;
@@ -1810,65 +1822,70 @@ export interface EnvelopeData {
 }
 
 /**
- * Cash Distribution Tracking Record
+ * Cash Distribution Batch (Batch-Level Distribution Records)
+ * Represents a batch of cash distributions during a single occurrence.
+ * This is distinct from CashEmployee which represents individual employee cash payments.
+ * All envelopes, countdowns, and distribution logistics are tracked at batch level.
  */
-export interface CashDistribution {
+export interface CashDistributionBatch {
     id: number;
-    cash_employee_id: number;
-    
-    distribution_date: string;
-    distribution_time: string;
-    
-    distributed_by: string;
-    distributed_by_employee_id: number;
-    
-    received_by?: string;                 // Employee or representative
-    recipient_contact_number?: string;
-    
-    signature_file_path?: string;
-    signature_captured_at?: string;
-    
-    amount: number;
-    formatted_amount: string;
-    
-    status: 'distributed' | 'unclaimed' | 'claimed' | 'returned';
+    payroll_period_id: number;
+    period_name: string;                     // joined from payroll_periods
+
+    batch_number: string;                    // e.g. "CDB-2025-10-001"
+    distribution_date: string;               // date only
+    distribution_time?: string;              // time of distribution
+    distribution_location: string | null;
+
+    total_cash_amount: number;
+    total_employees: number;
+    formatted_total_cash: string;
+
+    denomination_breakdown: Record<string, number> | null; // {"1000": 50, "500": 30, ...}
+
+    envelopes_prepared: number;
+    envelopes_distributed: number;
+    envelopes_unclaimed: number;
+    amount_distributed: number;
+    amount_unclaimed: number;
+
+    prepared_by: string | null;              // joined user name
+    counted_by: string | null;               // joined user name
+    witnessed_by: string | null;             // joined user name
+    distributed_by: string | null;           // joined user name
+    verification_at: string | null;
+
+    status: 'pending' | 'counting' | 'verified' | 'distributing' | 'completed' | 'partially_completed';
     status_label: string;
-    
-    notes: string;
-    
+    status_color: string;
+
+    notes: string | null;
     created_at: string;
     updated_at: string;
 }
 
 /**
  * Unclaimed Cash Tracking
+ * Records cash payments that remain unclaimed by employees.
+ * Removes computed fields (days_until_returned, contact_attempts, last_contact_attempt)
+ * that are not stored in the database; compute them in controller if needed from company policy.
  */
 export interface UnclaimedCash {
     id: number;
-    cash_employee_id: number;
+    payroll_payment_id: number;             // FK to payroll_payments
     employee_id: number;
     employee_number: string;
     employee_name: string;
-    
     period_name: string;
-    
     amount: number;
     formatted_amount: string;
-    
-    days_unclaimed: number;
-    days_until_returned: number;           // Days until money must be returned to company
-    
+    days_unclaimed: number;                 // computed: today - envelope_prepared_at
     envelope_prepared_at: string;
-    distribution_scheduled_for: string;
-    
-    contact_attempts: number;
-    last_contact_attempt: string;
-    
+    distribution_scheduled_for: string | null;
     status: 'pending_distribution' | 'pending_collection' | 'escalated' | 'returned';
     status_label: string;
     status_color: string;
-    
-    notes: string;
+    notes: string | null;
 }
 
 // ============================================================================

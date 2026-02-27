@@ -8,6 +8,7 @@ import type { CashEmployee, CashDistribution } from '@/types/payroll-pages';
 
 interface ReportData {
     period_id: string;
+    period_label: string;
     total_cash_employees: number;
     total_cash_amount: number;
     formatted_total: string;
@@ -41,32 +42,47 @@ export default function AccountabilityReport({
         window.print();
     };
 
-    const handleDownloadPDF = () => {
-        alert('PDF download would be implemented here');
-    };
-
     const distributedEmployees = employees.filter((e) => e.distribution_status === 'distributed');
     const unclaimedEmployees = employees.filter((e) => e.distribution_status === 'unclaimed');
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Accountability Report" />
-            <style>{`@media print { nav { display: none !important; } }`}</style>
+            <style>{`
+                @media print {
+                    aside,
+                    header,
+                    nav,
+                    [data-sidebar],
+                    .sidebar {
+                        display: none !important;
+                    }
+                    main,
+                    .main-content,
+                    [data-main] {
+                        width: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                }
+            `}</style>
             <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-6 print:p-2 print:gap-3 print:rounded-none">
                 {/* Header */}
                 <div className="flex items-center justify-between print:mb-2 print:hidden">
                     <div className="space-y-2">
                         <h1 className="text-3xl font-bold tracking-tight">Cash Payment Accountability Report</h1>
-                        <p className="text-muted-foreground">Period: {report.period_id}</p>
+                        <p className="text-muted-foreground">Period: {report.period_label}</p>
                     </div>
                     <div className="flex gap-2 print:hidden">
                         <Button variant="outline" size="sm" onClick={() => router.get('/payroll/payments/cash')}>
                             <ChevronLeft className="h-4 w-4 mr-2" />
                             Back
                         </Button>
-                        <Button size="sm" onClick={handleDownloadPDF} variant="outline">
-                            <Download className="h-4 w-4 mr-2" />
-                            PDF
+                        <Button size="sm" variant="outline" asChild>
+                            <a href={`/payroll/payments/cash/accountability-report/pdf?period_id=${report.period_id}`}>
+                                <Download className="h-4 w-4 mr-2" />
+                                Download PDF
+                            </a>
                         </Button>
                         <Button size="sm" onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700">
                             <Printer className="h-4 w-4 mr-2" />
@@ -78,7 +94,7 @@ export default function AccountabilityReport({
                 {/* Print Title */}
                 <div className="hidden print:block print:mb-2">
                     <h1 className="text-lg font-bold">Cash Payment Accountability Report</h1>
-                    <p className="text-sm text-gray-600">Period: {report.period_id}</p>
+                    <p className="text-sm text-gray-600">Period: {report.period_label}</p>
                 </div>
 
                 {/* Summary Cards */}

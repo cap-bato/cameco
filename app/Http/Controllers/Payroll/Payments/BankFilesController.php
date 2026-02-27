@@ -5,18 +5,21 @@ namespace App\Http\Controllers\Payroll\Payments;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Http\Controllers\Controller;
+use App\Models\BankFileBatch;
+use App\Models\PayrollPeriod;
+use App\Models\PaymentMethod;
 
 /**
  * BankFilesController
  * Manages bank payroll file generation, validation, and upload tracking
  * 
- * Supported Banks:
- * - BPI (Bank of the Philippine Islands) - CSV, Fixed-width
+ * PHASE 1 - Supported Banks:
  * - BDO (Banco de Oro) - CSV, Excel
- * - Metrobank - CSV, Fixed-width
- * - PNB (Philippine National Bank) - CSV, Excel
- * - RCBC (Rizal Commercial Banking Corporation) - CSV, Fixed-width
- * - Unionbank - CSV, Excel
+ * - Metrobank (Metropolitan Bank and Trust Company) - CSV, Fixed-width
+ * 
+ * Note: Only BDO and Metrobank are seeded in the payment_methods table for Phase 1.
+ * Additional banks (BPI, PNB, RCBC, Unionbank) will be added in Phase 4+ when those
+ * banking integrations go live.
  * 
  * File Formats:
  * - CSV: Comma-separated values
@@ -28,24 +31,39 @@ class BankFilesController extends Controller
 {
     public function index()
     {
-        $bankFiles = $this->getMockBankFiles();
-        $periods = $this->getMockPeriods();
-        $bankList = $this->getMockBankList();
-        $employeesCount = 25;
+        $bankFiles = BankFileBatch::with(['payrollPeriod', 'generatedBy', 'submittedBy'])
+            ->latest()
+            ->get();
 
-        return Inertia::render('Payroll/Payments/BankFiles/Index', [
-            'bankFiles' => $bankFiles,
-            'periods' => $periods,
-            'bankList' => $bankList,
-            'employeesCount' => $employeesCount,
-        ]);
+        $periods = PayrollPeriod::select('id', 'period_name', 'period_start', 'period_end', 'payment_date')
+            ->orderByDesc('payment_date')
+            ->get();
+
+        // Get enabled bank-type PaymentMethods (Phase 1: BDO and Metrobank only)
+        $bankList = PaymentMethod::enabled()
+            ->where('method_type', 'bank')
+            ->ordered()
+            ->get()
+            ->map(fn($m) => [
+                'id' => $m->bank_code ?? $m->display_name,
+                'name' => $m->display_name,
+                'code' => $m->bank_code,
+                'supported_formats' => ['csv', 'txt'],
+            ]);
+
+        // Count employees with bank payment preference (TODO: filter by current period)
+        $employeesCount = 0;
+
+        return Inertia::render('Payroll/Payments/BankFiles/Index', compact(
+            'bankFiles', 'periods', 'bankList', 'employeesCount'
+        ));
     }
 
     public function generateFile(Request $request)
     {
         $validated = $request->validate([
             'period_id' => 'required|integer',
-            'bank_name' => 'required|string|in:BPI,BDO,Metrobank,PNB,RCBC,Unionbank',
+            'bank_name' => 'required|string|in:BDO,Metrobank',
             'file_format' => 'required|string|in:csv,txt,excel,fixed_width',
         ]);
 
@@ -326,13 +344,9 @@ class BankFilesController extends Controller
 
     private function getMockBankList()
     {
+        // Phase 1: Only BDO and Metrobank are seeded in payment_methods table
+        // Additional banks (BPI, PNB, RCBC, Unionbank) will be added in Phase 4+
         return [
-            [
-                'id' => 'BPI',
-                'name' => 'Bank of the Philippine Islands',
-                'code' => '002',
-                'supported_formats' => ['csv', 'txt'],
-            ],
             [
                 'id' => 'BDO',
                 'name' => 'Banco de Oro',
@@ -344,24 +358,6 @@ class BankFilesController extends Controller
                 'name' => 'Metrobank',
                 'code' => '010',
                 'supported_formats' => ['csv', 'txt'],
-            ],
-            [
-                'id' => 'PNB',
-                'name' => 'Philippine National Bank',
-                'code' => '003',
-                'supported_formats' => ['csv', 'excel'],
-            ],
-            [
-                'id' => 'RCBC',
-                'name' => 'Rizal Commercial Banking Corporation',
-                'code' => '020',
-                'supported_formats' => ['csv', 'txt'],
-            ],
-            [
-                'id' => 'Unionbank',
-                'name' => 'Unionbank',
-                'code' => '007',
-                'supported_formats' => ['csv', 'excel'],
             ],
         ];
     }

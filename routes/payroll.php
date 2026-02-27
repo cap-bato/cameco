@@ -180,6 +180,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::post('/payments/cash/mark-claimed', [CashPaymentController::class, 'markClaimed'])->name('payments.cash.mark-claimed');
         Route::post('/payments/cash/record-contact-attempt', [CashPaymentController::class, 'recordContactAttempt'])->name('payments.cash.record-contact-attempt');
         Route::get('/payments/cash/accountability-report', [CashPaymentController::class, 'generateAccountabilityReport'])->name('payments.cash.accountability-report');
+        Route::get('/payments/cash/accountability-report/pdf', [CashPaymentController::class, 'downloadAccountabilityReportPdf'])->name('payments.cash.accountability-report.pdf');
 
         // Payroll Register Reports - Phase 5.1
         Route::get('/reports/register', [PayrollRegisterController::class, 'index'])->name('reports.register.index');

@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Payroll\Payments;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Http\Controllers\Controller;
+use App\Models\Payslip;
+use App\Models\PayrollPeriod;
+use App\Models\Department;
 
 /**
  * PayslipsController
@@ -22,29 +25,51 @@ class PayslipsController extends Controller
 {
     public function index(Request $request)
     {
-        $filters = [
-            'search' => $request->input('search', ''),
-            'period_id' => $request->input('period_id', null),
-            'department_id' => $request->input('department_id', null),
-            'status' => $request->input('status', 'all'),
-            'distribution_method' => $request->input('distribution_method', 'all'),
-            'date_from' => $request->input('date_from', null),
-            'date_to' => $request->input('date_to', null),
-        ];
+        $payslips = Payslip::with(['employee.profile', 'employee.department', 'payrollPayment.payrollPeriod', 'generatedBy'])
+            ->when($request->search, fn($q, $s) => $q->whereHas('employee', fn($eq) =>
+                $eq->where('full_name', 'ilike', "%{$s}%")
+                    ->orWhere('employee_number', 'ilike', "%{$s}%")
+            ))
+            ->when($request->period_id, fn($q, $id) => $q->whereHas('payrollPayment', fn($pq) =>
+                $pq->where('payroll_period_id', $id)
+            ))
+            ->when($request->department_id, fn($q, $id) => $q->whereHas('employee', fn($eq) =>
+                $eq->where('department_id', $id)
+            ))
+            ->when($request->status && $request->status !== 'all', fn($q, $s) => $q->where('status', $s))
+            ->when($request->distribution_method && $request->distribution_method !== 'all', fn($q, $m) =>
+                $q->where('distribution_method', $m)
+            )
+            ->when($request->date_from, fn($q, $d) => $q->whereDate('created_at', '>=', $d))
+            ->when($request->date_to, fn($q, $d) => $q->whereDate('created_at', '<=', $d))
+            ->latest()
+            ->paginate(50)
+            ->through(fn($p) => $this->formatPayslip($p));
 
-        $payslips = $this->getMockPayslips($filters);
-        $summary = $this->getMockSummary($payslips);
-        $periods = $this->getMockPeriods();
-        $departments = $this->getMockDepartments();
-        $distributionMethods = $this->getMockDistributionMethods();
+        $summary = [
+            'total_payslips' => Payslip::count(),
+            'draft' => Payslip::where('status', 'draft')->count(),
+            'generated' => Payslip::where('status', 'generated')->count(),
+            'distributed' => Payslip::where('status', 'distributed')->count(),
+            'acknowledged' => Payslip::where('status', 'acknowledged')->count(),
+            'total_distribution_email' => Payslip::where('distribution_method', 'email')->count(),
+            'total_distribution_portal' => Payslip::where('distribution_method', 'portal')->count(),
+            'total_distribution_print' => Payslip::where('distribution_method', 'print')->count(),
+            'total_distribution_sms' => Payslip::where('distribution_method', 'sms')->count(),
+        ];
 
         return Inertia::render('Payroll/Payments/Payslips/Index', [
             'payslips' => $payslips,
             'summary' => $summary,
-            'filters' => $filters,
-            'periods' => $periods,
-            'departments' => $departments,
-            'distributionMethods' => $distributionMethods,
+            'filters' => $request->only(['search', 'period_id', 'department_id', 'status', 'distribution_method', 'date_from', 'date_to']),
+            'periods' => PayrollPeriod::select('id', 'period_name', 'period_start', 'period_end', 'payment_date')->orderByDesc('payment_date')->get(),
+            'departments' => Department::select('id', 'name')->orderBy('name')->get(),
+            'distributionMethods' => [
+                ['id' => 'email', 'name' => 'Email'],
+                ['id' => 'portal', 'name' => 'Self-Service Portal'],
+                ['id' => 'print', 'name' => 'Printed'],
+                ['id' => 'sms', 'name' => 'SMS'],
+            ],
         ]);
     }
 
@@ -55,7 +80,7 @@ class PayslipsController extends Controller
             'employee_ids' => 'nullable|array',
             'employee_ids.*' => 'integer',
             'regenerate' => 'nullable|boolean',
-            'distribution_method' => 'required|in:email,portal,printed',
+            'distribution_method' => 'required|in:email,portal,print,sms',
         ]);
 
         try {
@@ -75,7 +100,7 @@ class PayslipsController extends Controller
         $validated = $request->validate([
             'payslip_ids' => 'required|array',
             'payslip_ids.*' => 'integer',
-            'distribution_method' => 'required|in:email,portal,printed',
+            'distribution_method' => 'required|in:email,portal,print,sms',
             'email_subject' => 'nullable|string',
             'email_message' => 'nullable|string',
         ]);
@@ -160,7 +185,55 @@ class PayslipsController extends Controller
     }
 
     // ===================================================================
-    // MOCK DATA GENERATORS
+    // HELPER METHODS
+    // ===================================================================
+
+    /**
+     * Format a Payslip record for the frontend
+     */
+    private function formatPayslip(Payslip $payslip)
+    {
+        $employee = $payslip->employee;
+        $paymentPeriod = $payslip->payrollPayment?->payrollPeriod;
+
+        return [
+            'id' => $payslip->id,
+            'payslip_number' => $payslip->payslip_number,
+            'payroll_payment_id' => $payslip->payroll_payment_id,
+            'employee_id' => $employee->id,
+            'payroll_period_id' => $payslip->payroll_payment_id ? $payslip->payrollPayment->payroll_period_id : null,
+            'employee_number' => $employee->employee_number,
+            'employee_name' => $employee->full_name,
+            'position' => $employee->position?->name ?? 'Unknown',
+            'department' => $employee->department?->name ?? 'Unknown',
+            'department_id' => $employee->department_id,
+            'period_name' => $paymentPeriod?->name ?? 'N/A',
+            'gross_pay' => $payslip->gross_amount,
+            'formatted_gross_pay' => '₱' . number_format((float) $payslip->gross_amount, 2),
+            'total_deductions' => $payslip->total_deductions,
+            'formatted_total_deductions' => '₱' . number_format((float) $payslip->total_deductions, 2),
+            'net_pay' => $payslip->net_amount,
+            'formatted_net_pay' => '₱' . number_format((float) $payslip->net_amount, 2),
+            'ytd_gross' => 0, // TODO: calculate from database
+            'ytd_deductions' => 0, // TODO: calculate from database
+            'ytd_net' => 0, // TODO: calculate from database
+            'status' => $payslip->status,
+            'status_label' => ucfirst(str_replace('_', ' ', $payslip->status)),
+            'distribution_method' => $payslip->distribution_method,
+            'distribution_method_label' => ucfirst($payslip->distribution_method === 'print' ? 'Printed' : str_replace('_', ' ', $payslip->distribution_method)),
+            'file_path' => $payslip->file_path,
+            'file_size' => $payslip->file_size,
+            'file_hash' => $payslip->file_hash,
+            'is_viewed' => $payslip->is_viewed,
+            'viewed_at' => $payslip->viewed_at,
+            'distributed_at' => $payslip->distributed_at,
+            'created_at' => $payslip->created_at->toDateTimeString(),
+            'updated_at' => $payslip->updated_at->toDateTimeString(),
+        ];
+    }
+
+    // ===================================================================
+    // MOCK DATA GENERATORS (Legacy - to be removed in Phase 4)
     // ===================================================================
 
     private function getMockPayslips(array $filters): array
