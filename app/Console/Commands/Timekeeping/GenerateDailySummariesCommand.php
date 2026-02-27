@@ -50,7 +50,7 @@ class GenerateDailySummariesCommand extends Command
             $summaryService = new AttendanceSummaryService();
             
             // Get all active employees
-            $employees = Employee::where('employment_status', 'active')->get();
+            $employees = Employee::where('status', 'active')->get();
             $this->info("Processing {$employees->count()} active employees...");
 
             $successCount = 0;

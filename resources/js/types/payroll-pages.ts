@@ -1456,15 +1456,23 @@ export interface Payslip {
  * Payslips Page Props
  */
 export interface PayslipsPageProps {
-    payslips: Payslip[];
+    payslips: {
+        data: Payslip[];
+        current_page: number;
+        last_page: number;
+        per_page: number;
+        total: number;
+        from: number;
+        to: number;
+    };
     summary: PayslipsSummary;
     filters: PayslipsFilters;
     periods: Array<{
         id: number;
-        name: string;
-        start_date: string;
-        end_date: string;
-        pay_date: string;
+        period_name: string;
+        period_start: string;
+        period_end: string;
+        payment_date: string;
     }>;
     departments: Array<{
         id: number;

@@ -25,10 +25,13 @@ class PayslipsController extends Controller
 {
     public function index(Request $request)
     {
-        $payslips = Payslip::with(['employee.profile', 'employee.department', 'payrollPayment.payrollPeriod', 'generatedBy'])
+        $payslips = Payslip::with(['employee.profile', 'employee.department', 'employee.position', 'payrollPayment.payrollPeriod', 'generatedBy'])
             ->when($request->search, fn($q, $s) => $q->whereHas('employee', fn($eq) =>
-                $eq->where('full_name', 'ilike', "%{$s}%")
-                    ->orWhere('employee_number', 'ilike', "%{$s}%")
+                $eq->where('employee_number', 'ilike', "%{$s}%")
+                    ->orWhereHas('profile', fn($pq) =>
+                        $pq->where('first_name', 'ilike', "%{$s}%")
+                           ->orWhere('last_name', 'ilike', "%{$s}%")
+                    )
             ))
             ->when($request->period_id, fn($q, $id) => $q->whereHas('payrollPayment', fn($pq) =>
                 $pq->where('payroll_period_id', $id)
@@ -200,33 +203,36 @@ class PayslipsController extends Controller
             'id' => $payslip->id,
             'payslip_number' => $payslip->payslip_number,
             'payroll_payment_id' => $payslip->payroll_payment_id,
-            'employee_id' => $employee->id,
+            'employee_id' => $employee?->id,
             'payroll_period_id' => $payslip->payroll_payment_id ? $payslip->payrollPayment->payroll_period_id : null,
-            'employee_number' => $employee->employee_number,
-            'employee_name' => $employee->full_name,
-            'position' => $employee->position?->name ?? 'Unknown',
-            'department' => $employee->department?->name ?? 'Unknown',
-            'department_id' => $employee->department_id,
-            'period_name' => $paymentPeriod?->name ?? 'N/A',
-            'gross_pay' => $payslip->gross_amount,
-            'formatted_gross_pay' => '₱' . number_format((float) $payslip->gross_amount, 2),
-            'total_deductions' => $payslip->total_deductions,
+            'employee_number' => $employee?->employee_number ?? $payslip->employee_number,
+            'employee_name' => $employee ? $employee->full_name : $payslip->employee_name,
+            'position' => $employee?->position?->title ?? $payslip->position ?? 'Unknown',
+            'department' => $employee?->department?->name ?? $payslip->department ?? 'Unknown',
+            'department_id' => $employee?->department_id,
+            'period_name' => $paymentPeriod?->period_name ?? 'N/A',
+            'period_start' => $payslip->period_start->format('Y-m-d'),
+            'period_end' => $payslip->period_end->format('Y-m-d'),
+            'pay_date' => $payslip->payment_date->format('Y-m-d'),
+            'gross_pay' => (float) $payslip->total_earnings,
+            'formatted_gross_pay' => '₱' . number_format((float) $payslip->total_earnings, 2),
+            'total_deductions' => (float) $payslip->total_deductions,
             'formatted_total_deductions' => '₱' . number_format((float) $payslip->total_deductions, 2),
-            'net_pay' => $payslip->net_amount,
-            'formatted_net_pay' => '₱' . number_format((float) $payslip->net_amount, 2),
-            'ytd_gross' => 0, // TODO: calculate from database
-            'ytd_deductions' => 0, // TODO: calculate from database
-            'ytd_net' => 0, // TODO: calculate from database
+            'net_pay' => (float) $payslip->net_pay,
+            'formatted_net_pay' => '₱' . number_format((float) $payslip->net_pay, 2),
+            'ytd_gross' => (float) ($payslip->ytd_gross ?? 0),
+            'ytd_deductions' => (float) (($payslip->ytd_tax ?? 0) + ($payslip->ytd_sss ?? 0) + ($payslip->ytd_philhealth ?? 0) + ($payslip->ytd_pagibig ?? 0)),
+            'ytd_net' => (float) ($payslip->ytd_net ?? 0),
             'status' => $payslip->status,
             'status_label' => ucfirst(str_replace('_', ' ', $payslip->status)),
             'distribution_method' => $payslip->distribution_method,
-            'distribution_method_label' => ucfirst($payslip->distribution_method === 'print' ? 'Printed' : str_replace('_', ' ', $payslip->distribution_method)),
+            'distribution_method_label' => ucfirst($payslip->distribution_method === 'print' ? 'Printed' : str_replace('_', ' ', $payslip->distribution_method ?? 'N/A')),
             'file_path' => $payslip->file_path,
             'file_size' => $payslip->file_size,
             'file_hash' => $payslip->file_hash,
-            'is_viewed' => $payslip->is_viewed,
-            'viewed_at' => $payslip->viewed_at,
-            'distributed_at' => $payslip->distributed_at,
+            'is_viewed' => (bool) $payslip->is_viewed,
+            'viewed_at' => $payslip->viewed_at?->toDateTimeString(),
+            'distributed_at' => $payslip->distributed_at?->toDateTimeString(),
             'created_at' => $payslip->created_at->toDateTimeString(),
             'updated_at' => $payslip->updated_at->toDateTimeString(),
         ];

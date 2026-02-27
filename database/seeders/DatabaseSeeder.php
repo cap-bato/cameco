@@ -182,6 +182,31 @@ class DatabaseSeeder extends Seeder
             $this->call(\Database\Seeders\DocumentTemplateSeeder::class);
         }
 
+        // Seed Payroll Payment Methods
+        if (class_exists(\Database\Seeders\PaymentMethodsSeeder::class)) {
+            $this->call(\Database\Seeders\PaymentMethodsSeeder::class);
+        }
+
+        // Seed Payroll Periods (must run after employees)
+        if (class_exists(\Database\Seeders\PayrollPeriodsSeeder::class)) {
+            $this->call(\Database\Seeders\PayrollPeriodsSeeder::class);
+        }
+
+        // Seed Payroll Payments (must run after periods, employees, and payment methods)
+        if (class_exists(\Database\Seeders\PayrollPaymentsSeeder::class)) {
+            $this->call(\Database\Seeders\PayrollPaymentsSeeder::class);
+        }
+
+        // Seed Cash Distribution Batches (must run after payments)
+        if (class_exists(\Database\Seeders\CashDistributionBatchSeeder::class)) {
+            $this->call(\Database\Seeders\CashDistributionBatchSeeder::class);
+        }
+
+        // Seed Payslips (must run after payments)
+        if (class_exists(\Database\Seeders\PayslipsSeeder::class)) {
+            $this->call(\Database\Seeders\PayslipsSeeder::class);
+        }
+
     }
 
 

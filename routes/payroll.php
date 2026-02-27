@@ -156,15 +156,15 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::post('/bank-files/{id}/regenerate', [BankFilesController::class, 'regenerateFile'])->name('bank-files.regenerate');
 
         // Payslips - Phase 4.2
-        Route::get('/payslips', [PayslipsController::class, 'index'])->name('payslips.index');
-        Route::post('/payslips/generate', [PayslipsController::class, 'generate'])->name('payslips.generate');
-        Route::post('/payslips/distribute', [PayslipsController::class, 'distribute'])->name('payslips.distribute');
-        Route::get('/payslips/{id}/preview', [PayslipsController::class, 'preview'])->name('payslips.preview');
-        Route::get('/payslips/{id}/download', [PayslipsController::class, 'download'])->name('payslips.download');
-        Route::post('/payslips/{id}/email', [PayslipsController::class, 'email'])->name('payslips.email');
-        Route::get('/payslips/{id}/print', [PayslipsController::class, 'print'])->name('payslips.print');
-        Route::post('/payslips/bulk-download', [PayslipsController::class, 'bulkDownload'])->name('payslips.bulk-download');
-        Route::post('/payslips/bulk-email', [PayslipsController::class, 'bulkEmail'])->name('payslips.bulk-email');
+        Route::get('/payments/payslips', [PayslipsController::class, 'index'])->name('payslips.index');
+        Route::post('/payments/payslips/generate', [PayslipsController::class, 'generate'])->name('payslips.generate');
+        Route::post('/payments/payslips/distribute', [PayslipsController::class, 'distribute'])->name('payslips.distribute');
+        Route::get('/payments/payslips/{id}/preview', [PayslipsController::class, 'preview'])->name('payslips.preview');
+        Route::get('/payments/payslips/{id}/download', [PayslipsController::class, 'download'])->name('payslips.download');
+        Route::post('/payments/payslips/{id}/email', [PayslipsController::class, 'email'])->name('payslips.email');
+        Route::get('/payments/payslips/{id}/print', [PayslipsController::class, 'print'])->name('payslips.print');
+        Route::post('/payments/payslips/bulk-download', [PayslipsController::class, 'bulkDownload'])->name('payslips.bulk-download');
+        Route::post('/payments/payslips/bulk-email', [PayslipsController::class, 'bulkEmail'])->name('payslips.bulk-email');
 
         // Payment Tracking - Phase 4.3
         Route::get('/payments/tracking', [PaymentTrackingController::class, 'index'])->name('payments.tracking.index');
@@ -175,12 +175,13 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
 
         // Cash Payments - Phase 4.4
         Route::get('/payments/cash', [CashPaymentController::class, 'index'])->name('payments.cash.index');
-        Route::post('/payments/cash/generate-envelopes', [CashPaymentController::class, 'generateEnvelopes'])->name('payments.cash.generate-envelopes');
+        Route::match(['get', 'post'], '/payments/cash/generate-envelopes', [CashPaymentController::class, 'generateEnvelopes'])->name('payments.cash.generate-envelopes');
         Route::post('/payments/cash/record-distribution', [CashPaymentController::class, 'recordDistribution'])->name('payments.cash.record-distribution');
         Route::post('/payments/cash/mark-claimed', [CashPaymentController::class, 'markClaimed'])->name('payments.cash.mark-claimed');
         Route::post('/payments/cash/record-contact-attempt', [CashPaymentController::class, 'recordContactAttempt'])->name('payments.cash.record-contact-attempt');
         Route::get('/payments/cash/accountability-report', [CashPaymentController::class, 'generateAccountabilityReport'])->name('payments.cash.accountability-report');
         Route::get('/payments/cash/accountability-report/pdf', [CashPaymentController::class, 'downloadAccountabilityReportPdf'])->name('payments.cash.accountability-report.pdf');
+        Route::get('/payments/cash/generate-envelopes/pdf', [CashPaymentController::class, 'downloadEnvelopesPdf'])->name('payments.cash.envelopes.pdf');
 
         // Payroll Register Reports - Phase 5.1
         Route::get('/reports/register', [PayrollRegisterController::class, 'index'])->name('reports.register.index');

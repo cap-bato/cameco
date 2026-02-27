@@ -21,10 +21,10 @@ interface PayslipGeneratorProps {
     onGenerate: (data: PayslipGenerationRequest) => void;
     periods: Array<{
         id: number;
-        name: string;
-        start_date: string;
-        end_date: string;
-        pay_date: string;
+        period_name: string;
+        period_start: string;
+        period_end: string;
+        payment_date: string;
     }>;
     employees?: Array<{
         id: number;
@@ -113,15 +113,15 @@ export function PayslipGenerator({
                             <SelectContent>
                                 {periods.map((period) => (
                                     <SelectItem key={period.id} value={period.id.toString()}>
-                                        {period.name}
+                                        {period.period_name}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                         {selectedPeriod && (
                             <p className="text-xs text-gray-600">
-                                Period: {selectedPeriod.start_date} to {selectedPeriod.end_date} • Pay Date:{' '}
-                                {selectedPeriod.pay_date}
+                                Period: {selectedPeriod.period_start} to {selectedPeriod.period_end} • Pay Date:{' '}
+                                {selectedPeriod.payment_date}
                             </p>
                         )}
                     </div>

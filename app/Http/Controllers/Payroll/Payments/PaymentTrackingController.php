@@ -189,12 +189,12 @@ class PaymentTrackingController extends Controller
 
         return [
             'id' => $payment->id,
-            'employee_id' => $employee->id,
-            'employee_number' => $employee->employee_number,
-            'employee_name' => $employee->full_name,
-            'department' => $employee->department?->name ?? 'Unknown',
-            'department_id' => $employee->department_id,
-            'position' => $employee->position?->name ?? 'Unknown',
+            'employee_id' => $employee?->id,
+            'employee_number' => $employee?->employee_number ?? 'UNKNOWN',
+            'employee_name' => $employee?->full_name ?? 'Unknown Employee',
+            'department' => $employee?->department?->name ?? 'Unknown',
+            'department_id' => $employee?->department_id,
+            'position' => $employee?->position?->title ?? 'Unknown',
             'payroll_period_id' => $payment->payroll_period_id,
             'period_name' => $period?->period_name ?? 'N/A',
             'net_pay' => (float) $payment->net_pay,
@@ -260,11 +260,11 @@ class PaymentTrackingController extends Controller
         $unclaimedCount = $allPayments->where('status', 'unclaimed')->count();
 
         // Calculate totals for all payments
-        $totalAmount = $allPayments->sum('net_amount');
-        $paidAmount = $allPayments->where('status', 'paid')->sum('net_amount');
-        $pendingAmount = $allPayments->whereIn('status', ['pending', 'processing', 'unclaimed'])->sum('net_amount');
-        $partiallyPaidAmount = $allPayments->where('status', 'partially_paid')->sum('net_amount');
-        $failedAmount = $allPayments->where('status', 'failed')->sum('net_amount');
+        $totalAmount = $allPayments->sum('net_pay');
+        $paidAmount = $allPayments->where('status', 'paid')->sum('net_pay');
+        $pendingAmount = $allPayments->whereIn('status', ['pending', 'processing', 'unclaimed'])->sum('net_pay');
+        $partiallyPaidAmount = $allPayments->where('status', 'partially_paid')->sum('net_pay');
+        $failedAmount = $allPayments->where('status', 'failed')->sum('net_pay');
 
         $totalEmployees = $allPayments->count();
 

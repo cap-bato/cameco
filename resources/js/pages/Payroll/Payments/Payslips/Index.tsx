@@ -59,44 +59,31 @@ export default function PayslipsIndex({
     const isSuccessNotification = !!flash?.success;
     const notificationMessage = (flash?.success || flash?.error || '') as string;
 
-    // Debounced search timer
-    const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
-
     // Apply filters reactively when any filter changes
     useEffect(() => {
-        // Clear previous timer if any
-        if (searchTimer) {
-            clearTimeout(searchTimer);
-        }
-
-        // Set new timer for debounced search (only for search field)
+        // Debounce for search field
         const timer = setTimeout(() => {
-            applyFilters();
-        }, 500); // 500ms debounce for search
-
-        setSearchTimer(timer);
+            router.get(
+                '/payroll/payments/payslips',
+                {
+                    search: search || undefined,
+                    period_id: periodId !== 'all' ? periodId : undefined,
+                    department_id: departmentId !== 'all' ? departmentId : undefined,
+                    status: status !== 'all' ? status : undefined,
+                    distribution_method: distributionMethod !== 'all' ? distributionMethod : undefined,
+                },
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                }
+            );
+        }, 500); // 500ms debounce
 
         return () => {
-            if (timer) clearTimeout(timer);
+            clearTimeout(timer);
         };
     }, [search, periodId, departmentId, status, distributionMethod]);
 
-    const applyFilters = () => {
-        router.get(
-            '/payroll/payments/payslips',
-            {
-                search: search || undefined,
-                period_id: periodId !== 'all' ? periodId : undefined,
-                department_id: departmentId !== 'all' ? departmentId : undefined,
-                status: status !== 'all' ? status : undefined,
-                distribution_method: distributionMethod !== 'all' ? distributionMethod : undefined,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-            }
-        );
-    };
 
     const handleClearFilters = () => {
         setSearch('');
@@ -222,10 +209,10 @@ export default function PayslipsIndex({
 
                     <Card>
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-600">Sent</CardTitle>
+                            <CardTitle className="text-sm font-medium text-gray-600">Distributed</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-3xl font-bold text-green-600">{summary.sent}</p>
+                            <p className="text-3xl font-bold text-green-600">{summary.distributed}</p>
                             <p className="mt-1 text-xs text-gray-600">
                                 {summary.acknowledged} acknowledged
                             </p>
@@ -234,11 +221,11 @@ export default function PayslipsIndex({
 
                     <Card>
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-600">Pending</CardTitle>
+                            <CardTitle className="text-sm font-medium text-gray-600">Generated</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-3xl font-bold text-orange-600">{summary.pending}</p>
-                            <p className="mt-1 text-xs text-gray-600">Awaiting distribution</p>
+                            <p className="text-3xl font-bold text-orange-600">{summary.generated}</p>
+                            <p className="mt-1 text-xs text-gray-600">Ready for distribution</p>
                         </CardContent>
                     </Card>
 
@@ -258,7 +245,7 @@ export default function PayslipsIndex({
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-gray-600">Printed:</span>
-                                    <span className="font-medium">{summary.total_distribution_printed}</span>
+                                    <span className="font-medium">{summary.total_distribution_print}</span>
                                 </div>
                             </div>
                         </CardContent>
@@ -292,7 +279,7 @@ export default function PayslipsIndex({
                                         <SelectItem value="all">All Periods</SelectItem>
                                         {periods.map((period) => (
                                             <SelectItem key={period.id} value={period.id.toString()}>
-                                                {period.name}
+                                                {period.period_name}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -324,11 +311,10 @@ export default function PayslipsIndex({
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all">All Status</SelectItem>
-                                        <SelectItem value="pending">Pending</SelectItem>
+                                        <SelectItem value="draft">Draft</SelectItem>
                                         <SelectItem value="generated">Generated</SelectItem>
-                                        <SelectItem value="sent">Sent</SelectItem>
+                                        <SelectItem value="distributed">Distributed</SelectItem>
                                         <SelectItem value="acknowledged">Acknowledged</SelectItem>
-                                        <SelectItem value="failed">Failed</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -390,7 +376,7 @@ export default function PayslipsIndex({
 
                 {/* Payslips Table */}
                 <PayslipsList
-                    payslips={payslips}
+                    payslips={payslips.data}
                     selectedPayslips={selectedPayslips}
                     onSelectionChange={setSelectedPayslips}
                     onDownload={handleDownload}

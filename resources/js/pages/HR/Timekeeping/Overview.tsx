@@ -52,6 +52,24 @@ interface LedgerHealthStatus {
     alerts: Array<{ severity: string; message: string; timestamp: string }>;
 }
 
+interface Violation {
+    id: number;
+    employee: string;
+    type: string;
+    time: string;
+    severity: 'low' | 'medium' | 'high';
+    corrected_at: string;
+}
+
+interface DailyTrend {
+    date: string;
+    label: string;
+    present: number;
+    late: number;
+    absent: number;
+    attendance_rate: number;
+}
+
 export default function TimekeepingOverview() {
     const page = usePage();
     const analytics = (page.props as { analytics?: Analytics }).analytics || {
@@ -62,6 +80,19 @@ export default function TimekeepingOverview() {
     
     // Get ledgerHealth from Inertia props (passed from controller)
     const ledgerHealth = (page.props as { ledgerHealth?: LedgerHealthStatus }).ledgerHealth || null;
+    
+    // Get recentViolations from Inertia props (passed from controller)
+    const recentViolations = (page.props as { recentViolations?: Violation[] }).recentViolations || [];
+    
+    // Get dailyTrends from Inertia props (passed from controller)
+    const dailyTrends = (page.props as { dailyTrends?: DailyTrend[] }).dailyTrends || [];
+    
+    // Calculate totals for each day and format day names
+    const trendsWithTotals = dailyTrends.map(trend => ({
+        ...trend,
+        total: trend.present + trend.late + trend.absent,
+        day: new Date(trend.date).toLocaleDateString('en-US', { weekday: 'long' })
+    }));
 
     // Simple status mapping function
     const getStatusIcon = (status: string) => {
@@ -374,30 +405,30 @@ export default function TimekeepingOverview() {
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-3">
-                                    {[
-                                        { id: 1, employee: 'John Doe', type: 'Late Arrival', time: '9:35 AM', severity: 'low' },
-                                        { id: 2, employee: 'Jane Smith', type: 'Early Departure', time: '4:15 PM', severity: 'medium' },
-                                        { id: 3, employee: 'Mike Johnson', type: 'Missed Punch', time: '12:00 PM', severity: 'high' },
-                                        { id: 4, employee: 'Sarah Williams', type: 'Extended Break', time: '2:45 PM', severity: 'low' },
-                                        { id: 5, employee: 'Tom Brown', type: 'Unauthorized OT', time: '6:30 PM', severity: 'medium' },
-                                    ].map((violation) => (
-                                        <div key={violation.id} className="flex items-center justify-between p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors">
-                                            <div>
-                                                <div className="font-medium text-sm">{violation.employee}</div>
-                                                <div className="text-xs text-muted-foreground">{violation.type} • {violation.time}</div>
+                                    {recentViolations.length > 0 ? (
+                                        recentViolations.map((violation) => (
+                                            <div key={violation.id} className="flex items-center justify-between p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors">
+                                                <div>
+                                                    <div className="font-medium text-sm">{violation.employee}</div>
+                                                    <div className="text-xs text-muted-foreground">{violation.type} • {violation.time}</div>
+                                                </div>
+                                                <Badge 
+                                                    variant={
+                                                        violation.severity === 'high' ? 'destructive' :
+                                                        violation.severity === 'medium' ? 'default' :
+                                                        'secondary'
+                                                    }
+                                                    className="capitalize"
+                                                >
+                                                    {violation.severity}
+                                                </Badge>
                                             </div>
-                                            <Badge 
-                                                variant={
-                                                    violation.severity === 'high' ? 'destructive' :
-                                                    violation.severity === 'medium' ? 'default' :
-                                                    'secondary'
-                                                }
-                                                className="capitalize"
-                                            >
-                                                {violation.severity}
-                                            </Badge>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-6 text-muted-foreground">
+                                            No recent violations
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
@@ -410,45 +441,43 @@ export default function TimekeepingOverview() {
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-3">
-                                    {[
-                                        { day: 'Monday', present: 95, late: 8, absent: 2, total: 105 },
-                                        { day: 'Tuesday', present: 98, late: 5, absent: 2, total: 105 },
-                                        { day: 'Wednesday', present: 93, late: 9, absent: 3, total: 105 },
-                                        { day: 'Thursday', present: 96, late: 7, absent: 2, total: 105 },
-                                        { day: 'Friday', present: 92, late: 10, absent: 3, total: 105 },
-                                        { day: 'Saturday', present: 50, late: 3, absent: 1, total: 54 },
-                                        { day: 'Sunday', present: 20, late: 1, absent: 0, total: 21 },
-                                    ].map((day, index) => {
-                                        const presentPercentage = (day.present / day.total) * 100;
-                                        const latePercentage = (day.late / day.total) * 100;
-                                        const absentPercentage = (day.absent / day.total) * 100;
-                                        
-                                        return (
-                                            <div key={index} className="space-y-1">
-                                                <div className="flex items-center justify-between text-sm">
-                                                    <span className="font-medium">{day.day}</span>
-                                                    <span className="text-muted-foreground">{day.total} employees</span>
+                                    {trendsWithTotals.length > 0 ? (
+                                        trendsWithTotals.map((day, index) => {
+                                            const presentPercentage = day.total > 0 ? (day.present / day.total) * 100 : 0;
+                                            const latePercentage = day.total > 0 ? (day.late / day.total) * 100 : 0;
+                                            const absentPercentage = day.total > 0 ? (day.absent / day.total) * 100 : 0;
+                                            
+                                            return (
+                                                <div key={index} className="space-y-1">
+                                                    <div className="flex items-center justify-between text-sm">
+                                                        <span className="font-medium">{day.day}</span>
+                                                        <span className="text-muted-foreground">{day.total} employees</span>
+                                                    </div>
+                                                    <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-muted">
+                                                        <div 
+                                                            className="bg-green-500" 
+                                                            style={{ width: `${presentPercentage}%` }}
+                                                            title={`Present: ${day.present}`}
+                                                        />
+                                                        <div 
+                                                            className="bg-yellow-500" 
+                                                            style={{ width: `${latePercentage}%` }}
+                                                            title={`Late: ${day.late}`}
+                                                        />
+                                                        <div 
+                                                            className="bg-red-500" 
+                                                            style={{ width: `${absentPercentage}%` }}
+                                                            title={`Absent: ${day.absent}`}
+                                                        />
+                                                    </div>
                                                 </div>
-                                                <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-muted">
-                                                    <div 
-                                                        className="bg-green-500" 
-                                                        style={{ width: `${presentPercentage}%` }}
-                                                        title={`Present: ${day.present}`}
-                                                    />
-                                                    <div 
-                                                        className="bg-yellow-500" 
-                                                        style={{ width: `${latePercentage}%` }}
-                                                        title={`Late: ${day.late}`}
-                                                    />
-                                                    <div 
-                                                        className="bg-red-500" 
-                                                        style={{ width: `${absentPercentage}%` }}
-                                                        title={`Absent: ${day.absent}`}
-                                                    />
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                            );
+                                        })
+                                    ) : (
+                                        <div className="text-center py-6 text-muted-foreground">
+                                            No attendance data available
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex items-center justify-center gap-4 mt-4 text-xs">
                                     <div className="flex items-center gap-1">

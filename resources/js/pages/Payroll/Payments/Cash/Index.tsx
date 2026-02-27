@@ -59,7 +59,7 @@ export default function CashPaymentIndex({
 
         // Apply department filter
         if (departmentId !== 'all') {
-            filtered = filtered.filter((emp) => emp.department === departmentId);
+            filtered = filtered.filter((emp) => emp.department_id?.toString() === departmentId.toString());
         }
 
         // Apply payment status filter (mapped from payroll_payments.status)

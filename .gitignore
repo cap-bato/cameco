@@ -30,6 +30,6 @@ yarn-error.log
 
 .github/
 .aiplans/
-
+.junie/
 docs/WORKFORCE_IMPLEMENTATION_ROADMAP.md
 PHASE5_VALIDATION_SUMMARY.md

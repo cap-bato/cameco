@@ -231,3 +231,12 @@ Before writing any service layer, fix these in order to avoid double-work:
 
 **Last Updated:** February 19, 2026  
 **Status:** 🟡 Phase 3 blocked pending TS type fixes and enum alignment
+
+## ✅ Envelope PDF Generation (Completed)
+
+- **Status:** ✅ Complete
+- **Controller Method:** `CashPaymentController::downloadEnvelopesPdf()`
+- **Template:** `resources/views/payroll/payments/cash/envelopes-pdf.blade.php`
+- **Route:** `GET /payroll/payments/cash/generate-envelopes/pdf`
+- **Frontend:** EnvelopePreview.tsx (Download PDF button)
+- **Pattern:** Server-side PDF generation using DomPDF (same as Accountability Report)
