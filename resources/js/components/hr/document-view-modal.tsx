@@ -9,6 +9,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FileText, Download, Calendar, User, Clock } from 'lucide-react';
+import { DocumentPreview } from '@/components/hr/document-preview';
 
 interface DocumentViewModalProps {
     open: boolean;
@@ -32,6 +33,8 @@ interface DocumentDetails {
     expires_at: string | null;
     notes?: string | null;
     mime_type: string;
+    preview_url?: string;
+    download_url?: string;
 }
 
 export function DocumentViewModal({ open, onClose, documentId, onDownload }: DocumentViewModalProps) {
@@ -109,7 +112,7 @@ export function DocumentViewModal({ open, onClose, documentId, onDownload }: Doc
 
     return (
         <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-4xl">
                 <DialogHeader>
                     <DialogTitle>Document Details</DialogTitle>
                     <DialogDescription>
@@ -208,6 +211,17 @@ export function DocumentViewModal({ open, onClose, documentId, onDownload }: Doc
                             </div>
                         )}
 
+                        {/* File Preview */}
+                        <div className="border-t pt-4">
+                            <h4 className="text-sm font-semibold text-muted-foreground mb-3">Preview</h4>
+                            <DocumentPreview
+                                previewUrl={document.preview_url ?? `/hr/documents/${document.id}/preview`}
+                                mimeType={document.mime_type}
+                                fileName={document.file_name}
+                                downloadUrl={document.download_url ?? `/hr/documents/${document.id}/download`}
+                                className="h-[400px]"
+                            />
+                        </div>
                         {/* Actions */}
                         <div className="flex gap-2 pt-4">
                             {onDownload && (

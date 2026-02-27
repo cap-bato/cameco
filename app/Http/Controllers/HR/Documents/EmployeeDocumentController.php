@@ -8,12 +8,15 @@ use App\Http\Requests\HR\Documents\BulkUploadRequest;
 use App\Http\Requests\HR\Documents\RejectDocumentRequest;
 use App\Http\Requests\HR\Documents\UploadDocumentRequest;
 use App\Traits\LogsSecurityAudits;
+use App\Traits\StreamsEmployeeDocumentPreview;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EmployeeDocumentController extends Controller
 {
     use LogsSecurityAudits;
+    use StreamsEmployeeDocumentPreview;
 
     /**
      * Display a listing of employee documents with filters.
@@ -312,8 +315,36 @@ class EmployeeDocumentController extends Controller
                 'expires_at' => $document->expires_at ? (string)$document->expires_at : null,
                 'notes' => $document->notes,
                 'mime_type' => $document->mime_type,
+                'preview_url' => route('hr.documents.preview', ['documentId' => $document->id]),
             ]
         ]);
+    }
+
+    /**
+     * Preview the specified document inline.
+     *
+     * @param int $id
+     * @return StreamedResponse|\Illuminate\Http\JsonResponse
+     */
+    public function preview(int $id): StreamedResponse|\Illuminate\Http\JsonResponse
+    {
+        $document = \App\Models\EmployeeDocument::findOrFail($id);
+        return $this->streamDocumentPreview(
+            $document,
+            route('hr.documents.download', ['document' => $document->id]),
+            false,
+            function (string $mime) use ($document) {
+                $this->logAudit(
+                    eventType: 'document_previewed',
+                    severity: 'info',
+                    details: [
+                        'document_id' => $document->id,
+                        'file_name' => $document->file_name,
+                        'mime_type' => $mime,
+                    ]
+                );
+            }
+        );
     }
 
     /**

@@ -7,9 +7,12 @@ use App\Http\Requests\HR\Documents\UploadDocumentRequest;
 use App\Http\Requests\HR\Documents\ApproveDocumentRequest;
 use App\Http\Requests\HR\Documents\RejectDocumentRequest;
 use App\Models\Employee;
+use App\Models\EmployeeDocument;
 use App\Traits\LogsSecurityAudits;
+use App\Traits\StreamsEmployeeDocumentPreview;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * EmployeeDocumentController
@@ -36,6 +39,43 @@ use Illuminate\Http\Request;
 class EmployeeDocumentController extends Controller
 {
     use LogsSecurityAudits;
+    use StreamsEmployeeDocumentPreview;
+
+    /**
+     * Safely get employee name from profile or return default string.
+     *
+     * @param Employee|null $employee
+     * @return string
+     */
+    private function getEmployeeName(?Employee $employee): string
+    {
+        if (!$employee || !$employee->profile) {
+            return 'Unknown';
+        }
+        
+        return trim(
+            ($employee->profile->first_name ?? '') . ' ' . 
+            ($employee->profile->last_name ?? '')
+        ) ?: 'Unknown';
+    }
+
+    /**
+     * Safely get authenticated user's name from profile.
+     *
+     * @return string
+     */
+    private function getAuthUserName(): string
+    {
+        $user = auth()->user();
+        if (!$user || !$user->profile) {
+            return 'System User';
+        }
+        
+        return trim(
+            ($user->profile->first_name ?? '') . ' ' . 
+            ($user->profile->last_name ?? '')
+        ) ?: 'System User';
+    }
 
     /**
      * Get all documents for a specific employee.
@@ -54,142 +94,49 @@ class EmployeeDocumentController extends Controller
         // Check HR permission
         $this->authorize('view', $employee);
 
-        // Mock data for frontend development
-        // In Phase 4, this will query actual database
-        $documents = collect([
-            [
-                'id' => 1,
-                'employee_id' => $employeeId,
-                'name' => 'Birth Certificate',
-                'document_type' => 'Birth Certificate (PSA)',
-                'file_name' => 'birth_certificate_psa.pdf',
-                'file_path' => '/storage/employee-documents/' . $employeeId . '/personal/2024/birth_certificate_psa.pdf',
-                'file_size' => 245000,
-                'mime_type' => 'application/pdf',
-                'category' => 'personal',
-                'status' => 'approved',
-                'uploaded_at' => '2024-01-15T10:30:00Z',
-                'uploaded_by' => 'HR Staff',
-                'uploaded_by_id' => 2,
-                'approved_at' => '2024-01-15T14:20:00Z',
-                'approved_by' => 'HR Manager',
-                'approved_by_id' => 1,
-                'expires_at' => null,
-                'notes' => 'PSA-authenticated original copy',
-            ],
-            [
-                'id' => 2,
-                'employee_id' => $employeeId,
-                'name' => 'NBI Clearance',
-                'document_type' => 'NBI Clearance',
-                'file_name' => 'nbi_clearance_2024.pdf',
-                'file_path' => '/storage/employee-documents/' . $employeeId . '/government/2024/nbi_clearance_2024.pdf',
-                'file_size' => 180000,
-                'mime_type' => 'application/pdf',
-                'category' => 'government',
-                'status' => 'approved',
-                'uploaded_at' => '2024-03-20T09:15:00Z',
-                'uploaded_by' => 'HR Staff',
-                'uploaded_by_id' => 2,
-                'approved_at' => '2024-03-20T11:30:00Z',
-                'approved_by' => 'HR Manager',
-                'approved_by_id' => 1,
-                'expires_at' => '2025-03-20',
-                'notes' => 'Valid for employment purposes',
-                'days_until_expiry' => 90,
-                'is_expiring_soon' => true,
-            ],
-            [
-                'id' => 3,
-                'employee_id' => $employeeId,
-                'name' => 'Medical Certificate',
-                'document_type' => 'Pre-Employment Medical',
-                'file_name' => 'medical_cert_2024.pdf',
-                'file_path' => '/storage/employee-documents/' . $employeeId . '/medical/2024/medical_cert_2024.pdf',
-                'file_size' => 320000,
-                'mime_type' => 'application/pdf',
-                'category' => 'medical',
-                'status' => 'approved',
-                'uploaded_at' => '2024-02-10T13:45:00Z',
-                'uploaded_by' => 'HR Manager',
-                'uploaded_by_id' => 1,
-                'approved_at' => '2024-02-10T13:45:00Z',
-                'approved_by' => 'HR Manager',
-                'approved_by_id' => 1,
-                'expires_at' => '2025-02-10',
-                'notes' => 'Annual medical checkup',
-                'days_until_expiry' => 52,
-                'is_expiring_soon' => false,
-            ],
-            [
-                'id' => 4,
-                'employee_id' => $employeeId,
-                'name' => 'Employment Contract',
-                'document_type' => 'Regular Employment Contract',
-                'file_name' => 'employment_contract_signed.pdf',
-                'file_path' => '/storage/employee-documents/' . $employeeId . '/contracts/2024/employment_contract_signed.pdf',
-                'file_size' => 450000,
-                'mime_type' => 'application/pdf',
-                'category' => 'contracts',
-                'status' => 'approved',
-                'uploaded_at' => '2024-01-20T16:00:00Z',
-                'uploaded_by' => 'HR Manager',
-                'uploaded_by_id' => 1,
-                'approved_at' => '2024-01-20T16:00:00Z',
-                'approved_by' => 'HR Manager',
-                'approved_by_id' => 1,
-                'expires_at' => null,
-                'notes' => 'Signed contract - regular employment',
-            ],
-            [
-                'id' => 5,
-                'employee_id' => $employeeId,
-                'name' => 'SSS E-1 Form',
-                'document_type' => 'SSS Registration',
-                'file_name' => 'sss_e1_form.pdf',
-                'file_path' => '/storage/employee-documents/' . $employeeId . '/government/2024/sss_e1_form.pdf',
-                'file_size' => 150000,
-                'mime_type' => 'application/pdf',
-                'category' => 'government',
-                'status' => 'approved',
-                'uploaded_at' => '2024-01-25T11:20:00Z',
-                'uploaded_by' => 'HR Staff',
-                'uploaded_by_id' => 2,
-                'approved_at' => '2024-01-25T14:00:00Z',
-                'approved_by' => 'HR Manager',
-                'approved_by_id' => 1,
-                'expires_at' => null,
-                'notes' => 'SSS employment registration',
-            ],
-            [
-                'id' => 6,
-                'employee_id' => $employeeId,
-                'name' => 'College Diploma',
-                'document_type' => 'Bachelor\'s Degree Diploma',
-                'file_name' => 'diploma_bscs.pdf',
-                'file_path' => '/storage/employee-documents/' . $employeeId . '/educational/2024/diploma_bscs.pdf',
-                'file_size' => 280000,
-                'mime_type' => 'application/pdf',
-                'category' => 'educational',
-                'status' => 'approved',
-                'uploaded_at' => '2024-01-18T10:00:00Z',
-                'uploaded_by' => 'HR Staff',
-                'uploaded_by_id' => 2,
-                'approved_at' => '2024-01-18T15:30:00Z',
-                'approved_by' => 'HR Manager',
-                'approved_by_id' => 1,
-                'expires_at' => null,
-                'notes' => 'Bachelor of Science in Computer Science',
-            ],
-        ]);
+        // Query actual documents from database
+        $dbDocuments = EmployeeDocument::where('employee_id', $employeeId)
+            ->with(['uploadedBy:id,email', 'approvedBy:id,email'])
+            ->orderByDesc('created_at')
+            ->get();
+
+        // Format documents for frontend
+        $documents = $dbDocuments->map(function ($doc) {
+            $expiresAt = $doc->expires_at ? \Carbon\Carbon::parse($doc->expires_at) : null;
+            $daysUntilExpiry = $expiresAt ? $expiresAt->diffInDays(now(), false) : null;
+            
+            return [
+                'id' => $doc->id,
+                'employee_id' => $doc->employee_id,
+                'name' => $doc->document_type,
+                'document_type' => $doc->document_type,
+                'file_name' => $doc->file_name,
+                'file_path' => $doc->file_path,
+                'file_size' => $doc->file_size,
+                'mime_type' => $doc->mime_type,
+                'category' => $doc->document_category,
+                'status' => $doc->status,
+                'uploaded_at' => $doc->uploaded_at?->toIso8601String(),
+                'uploaded_by' => $doc->uploadedBy?->email ?? 'Unknown',
+                'uploaded_by_id' => $doc->uploaded_by,
+                'approved_at' => $doc->approved_at?->toIso8601String(),
+                'approved_by' => $doc->approvedBy?->email ?? null,
+                'approved_by_id' => $doc->approved_by,
+                'expires_at' => $doc->expires_at?->toDateString(),
+                'notes' => $doc->notes,
+                'rejection_reason' => $doc->rejection_reason,
+                'days_until_expiry' => $daysUntilExpiry,
+                'is_expiring_soon' => $daysUntilExpiry !== null && $daysUntilExpiry <= 30 && $daysUntilExpiry >= 0,
+            ];
+        });
 
         // Log security audit
-        $this->logSecurityAudit(
+        $this->logAudit(
             'employee_documents.view',
-            "Viewed documents for employee ID: {$employeeId}",
+            'info',
             [
                 'employee_id' => $employeeId,
-                'employee_name' => $employee->profile->first_name . ' ' . $employee->profile->last_name,
+                'employee_name' => $this->getEmployeeName($employee),
                 'document_count' => $documents->count(),
             ]
         );
@@ -227,49 +174,82 @@ class EmployeeDocumentController extends Controller
 
         $validated = $request->validated();
 
-        // In Phase 4, this will:
-        // 1. Store file to storage/app/employee-documents/{employee_id}/{category}/{year}/
-        // 2. Create database record
-        // 3. Auto-approve or set pending based on document category
+        try {
+            // Store file to storage
+            $file = $request->file('file');
+            $year = now()->year;
+            $category = $validated['document_category'];
+            $path = "{$employeeId}/{$category}/{$year}";
+            
+            $filePath = $file->store($path, 'employee_documents');
 
-        // Mock response for frontend development
-        $mockDocument = [
-            'id' => 99,
-            'employee_id' => $employeeId,
-            'name' => $validated['document_type'],
-            'document_type' => $validated['document_type'],
-            'file_name' => $request->file('file')->getClientOriginalName(),
-            'file_path' => '/storage/employee-documents/' . $employeeId . '/' . $validated['document_category'] . '/2024/' . $request->file('file')->getClientOriginalName(),
-            'file_size' => $request->file('file')->getSize(),
-            'mime_type' => $request->file('file')->getMimeType(),
-            'category' => $validated['document_category'],
-            'status' => in_array($validated['document_category'], ['personal', 'educational']) ? 'approved' : 'pending',
-            'uploaded_at' => now()->toIso8601String(),
-            'uploaded_by' => auth()->user()->profile->first_name . ' ' . auth()->user()->profile->last_name,
-            'uploaded_by_id' => auth()->id(),
-            'expires_at' => $validated['expires_at'] ?? null,
-            'notes' => $validated['notes'] ?? null,
-        ];
-
-        // Log security audit
-        $this->logSecurityAudit(
-            'employee_documents.upload',
-            "Uploaded document for employee ID: {$employeeId}",
-            [
+            // Create database record
+            $document = EmployeeDocument::create([
                 'employee_id' => $employeeId,
-                'employee_name' => $employee->profile->first_name . ' ' . $employee->profile->last_name,
+                'document_category' => $category,
                 'document_type' => $validated['document_type'],
-                'category' => $validated['document_category'],
-                'file_name' => $request->file('file')->getClientOriginalName(),
-                'file_size' => $request->file('file')->getSize(),
-            ]
-        );
+                'file_name' => $file->getClientOriginalName(),
+                'file_path' => $filePath,
+                'file_size' => $file->getSize(),
+                'mime_type' => $file->getMimeType() ?? 'application/octet-stream',
+                'uploaded_by' => auth()->id(),
+                'uploaded_at' => now(),
+                'expires_at' => $validated['expires_at'] ?? null,
+                'notes' => $validated['notes'] ?? null,
+                'status' => in_array($category, ['personal', 'educational']) ? 'approved' : 'pending',
+                'requires_approval' => !in_array($category, ['personal', 'educational']),
+                'source' => 'manual',
+            ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Document uploaded successfully',
-            'data' => $mockDocument,
-        ], 201);
+            // Format response
+            $responseData = [
+                'id' => $document->id,
+                'employee_id' => $document->employee_id,
+                'name' => $document->document_type,
+                'document_type' => $document->document_type,
+                'file_name' => $document->file_name,
+                'file_size' => $document->file_size,
+                'mime_type' => $document->mime_type,
+                'category' => $document->document_category,
+                'status' => $document->status,
+                'uploaded_at' => $document->uploaded_at->toIso8601String(),
+                'uploaded_by' => $document->uploadedBy?->email ?? 'Unknown',
+                'uploaded_by_id' => $document->uploaded_by,
+                'expires_at' => $document->expires_at?->toDateString(),
+                'notes' => $document->notes,
+            ];
+
+            // Log security audit
+            $this->logAudit(
+                'employee_documents.upload',
+                'info',
+                [
+                    'employee_id' => $employeeId,
+                    'employee_name' => $this->getEmployeeName($employee),
+                    'document_type' => $validated['document_type'],
+                    'category' => $category,
+                    'file_name' => $file->getClientOriginalName(),
+                    'file_size' => $file->getSize(),
+                    'document_id' => $document->id,
+                ]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Document uploaded successfully',
+                'data' => $responseData,
+            ], 201);
+        } catch (\Exception $e) {
+            \Log::error('Failed to upload employee document', [
+                'employee_id' => $employeeId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload document. ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -290,46 +270,66 @@ class EmployeeDocumentController extends Controller
         // Check HR permission
         $this->authorize('view', $employee);
 
-        // Mock document details for frontend development
+        // Get document from database
+        $doc = EmployeeDocument::where('employee_id', $employeeId)
+            ->where('id', $documentId)
+            ->with(['uploadedBy:id,email', 'approvedBy:id,email'])
+            ->firstOrFail();
+
+        $expiresAt = $doc->expires_at ? \Carbon\Carbon::parse($doc->expires_at) : null;
+        $daysUntilExpiry = $expiresAt ? $expiresAt->diffInDays(now(), false) : null;
+
         $document = [
-            'id' => $documentId,
-            'employee_id' => $employeeId,
-            'name' => 'Birth Certificate',
-            'document_type' => 'Birth Certificate (PSA)',
-            'file_name' => 'birth_certificate_psa.pdf',
-            'file_path' => '/storage/employee-documents/' . $employeeId . '/personal/2024/birth_certificate_psa.pdf',
-            'file_size' => 245000,
-            'mime_type' => 'application/pdf',
-            'category' => 'personal',
-            'status' => 'approved',
-            'uploaded_at' => '2024-01-15T10:30:00Z',
-            'uploaded_by' => 'HR Staff',
-            'uploaded_by_id' => 2,
-            'approved_at' => '2024-01-15T14:20:00Z',
-            'approved_by' => 'HR Manager',
-            'approved_by_id' => 1,
-            'expires_at' => null,
-            'notes' => 'PSA-authenticated original copy',
+            'id' => $doc->id,
+            'employee_id' => $doc->employee_id,
+            'name' => $doc->document_type,
+            'document_type' => $doc->document_type,
+            'file_name' => $doc->file_name,
+            'file_path' => $doc->file_path,
+            'file_size' => $doc->file_size,
+            'mime_type' => $doc->mime_type,
+            'category' => $doc->document_category,
+            'status' => $doc->status,
+            'uploaded_at' => $doc->uploaded_at?->toIso8601String(),
+            'uploaded_by' => $doc->uploadedBy?->email ?? 'Unknown',
+            'uploaded_by_id' => $doc->uploaded_by,
+            'approved_at' => $doc->approved_at?->toIso8601String(),
+            'approved_by' => $doc->approvedBy?->email,
+            'approved_by_id' => $doc->approved_by,
+            'expires_at' => $doc->expires_at?->toDateString(),
+            'notes' => $doc->notes,
+            'rejection_reason' => $doc->rejection_reason,
+            'days_until_expiry' => $daysUntilExpiry,
+            'is_expiring_soon' => $daysUntilExpiry !== null && $daysUntilExpiry <= 30 && $daysUntilExpiry >= 0,
             'audit_log' => [
                 [
                     'action' => 'uploaded',
-                    'user' => 'HR Staff',
-                    'timestamp' => '2024-01-15T10:30:00Z',
+                    'user' => $doc->uploadedBy?->email ?? 'Unknown',
+                    'timestamp' => $doc->uploaded_at?->toIso8601String(),
                     'details' => 'Document uploaded',
                 ],
-                [
+                $doc->approved_at ? [
                     'action' => 'approved',
-                    'user' => 'HR Manager',
-                    'timestamp' => '2024-01-15T14:20:00Z',
-                    'details' => 'Document approved for 201 file',
-                ],
+                    'user' => $doc->approvedBy?->email ?? 'Unknown',
+                    'timestamp' => $doc->approved_at->toIso8601String(),
+                    'details' => 'Document approved',
+                ] : null,
+                $doc->rejection_reason ? [
+                    'action' => 'rejected',
+                    'user' => $doc->approvedBy?->email ?? 'Unknown',
+                    'timestamp' => $doc->updated_at->toIso8601String(),
+                    'details' => "Rejected: {$doc->rejection_reason}",
+                ] : null,
             ],
         ];
 
+        // Remove null entries from audit_log
+        $document['audit_log'] = array_filter($document['audit_log']);
+
         // Log security audit
-        $this->logSecurityAudit(
+        $this->logAudit(
             'employee_documents.view_detail',
-            "Viewed document details for employee ID: {$employeeId}, document ID: {$documentId}",
+            'info',
             [
                 'employee_id' => $employeeId,
                 'document_id' => $documentId,
@@ -340,6 +340,53 @@ class EmployeeDocumentController extends Controller
             'success' => true,
             'data' => $document,
         ]);
+    }
+
+    /**
+     * Preview a document file inline (PDF or image).
+     *
+     * Used by: Employee Profile → Documents Tab → Document Preview Modal
+     * Returns: Streamed file for inline viewing (PDF in iframe, images in img tag)
+     * Returns: JSON if file type is not previewable (e.g., DOCX, XLSX)
+     *
+     * @param int $employeeId
+     * @param int $documentId
+     * @return StreamedResponse|JsonResponse
+     */
+    public function preview(int $employeeId, int $documentId): StreamedResponse|JsonResponse
+    {
+        // Verify employee exists
+        $employee = Employee::findOrFail($employeeId);
+
+        // Check HR permission
+        $this->authorize('view', $employee);
+
+        // Get document from database
+        $document = EmployeeDocument::where('employee_id', $employeeId)
+            ->where('id', $documentId)
+            ->firstOrFail();
+        return $this->streamDocumentPreview(
+            $document,
+            route('hr.api.employees.documents.download-file', [
+                'employeeId' => $employeeId,
+                'documentId' => $documentId,
+            ]),
+            true,
+            function (string $mime) use ($employeeId, $employee, $documentId, $document) {
+                $this->logAudit(
+                    'employee_documents.preview',
+                    'info',
+                    [
+                        'employee_id' => $employeeId,
+                        'employee_name' => $this->getEmployeeName($employee),
+                        'document_id' => $documentId,
+                        'document_type' => $document->document_type,
+                        'mime_type' => $mime,
+                        'previewed_by' => $this->getAuthUserName(),
+                    ]
+                );
+            }
+        );
     }
 
     /**
@@ -363,17 +410,27 @@ class EmployeeDocumentController extends Controller
 
         $validated = $request->validated();
 
-        // In Phase 4, this will update database record status to 'approved'
+        // Get document and update status
+        $document = EmployeeDocument::where('employee_id', $employeeId)
+            ->where('id', $documentId)
+            ->firstOrFail();
+
+        $document->update([
+            'status' => 'approved',
+            'approved_by' => auth()->id(),
+            'approved_at' => now(),
+        ]);
 
         // Log security audit
-        $this->logSecurityAudit(
+        $this->logAudit(
             'employee_documents.approve',
-            "Approved document for employee ID: {$employeeId}, document ID: {$documentId}",
+            'info',
             [
                 'employee_id' => $employeeId,
-                'employee_name' => $employee->profile->first_name . ' ' . $employee->profile->last_name,
+                'employee_name' => $this->getEmployeeName($employee),
                 'document_id' => $documentId,
-                'approved_by' => auth()->user()->profile->first_name . ' ' . auth()->user()->profile->last_name,
+                'document_type' => $document->document_type,
+                'approved_by' => $this->getAuthUserName(),
             ]
         );
 
@@ -404,20 +461,30 @@ class EmployeeDocumentController extends Controller
 
         $validated = $request->validated();
 
-        // In Phase 4, this will update database record status to 'rejected'
+        // Get document and update status
+        $document = EmployeeDocument::where('employee_id', $employeeId)
+            ->where('id', $documentId)
+            ->firstOrFail();
+
+        $document->update([
+            'status' => 'rejected',
+            'rejection_reason' => $validated['rejection_reason'],
+            'approved_by' => auth()->id(),
+            'approved_at' => now(),
+        ]);
 
         // Log security audit
-        $this->logSecurityAudit(
+        $this->logAudit(
             'employee_documents.reject',
-            "Rejected document for employee ID: {$employeeId}, document ID: {$documentId}",
+            'warning',
             [
                 'employee_id' => $employeeId,
-                'employee_name' => $employee->profile->first_name . ' ' . $employee->profile->last_name,
+                'employee_name' => $this->getEmployeeName($employee),
                 'document_id' => $documentId,
+                'document_type' => $document->document_type,
                 'rejection_reason' => $validated['rejection_reason'],
-                'rejected_by' => auth()->user()->profile->first_name . ' ' . auth()->user()->profile->last_name,
-            ],
-            'warning'
+                'rejected_by' => $this->getAuthUserName(),
+            ]
         );
 
         return response()->json([
@@ -444,19 +511,25 @@ class EmployeeDocumentController extends Controller
         // Check HR permission
         $this->authorize('delete', $employee);
 
-        // In Phase 4, this will soft delete database record
+        // Get document and soft delete
+        $document = EmployeeDocument::where('employee_id', $employeeId)
+            ->where('id', $documentId)
+            ->firstOrFail();
+
+        $documentType = $document->document_type;
+        $document->delete(); // Soft delete
 
         // Log security audit
-        $this->logSecurityAudit(
+        $this->logAudit(
             'employee_documents.delete',
-            "Deleted document for employee ID: {$employeeId}, document ID: {$documentId}",
+            'warning',
             [
                 'employee_id' => $employeeId,
-                'employee_name' => $employee->profile->first_name . ' ' . $employee->profile->last_name,
+                'employee_name' => $this->getEmployeeName($employee),
                 'document_id' => $documentId,
-                'deleted_by' => auth()->user()->profile->first_name . ' ' . auth()->user()->profile->last_name,
-            ],
-            'warning'
+                'document_type' => $documentType,
+                'deleted_by' => $this->getAuthUserName(),
+            ]
         );
 
         return response()->json([
@@ -483,23 +556,35 @@ class EmployeeDocumentController extends Controller
         // Check HR permission
         $this->authorize('view', $employee);
 
-        // In Phase 4, this will:
-        // 1. Fetch document from database
-        // 2. Generate signed URL for file download (24-hour expiry)
-        // 3. Return download response or redirect to signed URL
+        // Get document from database
+        $document = EmployeeDocument::where('employee_id', $employeeId)
+            ->where('id', $documentId)
+            ->firstOrFail();
 
-        // Mock download URL for frontend development
-        $downloadUrl = url('/storage/employee-documents/' . $employeeId . '/personal/2024/birth_certificate_psa.pdf');
+        // Check if file exists in storage
+        if (!\Storage::disk('employee_documents')->exists($document->file_path)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Document file not found on server',
+            ], 404);
+        }
+
+        // Generate download URL - use a route that will stream the file
+        $downloadUrl = route('hr.api.employees.documents.download-file', [
+            'employeeId' => $employeeId,
+            'documentId' => $documentId,
+        ]);
 
         // Log security audit
-        $this->logSecurityAudit(
+        $this->logAudit(
             'employee_documents.download',
-            "Downloaded document for employee ID: {$employeeId}, document ID: {$documentId}",
+            'info',
             [
                 'employee_id' => $employeeId,
-                'employee_name' => $employee->profile->first_name . ' ' . $employee->profile->last_name,
+                'employee_name' => $this->getEmployeeName($employee),
                 'document_id' => $documentId,
-                'downloaded_by' => auth()->user()->profile->first_name . ' ' . auth()->user()->profile->last_name,
+                'document_type' => $document->document_type,
+                'downloaded_by' => $this->getAuthUserName(),
             ]
         );
 
@@ -508,9 +593,53 @@ class EmployeeDocumentController extends Controller
             'message' => 'Document ready for download',
             'data' => [
                 'download_url' => $downloadUrl,
-                'file_name' => 'birth_certificate_psa.pdf',
+                'file_name' => $document->file_name,
                 'expires_in' => '24 hours',
             ],
         ]);
+    }
+
+    /**
+     * Download document file (actual file streaming).
+     *
+     * @param int $employeeId
+     * @param int $documentId
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+     */
+    public function downloadFile(int $employeeId, int $documentId)
+    {
+        // Verify employee exists
+        $employee = Employee::findOrFail($employeeId);
+
+        // Check HR permission
+        $this->authorize('view', $employee);
+
+        // Get document from database
+        $document = EmployeeDocument::where('employee_id', $employeeId)
+            ->where('id', $documentId)
+            ->firstOrFail();
+
+        // Check if file exists in storage
+        if (!\Storage::disk('employee_documents')->exists($document->file_path)) {
+            abort(404, 'Document file not found');
+        }
+
+        // Log the download
+        $this->logAudit(
+            'employee_documents.file_download',
+            'info',
+            [
+                'employee_id' => $employeeId,
+                'document_id' => $documentId,
+                'document_type' => $document->document_type,
+                'downloaded_by' => $this->getAuthUserName(),
+            ]
+        );
+
+        // Stream file download
+        return \Storage::disk('employee_documents')->download(
+            $document->file_path,
+            $document->file_name
+        );
     }
 }

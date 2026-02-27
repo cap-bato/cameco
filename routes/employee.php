@@ -153,5 +153,10 @@ Route::middleware(['auth', 'verified', EnsureEmployee::class])
             Route::get('/{document}/download', [\App\Http\Controllers\Employee\DocumentController::class, 'download'])
                 ->middleware('permission:employee.documents.download')
                 ->name('download');
+
+            // Preview own document inline (PDF/images only)
+            Route::get('/{documentId}/preview', [\App\Http\Controllers\Employee\DocumentController::class, 'preview'])
+                ->middleware('permission:employee.documents.view')
+                ->name('preview');
         });
     });

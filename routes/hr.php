@@ -87,6 +87,14 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/{documentId}/download', [EmployeeDocumentController::class, 'download'])
                 ->middleware('permission:hr.documents.download')
                 ->name('download');
+            
+            Route::get('/{documentId}/download-file', [EmployeeDocumentController::class, 'downloadFile'])
+                ->middleware('permission:hr.documents.download')
+                ->name('download-file');
+            
+            Route::get('/{documentId}/preview', [EmployeeDocumentController::class, 'preview'])
+                ->middleware('permission:hr.documents.view')
+                ->name('preview');
         });
 
         // Department Management
@@ -217,6 +225,10 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/{document}/download', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'download'])
                 ->middleware('permission:hr.documents.download')
                 ->name('download');
+
+            Route::get('/{document}/preview', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'preview'])
+                ->middleware('permission:hr.documents.view')
+                ->name('preview');
             
             Route::post('/{document}/approve', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'approve'])
                 ->middleware('permission:hr.documents.approve')

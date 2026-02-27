@@ -23,6 +23,66 @@ use Inertia\Inertia;
 class DocumentController extends Controller
 {
     /**
+     * Preview own document inline (PDF/images only)
+     *
+     * @param  int  $documentId
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse|\Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
+     */
+    public function preview($documentId)
+    {
+        $user = Auth::user();
+        $employee = Employee::where('user_id', $user->id)->first();
+
+        if (!$employee) {
+            return back()->with('error', 'Employee record not found');
+        }
+
+        // Get document
+        $document = \DB::table('employee_documents')
+            ->where('id', $documentId)
+            ->where('employee_id', $employee->id)
+            ->first();
+
+        if (!$document) {
+            return response()->json(['error' => 'Document not found'], 404);
+        }
+
+        $filePath = storage_path("app/{$document->file_path}");
+        if (!file_exists($filePath)) {
+            return response()->json(['error' => 'File not found'], 404);
+        }
+
+        $mime = $document->mime_type ?? 'application/octet-stream';
+        $previewable = str_starts_with($mime, 'image/') || $mime === 'application/pdf';
+
+        if (!$previewable) {
+            return response()->json([
+                'previewable' => false,
+                'download_url' => route('employee.documents.download', ['documentId' => $documentId]),
+            ]);
+        }
+
+        // Stream file inline
+            // Optional audit logging for preview action
+            \Log::info('Employee document previewed', [
+                'employee_id' => $employee->id,
+                'user_id' => $user->id,
+                'document_id' => $documentId,
+                'file_path' => $document->file_path,
+                'previewed_at' => now(),
+            ]);
+        return response()->stream(function () use ($filePath) {
+            $stream = fopen($filePath, 'rb');
+            fpassthru($stream);
+            fclose($stream);
+        }, 200, [
+            'Content-Type'        => $mime,
+            'Content-Disposition' => 'inline; filename="' . ($document->file_name ?? 'document') . '"',
+            'Cache-Control'       => 'private, no-store',
+        ]);
+    }
+
+    /**
      * List employee's own documents
      *
      * @param  \Illuminate\Http\Request  $request
