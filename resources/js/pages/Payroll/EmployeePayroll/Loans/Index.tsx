@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import type { PayrollLoansPageProps, EmployeeLoan, EmployeeLoanFormData, LoanPayment } from '@/types/payroll-pages';
 import { LoansListTable } from '@/components/payroll/loans-list-table';
 import { LoansFilter, LoansFilterState } from '@/components/payroll/loans-filter';
@@ -109,39 +109,32 @@ export default function LoansPage({
         };
     }, [filteredLoans]);
 
-    // Mock payment history generator
-    const getPaymentHistory = (loan: EmployeeLoan): LoanPayment[] => {
-        const payments: LoanPayment[] = [];
-
-        for (let i = 0; i < Math.min(loan.installments_paid + 3, loan.number_of_installments); i++) {
-            const paymentDate = new Date(loan.start_date);
-            paymentDate.setMonth(paymentDate.getMonth() + i);
-
-            const principalPerInstallment = loan.principal_amount / loan.number_of_installments;
-            const interestPayment = loan.interest_rate ? (loan.total_amount * loan.interest_rate / 100) / loan.number_of_installments : 0;
-            const totalPayment = principalPerInstallment + interestPayment;
-            const balanceAfter = Math.max(loan.remaining_balance - totalPayment, 0);
-
-            payments.push({
-                id: loan.id * 100 + i,
-                employee_loan_id: loan.id,
-                payroll_calculation_id: 0,
-                payroll_period_id: 0,
-                payroll_period_name: `${paymentDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}`,
-                payment_amount: totalPayment,
-                principal_payment: principalPerInstallment,
-                interest_payment: interestPayment,
-                balance_after_payment: balanceAfter,
-                created_at: new Date().toISOString(),
-                is_paid: i < loan.installments_paid,
+    // Fetch payment history from backend
+    const getPaymentHistory = async (loanId: number): Promise<LoanPayment[]> => {
+        try {
+            const response = await fetch(`/payroll/loans/${loanId}/payments`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
             });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch payment history');
+            }
+
+            const data = await response.json();
+            return data.payments || [];
+        } catch (error) {
+            console.error('Error fetching payment history:', error);
+            return [];
         }
-        return payments;
     };
 
-    const handleViewLoan = (loan: EmployeeLoan) => {
+    const handleViewLoan = async (loan: EmployeeLoan) => {
         setSelectedLoan(loan);
-        setSelectedLoanPayments(getPaymentHistory(loan));
+        const payments = await getPaymentHistory(loan.id);
+        setSelectedLoanPayments(payments);
         setIsDetailsOpen(true);
     };
 
@@ -154,8 +147,11 @@ export default function LoansPage({
 
     const handleDeleteLoan = (loan: EmployeeLoan | undefined) => {
         if (loan && window.confirm(`Are you sure you want to cancel this loan? (${loan.loan_number})`)) {
-            // In a real app, this would call an API
-            console.log('Cancel loan:', loan);
+            router.delete(`/payroll/loans/${loan.id}`, {
+                onError: (errors) => {
+                    console.error('Failed to cancel loan:', errors);
+                },
+            });
         }
     };
 
@@ -165,8 +161,27 @@ export default function LoansPage({
     };
 
     const handleFormSubmit = (data: EmployeeLoanFormData) => {
-        console.log('Form submitted:', data);
-        // In a real app, this would call an API
+        if (selectedLoan) {
+            router.put(`/payroll/loans/${selectedLoan.id}`, data as unknown as Record<string, string>, {
+                onSuccess: () => {
+                    setIsFormOpen(false);
+                    setSelectedLoan(null);
+                },
+                onError: (errors) => {
+                    console.error('Failed to update loan:', errors);
+                },
+            });
+        } else {
+            router.post('/payroll/loans', data as unknown as Record<string, string>, {
+                onSuccess: () => {
+                    setIsFormOpen(false);
+                    setSelectedLoan(null);
+                },
+                onError: (errors) => {
+                    console.error('Failed to create loan:', errors);
+                },
+            });
+        }
     };
 
     return (

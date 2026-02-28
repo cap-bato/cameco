@@ -3,94 +3,119 @@
 namespace App\Http\Controllers\Payroll\EmployeePayroll;
 
 use App\Http\Controllers\Controller;
+use App\Models\EmployeePayrollInfo;
+use App\Models\Employee;
+use App\Models\Department;
+use App\Services\Payroll\EmployeePayrollInfoService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class EmployeePayrollInfoController extends Controller
 {
+    public function __construct(
+        private EmployeePayrollInfoService $payrollInfoService
+    ) {}
     /**
      * Display a listing of employee payroll information.
      */
     public function index(Request $request)
     {
-        // Get filter parameters
-        $search = $request->get('search', '');
-        $salaryType = $request->get('salary_type', '');
-        $paymentMethod = $request->get('payment_method', '');
-        $taxStatus = $request->get('tax_status', '');
-        $status = $request->get('status', 'all');
+        $query = EmployeePayrollInfo::query()
+            ->with(['employee.department', 'employee.position', 'createdBy', 'updatedBy'])
+            ->where('is_active', true);
 
-        // Mock employee payroll data
-        $mockEmployees = $this->getMockEmployeePayrollData();
-
-        // Apply filters
-        $filtered = collect($mockEmployees);
-
-        if ($search) {
-            $searchLower = strtolower($search);
-            $filtered = $filtered->filter(function ($emp) use ($searchLower) {
-                return str_contains(strtolower($emp['employee_name']), $searchLower) ||
-                       str_contains(strtolower($emp['employee_number']), $searchLower);
+        // Apply search filter
+        if ($request->has('search') && $request->input('search')) {
+            $search = $request->input('search');
+            $query->whereHas('employee', function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('employee_number', 'like', "%{$search}%");
             });
         }
 
-        if ($salaryType) {
-            $filtered = $filtered->where('salary_type', $salaryType);
+        // Apply salary type filter
+        if ($request->has('salary_type') && $request->input('salary_type')) {
+            $query->where('salary_type', $request->input('salary_type'));
         }
 
-        if ($paymentMethod) {
-            $filtered = $filtered->where('payment_method', $paymentMethod);
+        // Apply payment method filter
+        if ($request->has('payment_method') && $request->input('payment_method')) {
+            $query->where('payment_method', $request->input('payment_method'));
         }
 
-        if ($taxStatus) {
-            $filtered = $filtered->where('tax_status', $taxStatus);
+        // Apply tax status filter
+        if ($request->has('tax_status') && $request->input('tax_status')) {
+            $query->where('tax_status', $request->input('tax_status'));
         }
 
-        if ($status !== 'all') {
-            $filtered = $filtered->where('is_active', $status === 'active');
+        // Apply status filter
+        if ($request->has('status')) {
+            $status = $request->input('status');
+            if ($status === 'inactive') {
+                $query->where('is_active', false);
+            }
         }
+
+        $employees = $query->paginate(50);
+
+        // Transform the data for the frontend
+        $employees->transform(function ($payrollInfo) {
+            return [
+                'id' => $payrollInfo->id,
+                'employee_id' => $payrollInfo->employee_id,
+                'employee_name' => $payrollInfo->employee?->full_name ?? 'N/A',
+                'employee_number' => $payrollInfo->employee?->employee_number ?? 'N/A',
+                'department' => $payrollInfo->employee?->department?->name ?? 'N/A',
+                'position' => $payrollInfo->employee?->position?->name ?? 'N/A',
+                'salary_type' => $payrollInfo->salary_type,
+                'salary_type_label' => $this->getSalaryTypeLabel($payrollInfo->salary_type),
+                'basic_salary' => $payrollInfo->basic_salary,
+                'daily_rate' => $payrollInfo->daily_rate,
+                'hourly_rate' => $payrollInfo->hourly_rate,
+                'payment_method' => $payrollInfo->payment_method,
+                'payment_method_label' => $this->getPaymentMethodLabel($payrollInfo->payment_method),
+                'tax_status' => $payrollInfo->tax_status,
+                'tax_status_label' => $this->getTaxStatusLabel($payrollInfo->tax_status),
+                'rdo_code' => $payrollInfo->rdo_code,
+                'withholding_tax_exemption' => $payrollInfo->withholding_tax_exemption,
+                'is_tax_exempt' => $payrollInfo->is_tax_exempt,
+                'is_substituted_filing' => $payrollInfo->is_substituted_filing,
+                'sss_number' => $payrollInfo->sss_number,
+                'philhealth_number' => $payrollInfo->philhealth_number,
+                'pagibig_number' => $payrollInfo->pagibig_number,
+                'tin_number' => $payrollInfo->tin_number,
+                'sss_bracket' => $payrollInfo->sss_bracket,
+                'is_sss_voluntary' => $payrollInfo->is_sss_voluntary,
+                'philhealth_is_indigent' => $payrollInfo->philhealth_is_indigent,
+                'pagibig_employee_rate' => $payrollInfo->pagibig_employee_rate,
+                'bank_name' => $payrollInfo->bank_name,
+                'bank_code' => $payrollInfo->bank_code,
+                'bank_account_number' => $payrollInfo->bank_account_number,
+                'bank_account_name' => $payrollInfo->bank_account_name,
+                'is_entitled_to_rice' => $payrollInfo->is_entitled_to_rice,
+                'is_entitled_to_uniform' => $payrollInfo->is_entitled_to_uniform,
+                'is_entitled_to_laundry' => $payrollInfo->is_entitled_to_laundry,
+                'is_entitled_to_medical' => $payrollInfo->is_entitled_to_medical,
+                'is_active' => $payrollInfo->is_active,
+                'status_label' => $payrollInfo->is_active ? 'Active' : 'Inactive',
+                'effective_date' => $payrollInfo->effective_date,
+                'end_date' => $payrollInfo->end_date,
+                'created_at' => $payrollInfo->created_at,
+                'updated_at' => $payrollInfo->updated_at,
+            ];
+        });
+
+        // Get available options
+        $departments = Department::where('is_active', true)->get(['id', 'name'])->toArray();
 
         return Inertia::render('Payroll/EmployeePayroll/Info/Index', [
-            'employees' => $filtered->values()->toArray(),
-            'filters' => [
-                'search' => $search,
-                'salary_type' => $salaryType,
-                'payment_method' => $paymentMethod,
-                'tax_status' => $taxStatus,
-                'status' => $status,
-            ],
-            'available_salary_types' => [
-                ['value' => 'monthly', 'label' => 'Monthly'],
-                ['value' => 'daily', 'label' => 'Daily'],
-                ['value' => 'hourly', 'label' => 'Hourly'],
-                ['value' => 'contractual', 'label' => 'Contractual'],
-                ['value' => 'project_based', 'label' => 'Project-Based'],
-            ],
-            'available_payment_methods' => [
-                ['value' => 'bank_transfer', 'label' => 'Bank Transfer'],
-                ['value' => 'cash', 'label' => 'Cash'],
-                ['value' => 'check', 'label' => 'Check'],
-            ],
-            'available_tax_statuses' => [
-                ['value' => 'Z', 'label' => 'Zero/Exempt (Z)'],
-                ['value' => 'S', 'label' => 'Single (S)'],
-                ['value' => 'ME', 'label' => 'Married Employee (ME)'],
-                ['value' => 'S1', 'label' => 'Single w/ 1 Dependent (S1)'],
-                ['value' => 'ME1', 'label' => 'Married w/ 1 Dependent (ME1)'],
-                ['value' => 'S2', 'label' => 'Single w/ 2 Dependents (S2)'],
-                ['value' => 'ME2', 'label' => 'Married w/ 2 Dependents (ME2)'],
-                ['value' => 'S3', 'label' => 'Single w/ 3 Dependents (S3)'],
-                ['value' => 'ME3', 'label' => 'Married w/ 3 Dependents (ME3)'],
-                ['value' => 'S4', 'label' => 'Single w/ 4+ Dependents (S4)'],
-                ['value' => 'ME4', 'label' => 'Married w/ 4+ Dependents (ME4)'],
-            ],
-            'available_departments' => [
-                ['id' => 1, 'name' => 'Operations'],
-                ['id' => 2, 'name' => 'Finance'],
-                ['id' => 3, 'name' => 'Human Resources'],
-                ['id' => 4, 'name' => 'Information Technology'],
-                ['id' => 5, 'name' => 'Marketing'],
-            ],
+            'employees' => $employees,
+            'filters' => $request->only(['search', 'salary_type', 'payment_method', 'tax_status', 'status']),
+            'available_salary_types' => $this->getSalaryTypes(),
+            'available_payment_methods' => $this->getPaymentMethods(),
+            'available_tax_statuses' => $this->getTaxStatuses(),
+            'available_departments' => $departments,
         ]);
     }
 
@@ -99,24 +124,24 @@ class EmployeePayrollInfoController extends Controller
      */
     public function create()
     {
+        $employees = Employee::where('is_active', true)
+            ->doesntHave('payrollInfo')
+            ->with('department', 'position')
+            ->get(['id', 'employee_number', 'first_name', 'last_name', 'department_id'])
+            ->map(function ($emp) {
+                return [
+                    'id' => $emp->id,
+                    'employee_number' => $emp->employee_number,
+                    'full_name' => $emp->full_name,
+                    'department' => $emp->department?->name,
+                ];
+            });
+
         return Inertia::render('Payroll/EmployeePayroll/Info/Create', [
-            'available_salary_types' => [
-                ['value' => 'monthly', 'label' => 'Monthly'],
-                ['value' => 'daily', 'label' => 'Daily'],
-                ['value' => 'hourly', 'label' => 'Hourly'],
-                ['value' => 'contractual', 'label' => 'Contractual'],
-                ['value' => 'project_based', 'label' => 'Project-Based'],
-            ],
-            'available_payment_methods' => [
-                ['value' => 'bank_transfer', 'label' => 'Bank Transfer'],
-                ['value' => 'cash', 'label' => 'Cash'],
-                ['value' => 'check', 'label' => 'Check'],
-            ],
-            'available_tax_statuses' => [
-                ['value' => 'Z', 'label' => 'Zero/Exempt (Z)'],
-                ['value' => 'S', 'label' => 'Single (S)'],
-                ['value' => 'ME', 'label' => 'Married Employee (ME)'],
-            ],
+            'available_employees' => $employees,
+            'available_salary_types' => $this->getSalaryTypes(),
+            'available_payment_methods' => $this->getPaymentMethods(),
+            'available_tax_statuses' => $this->getTaxStatuses(),
         ]);
     }
 
@@ -125,350 +150,295 @@ class EmployeePayrollInfoController extends Controller
      */
     public function store(Request $request)
     {
-        // Mock implementation - just redirect back
-        return redirect()->route('payroll.employee-payroll-info.index')
-            ->with('success', 'Employee payroll information created successfully.');
+        $validated = $request->validate([
+            'employee_id' => 'required|exists:employees,id|unique:employee_payroll_info,employee_id,NULL,id,is_active,1',
+            'salary_type' => 'required|in:monthly,daily,hourly,contractual,project_based',
+            'basic_salary' => 'nullable|numeric|min:0',
+            'daily_rate' => 'nullable|numeric|min:0',
+            'hourly_rate' => 'nullable|numeric|min:0',
+            'payment_method' => 'required|in:bank_transfer,cash,check',
+            'tax_status' => 'required|in:Z,S,ME,S1,ME1,S2,ME2,S3,ME3,S4,ME4',
+            'rdo_code' => 'nullable|string|max:10',
+            'withholding_tax_exemption' => 'nullable|numeric|min:0',
+            'is_tax_exempt' => 'boolean',
+            'is_substituted_filing' => 'boolean',
+            'sss_number' => 'nullable|string|max:20',
+            'philhealth_number' => 'nullable|string|max:20',
+            'pagibig_number' => 'nullable|string|max:20',
+            'tin_number' => 'nullable|string|max:20',
+            'sss_bracket' => 'nullable|string|max:5',
+            'is_sss_voluntary' => 'boolean',
+            'philhealth_is_indigent' => 'boolean',
+            'pagibig_employee_rate' => 'nullable|numeric|in:1.00,2.00',
+            'bank_name' => 'nullable|string|max:100',
+            'bank_code' => 'nullable|string|max:10',
+            'bank_account_number' => 'nullable|string|max:20',
+            'bank_account_name' => 'nullable|string|max:100',
+            'is_entitled_to_rice' => 'boolean',
+            'is_entitled_to_uniform' => 'boolean',
+            'is_entitled_to_laundry' => 'boolean',
+            'is_entitled_to_medical' => 'boolean',
+            'effective_date' => 'required|date',
+        ]);
+
+        try {
+            $payrollInfo = $this->payrollInfoService->createPayrollInfo(
+                $validated,
+                auth()->user()
+            );
+
+            return redirect()
+                ->route('payroll.employee-payroll-info.show', $payrollInfo->id)
+                ->with('success', 'Employee payroll information created successfully.');
+        } catch (\Exception $e) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => $e->getMessage()])
+                ->withInput();
+        }
     }
 
     /**
      * Display the specified employee payroll info.
      */
-    public function show($id)
+    public function show(EmployeePayrollInfo $payrollInfo)
     {
-        // Mock implementation
-        $mockEmployees = $this->getMockEmployeePayrollData();
-        $employee = collect($mockEmployees)->firstWhere('id', $id);
-
-        if (!$employee) {
-            abort(404);
-        }
+        $payrollInfo->load(['employee.department', 'employee.position', 'createdBy', 'updatedBy']);
 
         return Inertia::render('Payroll/EmployeePayroll/Info/Show', [
-            'employee' => $employee,
+            'employee' => [
+                'id' => $payrollInfo->id,
+                'employee_id' => $payrollInfo->employee_id,
+                'employee_name' => $payrollInfo->employee?->full_name ?? 'N/A',
+                'employee_number' => $payrollInfo->employee?->employee_number ?? 'N/A',
+                'department' => $payrollInfo->employee?->department?->name ?? 'N/A',
+                'position' => $payrollInfo->employee?->position?->name ?? 'N/A',
+                'salary_type' => $payrollInfo->salary_type,
+                'salary_type_label' => $this->getSalaryTypeLabel($payrollInfo->salary_type),
+                'basic_salary' => $payrollInfo->basic_salary,
+                'daily_rate' => $payrollInfo->daily_rate,
+                'hourly_rate' => $payrollInfo->hourly_rate,
+                'payment_method' => $payrollInfo->payment_method,
+                'payment_method_label' => $this->getPaymentMethodLabel($payrollInfo->payment_method),
+                'tax_status' => $payrollInfo->tax_status,
+                'tax_status_label' => $this->getTaxStatusLabel($payrollInfo->tax_status),
+                'rdo_code' => $payrollInfo->rdo_code,
+                'withholding_tax_exemption' => $payrollInfo->withholding_tax_exemption,
+                'is_tax_exempt' => $payrollInfo->is_tax_exempt,
+                'is_substituted_filing' => $payrollInfo->is_substituted_filing,
+                'sss_number' => $payrollInfo->sss_number,
+                'philhealth_number' => $payrollInfo->philhealth_number,
+                'pagibig_number' => $payrollInfo->pagibig_number,
+                'tin_number' => $payrollInfo->tin_number,
+                'sss_bracket' => $payrollInfo->sss_bracket,
+                'is_sss_voluntary' => $payrollInfo->is_sss_voluntary,
+                'philhealth_is_indigent' => $payrollInfo->philhealth_is_indigent,
+                'pagibig_employee_rate' => $payrollInfo->pagibig_employee_rate,
+                'bank_name' => $payrollInfo->bank_name,
+                'bank_code' => $payrollInfo->bank_code,
+                'bank_account_number' => $payrollInfo->bank_account_number,
+                'bank_account_name' => $payrollInfo->bank_account_name,
+                'is_entitled_to_rice' => $payrollInfo->is_entitled_to_rice,
+                'is_entitled_to_uniform' => $payrollInfo->is_entitled_to_uniform,
+                'is_entitled_to_laundry' => $payrollInfo->is_entitled_to_laundry,
+                'is_entitled_to_medical' => $payrollInfo->is_entitled_to_medical,
+                'is_active' => $payrollInfo->is_active,
+                'status_label' => $payrollInfo->is_active ? 'Active' : 'Inactive',
+                'effective_date' => $payrollInfo->effective_date,
+                'end_date' => $payrollInfo->end_date,
+                'created_at' => $payrollInfo->created_at,
+                'updated_at' => $payrollInfo->updated_at,
+            ],
         ]);
     }
 
     /**
      * Show the form for editing the specified employee payroll info.
      */
-    public function edit($id)
+    public function edit(EmployeePayrollInfo $payrollInfo)
     {
-        $mockEmployees = $this->getMockEmployeePayrollData();
-        $employee = collect($mockEmployees)->firstWhere('id', $id);
-
-        if (!$employee) {
-            abort(404);
-        }
+        $payrollInfo->load(['employee.department', 'employee.position']);
 
         return Inertia::render('Payroll/EmployeePayroll/Info/Edit', [
-            'employee' => $employee,
-            'available_salary_types' => [
-                ['value' => 'monthly', 'label' => 'Monthly'],
-                ['value' => 'daily', 'label' => 'Daily'],
-                ['value' => 'hourly', 'label' => 'Hourly'],
-                ['value' => 'contractual', 'label' => 'Contractual'],
-                ['value' => 'project_based', 'label' => 'Project-Based'],
+            'employee' => [
+                'id' => $payrollInfo->id,
+                'employee_id' => $payrollInfo->employee_id,
+                'employee_name' => $payrollInfo->employee?->full_name ?? 'N/A',
+                'employee_number' => $payrollInfo->employee?->employee_number ?? 'N/A',
+                'salary_type' => $payrollInfo->salary_type,
+                'basic_salary' => $payrollInfo->basic_salary,
+                'daily_rate' => $payrollInfo->daily_rate,
+                'hourly_rate' => $payrollInfo->hourly_rate,
+                'payment_method' => $payrollInfo->payment_method,
+                'tax_status' => $payrollInfo->tax_status,
+                'rdo_code' => $payrollInfo->rdo_code,
+                'withholding_tax_exemption' => $payrollInfo->withholding_tax_exemption,
+                'is_tax_exempt' => $payrollInfo->is_tax_exempt,
+                'is_substituted_filing' => $payrollInfo->is_substituted_filing,
+                'sss_number' => $payrollInfo->sss_number,
+                'philhealth_number' => $payrollInfo->philhealth_number,
+                'pagibig_number' => $payrollInfo->pagibig_number,
+                'tin_number' => $payrollInfo->tin_number,
+                'sss_bracket' => $payrollInfo->sss_bracket,
+                'is_sss_voluntary' => $payrollInfo->is_sss_voluntary,
+                'philhealth_is_indigent' => $payrollInfo->philhealth_is_indigent,
+                'pagibig_employee_rate' => $payrollInfo->pagibig_employee_rate,
+                'bank_name' => $payrollInfo->bank_name,
+                'bank_code' => $payrollInfo->bank_code,
+                'bank_account_number' => $payrollInfo->bank_account_number,
+                'bank_account_name' => $payrollInfo->bank_account_name,
+                'is_entitled_to_rice' => $payrollInfo->is_entitled_to_rice,
+                'is_entitled_to_uniform' => $payrollInfo->is_entitled_to_uniform,
+                'is_entitled_to_laundry' => $payrollInfo->is_entitled_to_laundry,
+                'is_entitled_to_medical' => $payrollInfo->is_entitled_to_medical,
+                'effective_date' => $payrollInfo->effective_date,
             ],
-            'available_payment_methods' => [
-                ['value' => 'bank_transfer', 'label' => 'Bank Transfer'],
-                ['value' => 'cash', 'label' => 'Cash'],
-                ['value' => 'check', 'label' => 'Check'],
-            ],
-            'available_tax_statuses' => [
-                ['value' => 'Z', 'label' => 'Zero/Exempt (Z)'],
-                ['value' => 'S', 'label' => 'Single (S)'],
-                ['value' => 'ME', 'label' => 'Married Employee (ME)'],
-                ['value' => 'S1', 'label' => 'Single w/ 1 Dependent (S1)'],
-                ['value' => 'ME1', 'label' => 'Married w/ 1 Dependent (ME1)'],
-            ],
+            'available_salary_types' => $this->getSalaryTypes(),
+            'available_payment_methods' => $this->getPaymentMethods(),
+            'available_tax_statuses' => $this->getTaxStatuses(),
         ]);
     }
 
     /**
      * Update the specified employee payroll info in storage.
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, EmployeePayrollInfo $payrollInfo)
     {
-        // Mock implementation - just redirect back
-        return redirect()->route('payroll.employee-payroll-info.index')
-            ->with('success', 'Employee payroll information updated successfully.');
+        $validated = $request->validate([
+            'salary_type' => 'required|in:monthly,daily,hourly,contractual,project_based',
+            'basic_salary' => 'nullable|numeric|min:0',
+            'daily_rate' => 'nullable|numeric|min:0',
+            'hourly_rate' => 'nullable|numeric|min:0',
+            'payment_method' => 'required|in:bank_transfer,cash,check',
+            'tax_status' => 'required|in:Z,S,ME,S1,ME1,S2,ME2,S3,ME3,S4,ME4',
+            'rdo_code' => 'nullable|string|max:10',
+            'withholding_tax_exemption' => 'nullable|numeric|min:0',
+            'is_tax_exempt' => 'boolean',
+            'is_substituted_filing' => 'boolean',
+            'sss_number' => 'nullable|string|max:20',
+            'philhealth_number' => 'nullable|string|max:20',
+            'pagibig_number' => 'nullable|string|max:20',
+            'tin_number' => 'nullable|string|max:20',
+            'sss_bracket' => 'nullable|string|max:5',
+            'is_sss_voluntary' => 'boolean',
+            'philhealth_is_indigent' => 'boolean',
+            'pagibig_employee_rate' => 'nullable|numeric|in:1.00,2.00',
+            'bank_name' => 'nullable|string|max:100',
+            'bank_code' => 'nullable|string|max:10',
+            'bank_account_number' => 'nullable|string|max:20',
+            'bank_account_name' => 'nullable|string|max:100',
+            'is_entitled_to_rice' => 'boolean',
+            'is_entitled_to_uniform' => 'boolean',
+            'is_entitled_to_laundry' => 'boolean',
+            'is_entitled_to_medical' => 'boolean',
+        ]);
+
+        try {
+            $payrollInfo = $this->payrollInfoService->updatePayrollInfo(
+                $payrollInfo,
+                $validated,
+                auth()->user()
+            );
+
+            return redirect()
+                ->route('payroll.employee-payroll-info.show', $payrollInfo->id)
+                ->with('success', 'Employee payroll information updated successfully.');
+        } catch (\Exception $e) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => $e->getMessage()])
+                ->withInput();
+        }
     }
 
     /**
      * Remove the specified employee payroll info from storage.
      */
-    public function destroy($id)
+    public function destroy(EmployeePayrollInfo $payrollInfo)
     {
-        // Mock implementation - just redirect back
-        return redirect()->route('payroll.employee-payroll-info.index')
-            ->with('success', 'Employee payroll information deleted successfully.');
+        try {
+            $payrollInfo->delete();
+
+            return redirect()
+                ->route('payroll.employee-payroll-info.index')
+                ->with('success', 'Employee payroll information deleted successfully.');
+        } catch (\Exception $e) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => $e->getMessage()]);
+        }
     }
 
     /**
-     * Get mock employee payroll data
+     * Get available salary types
      */
-    private function getMockEmployeePayrollData()
+    private function getSalaryTypes()
     {
-        $now = date('Y-m-d');
         return [
-            [
-                'id' => 1,
-                'employee_id' => 1,
-                'employee_name' => 'Maria Santos',
-                'employee_number' => 'EMP001',
-                'department' => 'Operations',
-                'position' => 'Operations Manager',
-                'salary_type' => 'monthly',
-                'salary_type_label' => 'Monthly',
-                'basic_salary' => 45000.00,
-                'daily_rate' => null,
-                'hourly_rate' => null,
-                'payment_method' => 'bank_transfer',
-                'payment_method_label' => 'Bank Transfer',
-                'tax_status' => 'ME',
-                'tax_status_label' => 'Married Employee (ME)',
-                'rdo_code' => 'NCR-01',
-                'withholding_tax_exemption' => 0.00,
-                'is_tax_exempt' => false,
-                'is_substituted_filing' => false,
-                'sss_number' => '00-1234567-8',
-                'philhealth_number' => '00112233445566',
-                'pagibig_number' => '121912-012-3456789',
-                'tin_number' => '123-456-789-001',
-                'sss_bracket' => 'E4',
-                'is_sss_voluntary' => false,
-                'philhealth_is_indigent' => false,
-                'pagibig_employee_rate' => 1.00,
-                'bank_name' => 'BDO',
-                'bank_code' => '006',
-                'bank_account_number' => '0100123456789',
-                'bank_account_name' => 'Maria Santos',
-                'is_entitled_to_rice' => true,
-                'is_entitled_to_uniform' => true,
-                'is_entitled_to_laundry' => true,
-                'is_entitled_to_medical' => true,
-                'is_active' => true,
-                'status_label' => 'Active',
-                'effective_date' => '2024-01-01',
-                'end_date' => null,
-                'created_at' => '2024-01-01T08:00:00Z',
-                'updated_at' => '2024-01-01T08:00:00Z',
-            ],
-            [
-                'id' => 2,
-                'employee_id' => 2,
-                'employee_name' => 'Juan Dela Cruz',
-                'employee_number' => 'EMP002',
-                'department' => 'Finance',
-                'position' => 'Senior Accountant',
-                'salary_type' => 'monthly',
-                'salary_type_label' => 'Monthly',
-                'basic_salary' => 38000.00,
-                'daily_rate' => null,
-                'hourly_rate' => null,
-                'payment_method' => 'bank_transfer',
-                'payment_method_label' => 'Bank Transfer',
-                'tax_status' => 'S',
-                'tax_status_label' => 'Single (S)',
-                'rdo_code' => 'NCR-02',
-                'withholding_tax_exemption' => 0.00,
-                'is_tax_exempt' => false,
-                'is_substituted_filing' => false,
-                'sss_number' => '00-9876543-2',
-                'philhealth_number' => '00112233445567',
-                'pagibig_number' => '121912-012-3456790',
-                'tin_number' => '123-456-789-002',
-                'sss_bracket' => 'E3',
-                'is_sss_voluntary' => false,
-                'philhealth_is_indigent' => false,
-                'pagibig_employee_rate' => 1.00,
-                'bank_name' => 'Metrobank',
-                'bank_code' => '003',
-                'bank_account_number' => '1400123456789',
-                'bank_account_name' => 'Juan Dela Cruz',
-                'is_entitled_to_rice' => true,
-                'is_entitled_to_uniform' => true,
-                'is_entitled_to_laundry' => false,
-                'is_entitled_to_medical' => true,
-                'is_active' => true,
-                'status_label' => 'Active',
-                'effective_date' => '2023-06-15',
-                'end_date' => null,
-                'created_at' => '2023-06-15T08:00:00Z',
-                'updated_at' => '2024-11-01T08:00:00Z',
-            ],
-            [
-                'id' => 3,
-                'employee_id' => 3,
-                'employee_name' => 'Anna Garcia',
-                'employee_number' => 'EMP003',
-                'department' => 'Human Resources',
-                'position' => 'HR Specialist',
-                'salary_type' => 'monthly',
-                'salary_type_label' => 'Monthly',
-                'basic_salary' => 32000.00,
-                'daily_rate' => null,
-                'hourly_rate' => null,
-                'payment_method' => 'bank_transfer',
-                'payment_method_label' => 'Bank Transfer',
-                'tax_status' => 'S1',
-                'tax_status_label' => 'Single w/ 1 Dependent (S1)',
-                'rdo_code' => 'NCR-03',
-                'withholding_tax_exemption' => 125000.00,
-                'is_tax_exempt' => false,
-                'is_substituted_filing' => false,
-                'sss_number' => '00-5555555-5',
-                'philhealth_number' => '00112233445568',
-                'pagibig_number' => '121912-012-3456791',
-                'tin_number' => '123-456-789-003',
-                'sss_bracket' => 'E2',
-                'is_sss_voluntary' => false,
-                'philhealth_is_indigent' => false,
-                'pagibig_employee_rate' => 1.00,
-                'bank_name' => 'PNB',
-                'bank_code' => '002',
-                'bank_account_number' => '2100123456789',
-                'bank_account_name' => 'Anna Garcia',
-                'is_entitled_to_rice' => true,
-                'is_entitled_to_uniform' => true,
-                'is_entitled_to_laundry' => true,
-                'is_entitled_to_medical' => true,
-                'is_active' => true,
-                'status_label' => 'Active',
-                'effective_date' => '2023-03-01',
-                'end_date' => null,
-                'created_at' => '2023-03-01T08:00:00Z',
-                'updated_at' => '2024-10-15T08:00:00Z',
-            ],
-            [
-                'id' => 4,
-                'employee_id' => 4,
-                'employee_name' => 'Pedro Lopez',
-                'employee_number' => 'EMP004',
-                'department' => 'Operations',
-                'position' => 'Machine Operator',
-                'salary_type' => 'daily',
-                'salary_type_label' => 'Daily',
-                'basic_salary' => null,
-                'daily_rate' => 650.00,
-                'hourly_rate' => null,
-                'payment_method' => 'cash',
-                'payment_method_label' => 'Cash',
-                'tax_status' => 'S',
-                'tax_status_label' => 'Single (S)',
-                'rdo_code' => 'NCR-04',
-                'withholding_tax_exemption' => 0.00,
-                'is_tax_exempt' => true,
-                'is_substituted_filing' => false,
-                'sss_number' => '00-3333333-3',
-                'philhealth_number' => '00112233445569',
-                'pagibig_number' => '121912-012-3456792',
-                'tin_number' => null,
-                'sss_bracket' => 'E1',
-                'is_sss_voluntary' => false,
-                'philhealth_is_indigent' => true,
-                'pagibig_employee_rate' => 1.00,
-                'bank_name' => null,
-                'bank_code' => null,
-                'bank_account_number' => null,
-                'bank_account_name' => null,
-                'is_entitled_to_rice' => true,
-                'is_entitled_to_uniform' => true,
-                'is_entitled_to_laundry' => true,
-                'is_entitled_to_medical' => true,
-                'is_active' => true,
-                'status_label' => 'Active',
-                'effective_date' => '2022-08-10',
-                'end_date' => null,
-                'created_at' => '2022-08-10T08:00:00Z',
-                'updated_at' => '2024-09-20T08:00:00Z',
-            ],
-            [
-                'id' => 5,
-                'employee_id' => 5,
-                'employee_name' => 'Rosa Reyes',
-                'employee_number' => 'EMP005',
-                'department' => 'Information Technology',
-                'position' => 'IT Specialist',
-                'salary_type' => 'monthly',
-                'salary_type_label' => 'Monthly',
-                'basic_salary' => 55000.00,
-                'daily_rate' => null,
-                'hourly_rate' => null,
-                'payment_method' => 'bank_transfer',
-                'payment_method_label' => 'Bank Transfer',
-                'tax_status' => 'ME2',
-                'tax_status_label' => 'Married w/ 2 Dependents (ME2)',
-                'rdo_code' => 'NCR-05',
-                'withholding_tax_exemption' => 250000.00,
-                'is_tax_exempt' => false,
-                'is_substituted_filing' => true,
-                'sss_number' => '00-2222222-2',
-                'philhealth_number' => '00112233445570',
-                'pagibig_number' => '121912-012-3456793',
-                'tin_number' => '123-456-789-004',
-                'sss_bracket' => 'E4',
-                'is_sss_voluntary' => false,
-                'philhealth_is_indigent' => false,
-                'pagibig_employee_rate' => 2.00,
-                'bank_name' => 'DBP',
-                'bank_code' => '008',
-                'bank_account_number' => '0800123456789',
-                'bank_account_name' => 'Rosa Reyes',
-                'is_entitled_to_rice' => true,
-                'is_entitled_to_uniform' => false,
-                'is_entitled_to_laundry' => true,
-                'is_entitled_to_medical' => true,
-                'is_active' => true,
-                'status_label' => 'Active',
-                'effective_date' => '2023-01-01',
-                'end_date' => null,
-                'created_at' => '2023-01-01T08:00:00Z',
-                'updated_at' => '2024-11-10T08:00:00Z',
-            ],
-            [
-                'id' => 6,
-                'employee_id' => 6,
-                'employee_name' => 'Carlos Morales',
-                'employee_number' => 'EMP006',
-                'department' => 'Operations',
-                'position' => 'Quality Control Officer',
-                'salary_type' => 'hourly',
-                'salary_type_label' => 'Hourly',
-                'basic_salary' => null,
-                'daily_rate' => null,
-                'hourly_rate' => 250.00,
-                'payment_method' => 'bank_transfer',
-                'payment_method_label' => 'Bank Transfer',
-                'tax_status' => 'Z',
-                'tax_status_label' => 'Zero/Exempt (Z)',
-                'rdo_code' => null,
-                'withholding_tax_exemption' => 0.00,
-                'is_tax_exempt' => true,
-                'is_substituted_filing' => false,
-                'sss_number' => '00-1111111-1',
-                'philhealth_number' => '00112233445571',
-                'pagibig_number' => '121912-012-3456794',
-                'tin_number' => null,
-                'sss_bracket' => 'E2',
-                'is_sss_voluntary' => false,
-                'philhealth_is_indigent' => true,
-                'pagibig_employee_rate' => 1.00,
-                'bank_name' => 'BDO',
-                'bank_code' => '006',
-                'bank_account_number' => '0100123456790',
-                'bank_account_name' => 'Carlos Morales',
-                'is_entitled_to_rice' => true,
-                'is_entitled_to_uniform' => true,
-                'is_entitled_to_laundry' => false,
-                'is_entitled_to_medical' => false,
-                'is_active' => false,
-                'status_label' => 'Inactive',
-                'effective_date' => '2021-05-20',
-                'end_date' => '2024-10-31',
-                'created_at' => '2021-05-20T08:00:00Z',
-                'updated_at' => '2024-10-31T08:00:00Z',
-            ],
+            ['value' => 'monthly', 'label' => 'Monthly'],
+            ['value' => 'daily', 'label' => 'Daily'],
+            ['value' => 'hourly', 'label' => 'Hourly'],
+            ['value' => 'contractual', 'label' => 'Contractual'],
+            ['value' => 'project_based', 'label' => 'Project-Based'],
         ];
+    }
+
+    /**
+     * Get available payment methods
+     */
+    private function getPaymentMethods()
+    {
+        return [
+            ['value' => 'bank_transfer', 'label' => 'Bank Transfer'],
+            ['value' => 'cash', 'label' => 'Cash'],
+            ['value' => 'check', 'label' => 'Check'],
+        ];
+    }
+
+    /**
+     * Get available tax statuses
+     */
+    private function getTaxStatuses()
+    {
+        return [
+            ['value' => 'Z', 'label' => 'Zero/Exempt (Z)'],
+            ['value' => 'S', 'label' => 'Single (S)'],
+            ['value' => 'ME', 'label' => 'Married Employee (ME)'],
+            ['value' => 'S1', 'label' => 'Single w/ 1 Dependent (S1)'],
+            ['value' => 'ME1', 'label' => 'Married w/ 1 Dependent (ME1)'],
+            ['value' => 'S2', 'label' => 'Single w/ 2 Dependents (S2)'],
+            ['value' => 'ME2', 'label' => 'Married w/ 2 Dependents (ME2)'],
+            ['value' => 'S3', 'label' => 'Single w/ 3 Dependents (S3)'],
+            ['value' => 'ME3', 'label' => 'Married w/ 3 Dependents (ME3)'],
+            ['value' => 'S4', 'label' => 'Single w/ 4+ Dependents (S4)'],
+            ['value' => 'ME4', 'label' => 'Married w/ 4+ Dependents (ME4)'],
+        ];
+    }
+
+    /**
+     * Get salary type label
+     */
+    private function getSalaryTypeLabel($value)
+    {
+        $types = collect($this->getSalaryTypes())->keyBy('value');
+        return $types->get($value)?->label ?? $value;
+    }
+
+    /**
+     * Get payment method label
+     */
+    private function getPaymentMethodLabel($value)
+    {
+        $methods = collect($this->getPaymentMethods())->keyBy('value');
+        return $methods->get($value)?->label ?? $value;
+    }
+
+    /**
+     * Get tax status label
+     */
+    private function getTaxStatusLabel($value)
+    {
+        $statuses = collect($this->getTaxStatuses())->keyBy('value');
+        return $statuses->get($value)?->label ?? $value;
     }
 }

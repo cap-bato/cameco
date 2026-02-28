@@ -151,6 +151,56 @@ class Employee extends Model
         return $this->hasMany(RfidCardMapping::class);
     }
 
+    // ========== Payroll Module Relationships ==========
+
+    /**
+     * Get the current active payroll information for this employee
+     */
+    public function payrollInfo()
+    {
+        return $this->hasOne(EmployeePayrollInfo::class)->where('is_active', true);
+    }
+
+    /**
+     * Get all payroll information history for this employee
+     */
+    public function payrollHistory()
+    {
+        return $this->hasMany(EmployeePayrollInfo::class);
+    }
+
+    /**
+     * Get active salary component assignments for this employee
+     */
+    public function employeeSalaryComponents()
+    {
+        return $this->hasMany(EmployeeSalaryComponent::class);
+    }
+
+    /**
+     * Get all active allowances for this employee
+     */
+    public function allowances()
+    {
+        return $this->hasMany(EmployeeAllowance::class)->where('is_active', true);
+    }
+
+    /**
+     * Get all active deductions for this employee
+     */
+    public function deductions()
+    {
+        return $this->hasMany(EmployeeDeduction::class)->where('is_active', true);
+    }
+
+    /**
+     * Get all active loans for this employee
+     */
+    public function loans()
+    {
+        return $this->hasMany(EmployeeLoan::class)->where('status', 'active');
+    }
+
     /**
      * Scope a query to only include active employees.
      */
