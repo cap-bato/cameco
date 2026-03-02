@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
@@ -72,11 +72,11 @@ export default function CreateBadge({ employees, existingBadgeUids }: CreateBadg
                     success: true,
                     message: `Badge successfully issued to ${selectedEmployee?.name}`,
                     badgeData: {
-                        employeeName: selectedEmployee?.name,
-                        employeeId: selectedEmployee?.employee_id,
+                        employeeName: selectedEmployee?.name || '',
+                        employeeId: selectedEmployee?.employee_id || '',
                         cardUid: formData.card_uid,
                         cardType: formData.card_type,
-                        expiresAt: formData.expires_at,
+                        expiresAt: formData.expires_at || '',
                         issuedAt: new Date().toISOString(),
                     },
                 });
