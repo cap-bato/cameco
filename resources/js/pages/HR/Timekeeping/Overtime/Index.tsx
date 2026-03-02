@@ -9,8 +9,18 @@ import { OvertimeDetailModal } from '@/components/timekeeping/overtime-detail-mo
 import { OvertimeRecord, EmployeeBasic } from '@/types/timekeeping-pages';
 import { PermissionGate, usePermission } from '@/components/permission-gate';
 
+interface PaginatedResponse<T> {
+    data: T[];
+    current_page: number;
+    last_page: number;
+    total: number;
+    per_page: number;
+    links: any;
+    meta: any;
+}
+
 interface OvertimeRequestsIndexProps {
-    overtime: OvertimeRecord[];
+    overtime: PaginatedResponse<OvertimeRecord>;
     employees: EmployeeBasic[];
     summary: {
         total_records: number;
@@ -22,7 +32,7 @@ interface OvertimeRequestsIndexProps {
 }
 
 export default function OvertimeIndex() {
-    const { overtime = [], employees = [], summary } = usePage().props as unknown as OvertimeRequestsIndexProps;
+    const { overtime = { data: [] }, employees = [], summary } = usePage().props as unknown as OvertimeRequestsIndexProps;
     const { hasPermission } = usePermission();
 
     // Modal states
@@ -154,7 +164,7 @@ export default function OvertimeIndex() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {overtime.slice(0, 10).map((record) => (
+                                    {overtime.data.slice(0, 10).map((record) => (
                                         <tr key={record.id} className="border-b hover:bg-muted/50">
                                             <td className="py-3 px-4">{record.employee_name}</td>
                                             <td className="py-3 px-4">{record.overtime_date}</td>
