@@ -202,6 +202,22 @@ class Employee extends Model
     }
 
     /**
+     * Get all cash advances for this employee
+     */
+    public function cashAdvances()
+    {
+        return $this->hasMany(CashAdvance::class);
+    }
+
+    /**
+     * Get all active cash advances for this employee
+     */
+    public function activeCashAdvances()
+    {
+        return $this->cashAdvances()->where('deduction_status', 'active');
+    }
+
+    /**
      * Scope a query to only include active employees.
      */
     public function scopeActive($query)
