@@ -153,211 +153,6 @@ class RfidBadgeController extends Controller
     }
 
     /**
-     * Generate mock badge data for Phase 1
-     * TODO: Replace with real database queries in Phase 2
-     */
-    private function getMockBadges()
-    {
-        return [
-            [
-                'id' => '1',
-                'card_uid' => '04:3A:B2:C5:D8',
-                'employee_id' => 'EMP-2024-001',
-                'employee_name' => 'Juan Dela Cruz',
-                'employee_photo' => null,
-                'department' => 'Operations',
-                'position' => 'Warehouse Supervisor',
-                'card_type' => 'mifare',
-                'issued_at' => '2024-01-15 10:00:00',
-                'issued_by' => 'Maria Santos',
-                'expires_at' => '2026-01-15',
-                'is_active' => true,
-                'last_used_at' => now()->subHours(2)->toDateTimeString(),
-                'usage_count' => 1247,
-                'status' => 'active',
-                'deactivation_reason' => null,
-                'notes' => 'Initial issuance',
-            ],
-            [
-                'id' => '2',
-                'card_uid' => '04:3A:B2:C5:D9',
-                'employee_id' => 'EMP-2024-002',
-                'employee_name' => 'Pedro Garcia',
-                'employee_photo' => null,
-                'department' => 'Operations',
-                'position' => 'Forklift Operator',
-                'card_type' => 'mifare',
-                'issued_at' => '2024-02-01 09:30:00',
-                'issued_by' => 'Maria Santos',
-                'expires_at' => null,
-                'is_active' => true,
-                'last_used_at' => now()->subMinutes(45)->toDateTimeString(),
-                'usage_count' => 892,
-                'status' => 'active',
-                'deactivation_reason' => null,
-                'notes' => 'Standard badge',
-            ],
-            [
-                'id' => '3',
-                'card_uid' => '04:3A:B2:C5:E0',
-                'employee_id' => 'EMP-2024-003',
-                'employee_name' => 'Ana Rodriguez',
-                'employee_photo' => null,
-                'department' => 'Warehouse',
-                'position' => 'Inventory Manager',
-                'card_type' => 'desfire',
-                'issued_at' => '2024-01-20 11:00:00',
-                'issued_by' => 'Maria Santos',
-                'expires_at' => now()->addDays(25)->toDateString(),
-                'is_active' => true,
-                'last_used_at' => now()->subHours(1)->toDateTimeString(),
-                'usage_count' => 1543,
-                'status' => 'active',
-                'deactivation_reason' => null,
-                'notes' => 'DESFire upgrade',
-            ],
-            [
-                'id' => '4',
-                'card_uid' => '04:3A:B2:C5:E1',
-                'employee_id' => 'EMP-2024-004',
-                'employee_name' => 'Carlos Montoya',
-                'employee_photo' => null,
-                'department' => 'Operations',
-                'position' => 'Security Guard',
-                'card_type' => 'mifare',
-                'issued_at' => '2023-12-01 14:00:00',
-                'issued_by' => 'HR Admin',
-                'expires_at' => now()->subDays(5)->toDateString(),
-                'is_active' => false,
-                'last_used_at' => now()->subDays(8)->toDateTimeString(),
-                'usage_count' => 2156,
-                'status' => 'expired',
-                'deactivation_reason' => 'Badge expired automatically',
-                'notes' => 'Contract employee - ended',
-            ],
-            [
-                'id' => '5',
-                'card_uid' => '04:3A:B2:C5:E2',
-                'employee_id' => 'EMP-2024-005',
-                'employee_name' => 'Sofia Hernandez',
-                'employee_photo' => null,
-                'department' => 'Engineering',
-                'position' => 'Senior Engineer',
-                'card_type' => 'em4100',
-                'issued_at' => '2024-01-10 08:00:00',
-                'issued_by' => 'HR Manager',
-                'expires_at' => null,
-                'is_active' => false,
-                'last_used_at' => now()->subDays(15)->toDateTimeString(),
-                'usage_count' => 234,
-                'status' => 'lost',
-                'deactivation_reason' => 'Lost - reported Feb 10',
-                'notes' => 'Incident report #2024-0234',
-            ],
-            [
-                'id' => '6',
-                'card_uid' => '04:3A:B2:C5:E3',
-                'employee_id' => 'EMP-2024-006',
-                'employee_name' => 'Miguel Santos',
-                'employee_photo' => null,
-                'department' => 'Warehouse',
-                'position' => 'Warehouse Associate',
-                'card_type' => 'mifare',
-                'issued_at' => '2024-01-25 13:00:00',
-                'issued_by' => 'Maria Santos',
-                'expires_at' => null,
-                'is_active' => true,
-                'last_used_at' => now()->subDays(30)->toDateTimeString(),
-                'usage_count' => 45,
-                'status' => 'active',
-                'deactivation_reason' => null,
-                'notes' => 'Recently hired',
-            ],
-        ];
-    }
-
-    /**
-     * Filter badges based on request parameters
-     */
-    private function filterBadges($badges, Request $request)
-    {
-        $filtered = $badges;
-
-        // Search filter
-        if ($request->has('search') && $request->search) {
-            $search = strtolower($request->search);
-            $filtered = array_filter($filtered, function ($badge) use ($search) {
-                return strpos(strtolower($badge['employee_name']), $search) !== false ||
-                       strpos(strtolower($badge['employee_id']), $search) !== false ||
-                       strpos(strtolower($badge['card_uid']), $search) !== false;
-            });
-        }
-
-        // Status filter
-        if ($request->has('status') && $request->status) {
-            $status = $request->status;
-            $filtered = array_filter($filtered, function ($badge) use ($status) {
-                if ($status === 'active') return $badge['is_active'] && $badge['status'] === 'active';
-                if ($status === 'inactive') return !$badge['is_active'];
-                if ($status === 'expiring_soon') {
-                    if (!$badge['expires_at']) return false;
-                    $daysLeft = now()->diffInDays(new \DateTime($badge['expires_at']), false);
-                    return $daysLeft <= 30 && $daysLeft > 0;
-                }
-                return $badge['status'] === $status;
-            });
-        }
-
-        // Department filter
-        if ($request->has('department') && $request->department) {
-            $department = $request->department;
-            $filtered = array_filter($filtered, function ($badge) use ($department) {
-                return strtolower($badge['department']) === strtolower($department);
-            });
-        }
-
-        // Card type filter
-        if ($request->has('card_type') && $request->card_type) {
-            $cardType = $request->card_type;
-            $filtered = array_filter($filtered, function ($badge) use ($cardType) {
-                return $badge['card_type'] === $cardType;
-            });
-        }
-
-        return array_values($filtered);
-    }
-
-    /**
-     * Calculate badge statistics
-     * Subtask 1.1.2: Generate badge stats for dashboard
-     */
-    private function calculateBadgeStats($badges)
-    {
-        $total = count($badges);
-        $active = count(array_filter($badges, fn ($b) => $b['is_active'] && $b['status'] === 'active'));
-        $inactive = count(array_filter($badges, fn ($b) => !$b['is_active']));
-        
-        // Calculate expiring soon
-        $expiringSoon = count(array_filter($badges, function ($badge) {
-            if (!$badge['expires_at']) return false;
-            $daysLeft = now()->diffInDays(new \DateTime($badge['expires_at']), false);
-            return $daysLeft <= 30 && $daysLeft > 0;
-        }));
-
-        // Mock: employees without badges
-        // In Phase 2, query from employees table where no active badge exists
-        $employeesWithoutBadges = 5; // Mock value
-
-        return [
-            'total' => $total,
-            'active' => $active,
-            'inactive' => $inactive,
-            'expiring_soon' => $expiringSoon,
-            'employees_without_badges' => $employeesWithoutBadges,
-        ];
-    }
-
-    /**
      * Paginate badges array
      */
     private function paginateBadges($items, $page, $perPage)
@@ -882,30 +677,20 @@ class RfidBadgeController extends Controller
             $validationResults = [];
             $rowNumber = 1;
 
-            // Get existing badges for duplicate/active badge checks
-            $existingCardUids = collect($this->getMockBadges())
-                ->pluck('card_uid')
-                ->toArray();
+            // Get existing card UIDs from database (all active and inactive badges)
+            $existingCardUids = RfidCardMapping::pluck('card_uid')->toArray();
             
-            $activeEmployeeWithBadges = collect($this->getMockBadges())
-                ->where('is_active', true)
-                ->where('status', 'active')
+            // Get employees who already have active badges
+            $activeEmployeeWithBadges = RfidCardMapping::where('is_active', true)
                 ->pluck('employee_id')
                 ->toArray();
 
-            // Get mock employees for validation
-            $mockEmployees = [
-                ['id' => '1', 'employee_id' => 'EMP-2024-001', 'name' => 'Juan Dela Cruz', 'status' => 'active'],
-                ['id' => '2', 'employee_id' => 'EMP-2024-002', 'name' => 'Maria Santos', 'status' => 'active'],
-                ['id' => '3', 'employee_id' => 'EMP-2024-003', 'name' => 'Pedro Reyes', 'status' => 'active'],
-                ['id' => '4', 'employee_id' => 'EMP-2024-004', 'name' => 'Ana Lopez', 'status' => 'active'],
-                ['id' => '5', 'employee_id' => 'EMP-2024-005', 'name' => 'Carlos Morales', 'status' => 'active'],
-                ['id' => '6', 'employee_id' => 'EMP-2024-006', 'name' => 'Rosa Garcia', 'status' => 'active'],
-                ['id' => '7', 'employee_id' => 'EMP-2024-007', 'name' => 'Miguel Torres', 'status' => 'active'],
-                ['id' => '8', 'employee_id' => 'EMP-2024-008', 'name' => 'Sofia Ramirez', 'status' => 'active'],
-                ['id' => '9', 'employee_id' => 'EMP-2024-009', 'name' => 'Daniel Gutierrez', 'status' => 'active'],
-                ['id' => '10', 'employee_id' => 'EMP-2024-010', 'name' => 'Elena Castro', 'status' => 'active'],
-            ];
+            // Get all active employees for validation
+            // Keep as model instances to use accessors and relationships
+            $activeEmployees = Employee::where('status', 'active')
+                ->with('profile')
+                ->get()
+                ->keyBy('employee_number');
 
             // Validate each row
             foreach ($validated['rows'] as $row) {
@@ -923,21 +708,26 @@ class RfidBadgeController extends Controller
                 $errors = [];
                 $warnings = [];
 
-                // 1. Check if employee ID exists
-                $employee = collect($mockEmployees)
-                    ->firstWhere('employee_id', $row['employee_id'] ?? null);
+                // 1. Check if employee exists and is active
+                $employeeNumber = $row['employee_id'] ?? null;
+                $employee = $activeEmployees->get($employeeNumber);
                 
                 if (!$employee) {
                     $errors[] = [
                         'field' => 'employee_id',
-                        'message' => 'Employee not found in system',
+                        'message' => 'Employee not found or inactive in system',
                     ];
                 } else {
-                    $result['employee_name'] = $employee['name'] ?? '';
+                    $result['employee_name'] = $employee->full_name;
+                    
+                    // Check if employee already has active badge (warning only)
+                    if (in_array($employee->id, $activeEmployeeWithBadges)) {
+                        $warnings[] = 'Employee already has an active badge. This will be replaced.';
+                    }
                 }
 
-                // 2. Employee is active (assumed all mock employees are active)
-                // Already handled above
+                // 2. Employee is active (already filtered in database query)
+                // No additional check needed
 
                 // 3. Validate card UID format (XX:XX:XX:XX:XX)
                 $cardUid = $row['card_uid'] ?? '';
@@ -1003,11 +793,6 @@ class RfidBadgeController extends Controller
                             ];
                         }
                     }
-                }
-
-                // 8. Check if employee already has active badge (warning, not error)
-                if ($employee && in_array($employee['employee_id'], $activeEmployeeWithBadges)) {
-                    $warnings[] = 'Employee already has an active badge. This will be replaced.';
                 }
 
                 // Set status based on errors/warnings

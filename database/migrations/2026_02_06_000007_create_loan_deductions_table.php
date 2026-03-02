@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('loan_deductions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('employee_loan_id')->constrained('employee_loans')->onDelete('cascade');
-            $table->foreignId('payroll_calculation_id')->nullable()->constrained('payroll_calculations')->onDelete('set null');
+            $table->foreignId('payroll_calculation_id')->nullable()->constrained('employee_payroll_calculations')->onDelete('set null');
             
             // Installment Information
             $table->integer('installment_number'); // Which installment (1st, 2nd, etc.)

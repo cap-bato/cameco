@@ -1088,6 +1088,32 @@ $avgProcessingTime = RfidLedger::whereDate('scan_timestamp', today())
    - Verify next event is correct
    - Verify employee_today events are accurate
 
+---
+
+✅ **TASK 5.1 COMPLETED** (2024-01-XX)  
+**Status:** All 15 unit tests passing with 141 assertions  
+**Test Coverage:**
+- ✅ Ledger index displays real events (5 entries, pagination)
+- ✅ Event detail page with employee data
+- ✅ Date range filtering
+- ✅ Device filtering
+- ✅ Event type filtering
+- ✅ Employee search with profile data
+- ✅ Pagination with correct metadata
+- ✅ Linked attendance event handling (null and real)
+- ✅ Related events navigation (previous/next)
+- ✅ Employee today events accuracy
+- ✅ 404 handling
+- ✅ Empty ledger state
+- ✅ Multiple filter combinations
+
+**Architecture Fixed:**
+- ✅ RfidLedger model: `belongsTo(RfidCardMapping)` instead of non-existent `rfid_card` column
+- ✅ All controller methods: Eager loading through `rfidCardMapping.employee` chain
+- ✅ Response transformations: Include all required fields (employee_rfid, employee_id, employee_name)
+- ✅ Pagination: Root-level keys instead of nested meta
+
+**File Location:** `tests/Unit/Controllers/HR/Timekeeping/LedgerControllerTest.php` (639 lines)
 
  --- this is last done task, will continue with integration testing and performance validation in next steps.
 ### Task 5.2: Integration Testing

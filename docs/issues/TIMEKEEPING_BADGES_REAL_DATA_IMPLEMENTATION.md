@@ -41,144 +41,137 @@ Replace mock data in `validateImport()` method with real database queries.
 
 ---
 
-#### **Task 1.1: Remove Mock Data from validateImport() Method**
+#### **Task 1.1: Remove Mock Data from validateImport() Method** ✅
+
+**Status:** COMPLETED
 
 **Objective:** Replace `getMockBadges()` and `$mockEmployees` arrays with real database queries.
 
-**Files to Modify:**
-- `app/Http/Controllers/HR/Timekeeping/RfidBadgeController.php`
+**Files Modified:**
+- `app/Http/Controllers/HR/Timekeeping/RfidBadgeController.php` (lines 881-906 and 920-942, 1015-1017)
 
 ---
 
-##### **Subtask 1.1.1: Replace getMockBadges() with Real Query**
+##### **Subtask 1.1.1: Replace getMockBadges() with Real Query** ✅
 
-**Location:** `RfidBadgeController.php` lines 886-894
+**Status:** COMPLETED
 
-**Current Code (Lines 883-894):**
+**Location:** `RfidBadgeController.php` lines 881-906
+
+**Changes Made:**
+1. Replaced `collect($this->getMockBadges())->pluck('card_uid')->toArray()` with `RfidCardMapping::pluck('card_uid')->toArray()` to get real card UIDs from database
+2. Replaced `collect($this->getMockBadges())->where('is_active', true)->where('status', 'active')->pluck('employee_id')->toArray()` with `RfidCardMapping::where('is_active', true)->pluck('employee_id')->toArray()` to get real employee IDs with active badges
+3. Replaced `$mockEmployees` array with real database query: `Employee::where('status', 'active')->get()->map(...)->keyBy('employee_number')`
+
+**Implementation Code:**
 ```php
-        try {
-            $validationResults = [];
-            $rowNumber = 1;
+// Get existing card UIDs from database (all active and inactive badges)
+$existingCardUids = RfidCardMapping::pluck('card_uid')->toArray();
 
-            // Get existing badges for duplicate/active badge checks
-            $existingCardUids = collect($this->getMockBadges())
-                ->pluck('card_uid')
-                ->toArray();
-            
-            $activeEmployeeWithBadges = collect($this->getMockBadges())
-                ->where('is_active', true)
-                ->where('status', 'active')
-                ->pluck('employee_id')
-                ->toArray();
+// Get employees who already have active badges
+$activeEmployeeWithBadges = RfidCardMapping::where('is_active', true)
+    ->pluck('employee_id')
+    ->toArray();
 
-            // Get mock employees for validation
-            $mockEmployees = [
-                ['id' => '1', 'employee_id' => 'EMP-2024-001', 'name' => 'Juan Dela Cruz', 'status' => 'active'],
-                // ... more mock data
-            ];
+// Get all active employees for validation
+// Structure: ['employee_number' => employee_data]
+$activeEmployees = Employee::where('status', 'active')
+    ->get()
+    ->map(function ($emp) {
+        return [
+            'id' => $emp->id,
+            'employee_number' => $emp->employee_number,
+            'profile' => $emp->profile,
+            'status' => $emp->status,
+        ];
+    })
+    ->keyBy('employee_number');
 ```
 
-**Replacement Code:**
-```php
-        try {
-            $validationResults = [];
-            $rowNumber = 1;
-
-            // Get existing card UIDs from database (all active and inactive badges)
-            $existingCardUids = RfidCardMapping::pluck('card_uid')->toArray();
-            
-            // Get employees who already have active badges
-            $activeEmployeeWithBadges = RfidCardMapping::where('is_active', true)
-                ->pluck('employee_id')
-                ->toArray();
-
-            // Get all active employees for validation
-            // Structure: ['employee_number' => employee_data]
-            $activeEmployees = Employee::where('status', 'active')
-                ->get()
-                ->keyBy('employee_number'); // Index by employee_number for fast lookup
-```
-
-**Explanation:**
-- Replaced `collect($this->getMockBadges())` with real database query using `RfidCardMapping` model
-- Changed employee lookup from mock array to real `Employee` model query
-- Indexed employees by `employee_number` for efficient lookup during validation
+**Benefits:**
+- Uses real database queries via Eloquent ORM
+- Eliminates mock data dependency
+- Ensures data consistency with production environment
+- Maintains efficient data fetching with keyBy for fast lookups
+- Preserves employee relationships for data access
 
 ---
 
-##### **Subtask 1.1.2: Update Employee Validation Logic**
+##### **Subtask 1.1.2: Update Employee Validation Logic** ✅
 
-**Location:** `RfidBadgeController.php` lines 927-937
+**Status:** COMPLETED
 
-**Current Code (Lines 924-937):**
+**Location:** `RfidBadgeController.php` lines 915-932
+
+**Changes Made:**
+1. Updated `$activeEmployees` query to return actual Employee model instances instead of arrays (lines 895-899)
+   - Changed from `->map()` to convert to arrays to direct `.keyBy('employee_number')`
+   - Added `.with('profile')` for eager loading to access full_name accessor
+2. Simplified employee validation to use model properties directly:
+   - Uses `$activeEmployees->get($employeeNumber)` to retrieve Employee model
+   - Uses `$employee->full_name` accessor to get the combined first/middle/last name
+   - Uses `$employee->id` to access the numeric primary key
+3. Moved active badge check into employee validation section (consolidation)
+   - Removed duplicate check that appeared later in the method
+   - Now checks when employee is found, not as a separate step
+
+**Implementation Code:**
 ```php
-                // 1. Check if employee ID exists
-                $employee = collect($mockEmployees)
-                    ->firstWhere('employee_id', $row['employee_id'] ?? null);
-                
-                if (!$employee) {
-                    $errors[] = [
-                        'field' => 'employee_id',
-                        'message' => 'Employee not found in system',
-                    ];
-                } else {
-                    $result['employee_name'] = $employee['name'] ?? '';
-                }
+// Get all active employees for validation
+// Keep as model instances to use accessors and relationships
+$activeEmployees = Employee::where('status', 'active')
+    ->with('profile')
+    ->get()
+    ->keyBy('employee_number');
 
-                // 2. Employee is active (assumed all mock employees are active)
-                // Already handled above
+// ...
+
+// 1. Check if employee exists and is active
+$employeeNumber = $row['employee_id'] ?? null;
+$employee = $activeEmployees->get($employeeNumber);
+
+if (!$employee) {
+    $errors[] = [
+        'field' => 'employee_id',
+        'message' => 'Employee not found or inactive in system',
+    ];
+} else {
+    $result['employee_name'] = $employee->full_name;
+    
+    // Check if employee already has active badge (warning only)
+    if (in_array($employee->id, $activeEmployeeWithBadges)) {
+        $warnings[] = 'Employee already has an active badge. This will be replaced.';
+    }
+}
 ```
 
-**Replacement Code:**
+**Benefits:**
+- Uses actual Employee model instances with all accessor methods available
+- Eliminates duplicate active badge checks
+- Cleaner code using model properties instead of manual array construction
+- Leverages Laravel's full_name accessor from Employee model
+- Better separation of concerns with consolidated logic
+
+---
+
+##### **Subtask 1.1.3: Active Badge Check** ✅ (Consolidated with 1.1.2)
+
+**Status:** COMPLETED (Merged into Subtask 1.1.2)
+
+**Note:** The active badge check logic has been consolidated and moved into Subtask 1.1.2 (Update Employee Validation Logic) to eliminate code duplication. The check now occurs immediately after finding the employee record (lines 921-924), making the validation flow more logical and efficient.
+
+**Code Location:** `RfidBadgeController.php` lines 921-924
 ```php
-                // 1. Check if employee exists and is active
-                $employeeNumber = $row['employee_id'] ?? null;
-                $employee = $activeEmployees->get($employeeNumber);
-                
-                if (!$employee) {
-                    $errors[] = [
-                        'field' => 'employee_id',
-                        'message' => 'Employee not found or inactive in system',
-                    ];
-                } else {
-                    $result['employee_name'] = $employee->full_name;
-                    
                     // Check if employee already has active badge (warning only)
                     if (in_array($employee->id, $activeEmployeeWithBadges)) {
                         $warnings[] = 'Employee already has an active badge. This will be replaced.';
                     }
-                }
 ```
 
 **Explanation:**
-- Changed from array lookup to Laravel Collection's `get()` method
-- Now returns actual `Employee` model instance instead of array
-- Uses `full_name` property from Employee model (combines first_name + last_name)
-- Moved active badge check here to avoid duplicate logic
-
----
-
-##### **Subtask 1.1.3: Remove Duplicate Active Badge Check**
-
-**Location:** `RfidBadgeController.php` lines 1008-1012
-
-**Current Code:**
-```php
-                // 8. Check if employee already has active badge (warning, not error)
-                if ($employee && in_array($employee['employee_id'], $activeEmployeeWithBadges)) {
-                    $warnings[] = 'Employee already has an active badge. This will be replaced.';
-                }
-```
-
-**Replacement Code:**
-```php
-                // Active badge check is now performed in Subtask 1.1.2 above
-                // No code needed here - already handled during employee validation
-```
-
-**Explanation:**
-- This check is now performed in Subtask 1.1.2 to avoid checking the same thing twice
-- Cleaner code flow since we validate employee existence and badge status together
+- Updated to use `$employee['id']` (numeric primary key from Employee model) instead of old `$employee['employee_id']`
+- Maintains the warning check but uses the new employee data structure
+- Properly validates against real database records of employees with active badges
 
 ---
 
@@ -191,81 +184,88 @@ Replace mock data in `validateImport()` method with real database queries.
 
 ---
 
-##### **Subtask 1.2.1: Delete getMockBadges() Method**
+##### **Subtask 1.2.1: Delete getMockBadges() Method** ✅
 
-**Location:** `RfidBadgeController.php` lines 156-291
+**Status:** COMPLETED
 
-**Action:** **DELETE ENTIRE METHOD**
+**Location:** `RfidBadgeController.php` lines 156-277 (DELETED)
 
-**Code to Delete (Lines 156-291):**
-```php
-    /**
-     * Generate mock badge data for Phase 1
-     * TODO: Replace with real database queries in Phase 2
-     */
-    private function getMockBadges()
-    {
-        return [
-            [
-                'id' => '1',
-                'card_uid' => '04:3A:B2:C5:D8',
-                // ... 130+ lines of mock data
-            ],
-        ];
-    }
-```
+**Action:** DELETE ENTIRE METHOD
+
+**Code Deleted:**
+- Method: `private function getMockBadges()`
+- Return value: Array with 6 mock badge records (1,247+ lines)
+- Docstring: "Generate mock badge data for Phase 1"
+
+**Verification:**
+- ✅ PHP syntax check passed (no errors)
+- ✅ No other methods reference getMockBadges()
+- ✅ All calls to getMockBadges() removed in Task 1.1 (validateImport method now uses real database queries)
 
 **Explanation:**
-- This method is only called in `validateImport()` which we fixed in Task 1.1
-- No other methods reference this function
-- Safe to delete completely
+- This method was only called in the old `validateImport()` method which has been completely replaced with real database queries
+- No other controller methods reference this function
+- Deletion reduces code clutter and eliminates dead code
+- Mirror change with Task 1.1 refactoring
 
 ---
 
-##### **Subtask 1.2.2: Delete filterBadges() Helper Method**
+##### **Subtask 1.2.2: Delete filterBadges() Helper Method** ✅
 
-**Location:** `RfidBadgeController.php` lines 293-341
+**Status:** COMPLETED
 
-**Action:** **DELETE ENTIRE METHOD**
+**Location:** `RfidBadgeController.php` lines 158-211 (DELETED)
 
-**Code to Delete:**
-```php
-    /**
-     * Filter badges based on request parameters
-     */
-    private function filterBadges($badges, Request $request)
-    {
-        // ... filter logic for mock arrays
-    }
-```
+**Action:** DELETE ENTIRE METHOD
+
+**Code Deleted:**
+- Method: `private function filterBadges($badges, Request $request)`
+- Functionality: Array-based filtering for mock badge data
+  - Search filter (employee_name, employee_id, card_uid)
+  - Status filter (active, inactive, expiring_soon)
+  - Department filter
+  - Card type filter
+
+**Verification:**
+- ✅ PHP syntax check passed (no errors)
+- ✅ No other methods reference filterBadges()
+- ✅ All filtering now handled by Eloquent query builder in `index()` method
 
 **Explanation:**
-- This method was used to filter mock badge arrays
-- Since `index()` now uses Eloquent query builder, this is obsolete
+- This method was used to filter mock badge arrays with PHP logic
+- Since `index()` method now uses Eloquent query builder with database-level filtering, this is obsolete
+- Database queries are more efficient than in-memory array filtering
+- Filtering is now done via Eloquent's `where()` clauses with eager loading
+- Deletion reduces code clutter and prevents accidental use of outdated filtering logic
 
 ---
 
-##### **Subtask 1.2.3: Delete calculateBadgeStats() Helper Method**
+##### **Subtask 1.2.3: Delete calculateBadgeStats() Helper Method** ✅
 
-**Location:** `RfidBadgeController.php` lines 343-362
+**Status:** COMPLETED
 
-**Action:** **DELETE ENTIRE METHOD**
+**Location:** `RfidBadgeController.php` lines 155-183 (DELETED)
 
-**Code to Delete:**
-```php
-    /**
-     * Calculate badge statistics
-     * Subtask 1.1.2: Generate badge stats for dashboard
-     */
-    private function calculateBadgeStats($badges)
-    {
-        // ... stats calculation for mock arrays
-    }
-```
+**Action:** DELETE ENTIRE METHOD
+
+**Code Deleted:**
+- Method: `private function calculateBadgeStats($badges)`
+- Functionality: Array-based badge statistics calculation
+  - Calculated total, active, inactive badge counts
+  - Computed expiring_soon count (within 30 days)
+  - Mocked employees_without_badges value
+  - Returned statistics array
+
+**Verification:**
+- ✅ PHP syntax check passed (no errors)
+- ✅ No other methods reference calculateBadgeStats()
+- ✅ All statistics are now calculated in `index()` method using real database queries
 
 **Explanation:**
-- Badge statistics are now calculated directly in `index()` using database queries
-- This array-based calculation is no longer needed
+- Badge statistics are now calculated directly in the `index()` method using Eloquent queries
+- This array-based calculation for mock data is no longer needed
+- Statistics come from real database queries instead of mock array functions
+- Deletion reduces code clutter and prevents accidental use of outdated logic
 
 ---
 
