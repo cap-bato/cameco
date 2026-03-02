@@ -80,9 +80,11 @@ interface BadgesIndexProps {
         department?: string;
         card_type?: string;
     };
+    employees: Employee[];
+    employeesWithoutBadges: Employee[];
 }
 
-export default function BadgesIndex({ badges, stats, filters }: BadgesIndexProps) {
+export default function BadgesIndex({ badges, stats, filters, employees, employeesWithoutBadges }: BadgesIndexProps) {
     // Defensive: ensure badges has expected structure
     const safeBadges = badges || { data: [], current_page: 1, last_page: 1, total: 0, per_page: 10 };
     const safeStats = stats || { total: 0, active: 0, inactive: 0, expiring_soon: 0, expiringSoon: 0, employees_without_badges: 0, employeesWithoutBadges: 0 };
@@ -422,36 +424,4 @@ export default function BadgesIndex({ badges, stats, filters }: BadgesIndexProps
             />
         </AppLayout>
     );
-}
-
-// Mock employees for report (includes those with and without badges)
-function getMockEmployees(): Employee[] {
-    return [
-        { id: '1', name: 'Juan Dela Cruz', employee_id: 'EMP-2024-001', department: 'IT', position: 'Software Engineer', hire_date: '2023-01-15' },
-        { id: '2', name: 'Maria Santos', employee_id: 'EMP-2024-002', department: 'HR', position: 'HR Manager', hire_date: '2023-02-20' },
-        { id: '3', name: 'Pedro Reyes', employee_id: 'EMP-2024-003', department: 'Operations', position: 'Operations Supervisor', hire_date: '2023-03-10' },
-        { id: '4', name: 'Ana Lopez', employee_id: 'EMP-2024-004', department: 'Finance', position: 'Finance Officer', hire_date: '2023-04-05' },
-        { id: '5', name: 'Carlos Morales', employee_id: 'EMP-2024-005', department: 'IT', position: 'IT Support', hire_date: '2023-05-12' },
-        { id: '6', name: 'Rosa Garcia', employee_id: 'EMP-2024-006', department: 'HR', position: 'HR Specialist', hire_date: '2023-06-18' },
-        { id: '7', name: 'Miguel Torres', employee_id: 'EMP-2024-007', department: 'Operations', position: 'Operations Manager', hire_date: '2023-07-22' },
-        { id: '8', name: 'Sofia Ramirez', employee_id: 'EMP-2024-008', department: 'Finance', position: 'Senior Accountant', hire_date: '2023-08-30' },
-        { id: '9', name: 'Daniel Gutierrez', employee_id: 'EMP-2024-009', department: 'IT', position: 'DevOps Engineer', hire_date: '2023-09-14' },
-        { id: '10', name: 'Elena Castro', employee_id: 'EMP-2024-010', department: 'HR', position: 'Recruitment Lead', hire_date: '2023-10-25' },
-    ];
-}
-
-// Mock employees without badges for Task 1.8
-function getMockEmployeesWithoutBadges(): Employee[] {
-    return [
-        { id: '11', name: 'Lucia Fernandez', employee_id: 'EMP-2024-011', department: 'Operations', position: 'Logistics Manager', hire_date: '2024-02-01', photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Lucia' },
-        { id: '12', name: 'Ricardo Santos', employee_id: 'EMP-2024-012', department: 'IT', position: 'Systems Administrator', hire_date: '2024-01-20', photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ricardo' },
-        { id: '13', name: 'Patricia Reyes', employee_id: 'EMP-2024-013', department: 'HR', position: 'Recruitment Specialist', hire_date: '2024-01-10', photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Patricia' },
-        { id: '14', name: 'Marcos Gutierrez', employee_id: 'EMP-2024-014', department: 'Finance', position: 'Accountant', hire_date: '2023-12-15', photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Marcos' },
-        { id: '15', name: 'Daniela Torres', employee_id: 'EMP-2024-015', department: 'Operations', position: 'Operations Coordinator', hire_date: '2023-12-01', photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Daniela' },
-        { id: '16', name: 'Roberto Morales', employee_id: 'EMP-2024-016', department: 'IT', position: 'Database Administrator', hire_date: '2023-11-20', photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Roberto' },
-        { id: '17', name: 'Valentina Castro', employee_id: 'EMP-2024-017', department: 'HR', position: 'Training Coordinator', hire_date: '2023-11-10', photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Valentina' },
-        { id: '18', name: 'Alejandro Lopez', employee_id: 'EMP-2024-018', department: 'Finance', position: 'Financial Analyst', hire_date: '2023-10-15', photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alejandro' },
-        { id: '19', name: 'Camila Ramirez', employee_id: 'EMP-2024-019', department: 'Operations', position: 'Warehouse Associate', hire_date: '2023-10-01', photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Camila' },
-        { id: '20', name: 'Felipe Santos', employee_id: 'EMP-2024-020', department: 'IT', position: 'Help Desk Support', hire_date: '2023-09-25', photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felipe' },
-    ];
 }

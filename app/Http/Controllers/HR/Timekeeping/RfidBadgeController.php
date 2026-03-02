@@ -102,10 +102,44 @@ class RfidBadgeController extends Controller
                 'employeesWithoutBadges' => $employeesWithoutBadges, // camelCase for frontend
             ];
 
+            // Get all active employees
+            $allActiveEmployees = Employee::where('status', 'active')
+                ->with(['department', 'rfidCardMappings' => fn($q) => $q->where('is_active', true)])
+                ->orderBy('first_name')
+                ->orderBy('last_name')
+                ->get()
+                ->map(fn($emp) => [
+                    'id' => $emp->id,
+                    'name' => $emp->full_name,
+                    'employee_id' => $emp->employee_number,
+                    'department' => $emp->department?->name ?? 'N/A',
+                    'position' => $emp->position,
+                    'hire_date' => $emp->hire_date?->format('Y-m-d'),
+                    'photo' => $emp->photo_url,
+                ]);
+
+            // Get employees without active badges
+            $employeesWithoutActiveBadges = Employee::where('status', 'active')
+                ->whereDoesntHave('rfidCardMappings', fn($q) => $q->where('is_active', true))
+                ->orderBy('first_name')
+                ->orderBy('last_name')
+                ->get()
+                ->map(fn($emp) => [
+                    'id' => $emp->id,
+                    'name' => $emp->full_name,
+                    'employee_id' => $emp->employee_number,
+                    'department' => $emp->department?->name ?? 'N/A',
+                    'position' => $emp->position,
+                    'hire_date' => $emp->hire_date?->format('Y-m-d'),
+                    'photo' => $emp->photo_url,
+                ]);
+
             return Inertia::render('HR/Timekeeping/Badges/Index', [
                 'badges' => $badges,
                 'stats' => $stats,
                 'filters' => $request->only(['search', 'status', 'department', 'card_type']),
+                'employees' => $allActiveEmployees,
+                'employeesWithoutBadges' => $employeesWithoutActiveBadges,
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to fetch badges', [
