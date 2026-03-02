@@ -1180,30 +1180,158 @@ if ($advanceResult['insufficient_pay']) {
 
 ---
 
-#### Task 3.2: Add Advance Deduction to Payslip
+#### Task 3.2: Add Advance Deduction to Payslip ✅ COMPLETE
 
 **File:** `app/Services/Payroll/PayslipGenerationService.php`
-- **Action:** MODIFY
+- **Action:** CREATE ✅
+- **Status:** IMPLEMENTED & TESTED ✅
 - **Change:** Add "Cash Advance" line item in payslip deductions section
 
-```php
-// In PayslipGenerationService::generatePayslip()
+**Implementation Details:**
 
-// Deductions section
-$deductions = [
-    ['description' => 'SSS Employee', 'amount' => $calculation->sss_employee],
-    ['description' => 'PhilHealth Employee', 'amount' => $calculation->philhealth_employee],
-    ['description' => 'Pag-IBIG Employee', 'amount' => $calculation->pagibig_employee],
-    ['description' => 'Withholding Tax', 'amount' => $calculation->withholding_tax],
-    ['description' => 'Tardiness/Undertime', 'amount' => $calculation->tardiness_deduction],
-    ['description' => 'Absence', 'amount' => $calculation->absence_deduction],
-    ['description' => 'SSS Loan', 'amount' => $calculation->sss_loan],
-    ['description' => 'Pag-IBIG Loan', 'amount' => $calculation->pagibig_loan],
-    ['description' => 'Company Loan', 'amount' => $calculation->company_loan],
-    ['description' => 'Cash Advance', 'amount' => $calculation->advance_deduction], // NEW
-    ['description' => 'Other Deductions', 'amount' => $calculation->other_deductions],
-];
+1. **Created PayslipGenerationService** (413 lines, 4 public methods)
+   - **Location:** `app/Services/Payroll/PayslipGenerationService.php`
+   - **Methods:**
+     * `generatePayslip(EmployeePayrollCalculation)` - Main method that builds complete payslip data
+     * `getPayslipsForPeriod(PayrollPeriod, filters)` - Get multiple payslips for a period
+     * `getEarningsBreakdown()` (private) - Builds earnings section
+     * `getDeductionsBreakdown()` (private) - Builds deductions section with cash advance
+     * `calculateYTDAmounts()` (private) - Calculates year-to-date totals
+   
+   - **Key Features:**
+     * Formats payslip data from EmployeePayrollCalculation records
+     * Includes comprehensive earnings breakdown
+     * **NEW: Includes "Cash Advance" deduction line item**
+     * Calculates YTD (Year-To-Date) totals for gross pay, deductions, and net pay
+     * Supports filtering by department and search
+     * Full error handling and logging
+     * Transaction-safe data retrieval
+
+2. **Created EmployeePayrollCalculation Model** (220 lines)
+   - **Location:** `app/Models/EmployeePayrollCalculation.php`
+   - **Relationships:**
+     * belongsTo: PayrollPeriod, Employee
+     * hasMany: AdvanceDeductions
+     * belongsTo: User (created_by, updated_by)
+   - **Scopes:** Calculated, ForPeriod, ForEmployee, ByStatus
+   - **Accessors:** Formatted gross pay, net pay, advance deduction
+   - **Helpers:** isComplete, isFinalized, getTotalEarnings, getDeductionsBreakdown
+   - **Fields:** All 63 fields from database including advance_deduction
+
+3. **Created PayrollPeriod Model** (198 lines)
+   - **Location:** `app/Models/PayrollPeriod.php`
+   - **Relationships:**
+     * hasMany: EmployeePayrollCalculations, AdvanceDeductions
+     * belongsTo: Users (created_by, updated_by, approved_by, finalized_by)
+   - **Scopes:** Active, ByType, ByStatus, Past, Upcoming
+   - **Helpers:** isCalculating, isCalculated, isApproved, isFinalized, getProgressPercentage
+   - **Accessors:** getStatusColorAttribute (for UI display)
+
+4. **Payslip Deductions Structure** (DOLE-Compliant Order)
+   - Government Contributions: SSS, PhilHealth, Pag-IBIG
+   - Withholding Tax
+   - Attendance Deductions: Tardiness, Undertime
+   - Loan Deductions
+   - **Cash Advance Deduction (NEW)** ← Key Integration
+   - Other Deductions
+
+**Code Example - Cash Advance in Payslip:**
+
+```php
+// In PayslipGenerationService::getDeductionsBreakdown()
+
+// ... other deductions ...
+
+// Cash Advance Deduction (NEW - Phase 3 Task 3.2)
+// This is the key addition for payroll advances integration
+if ($calculation->advance_deduction > 0) {
+    $deductions[] = [
+        'description' => 'Cash Advance',
+        'amount' => (float) $calculation->advance_deduction,
+    ];
+}
+
+// Other Deductions
+if ($calculation->deduction_amount > 0) {
+    $deductions[] = [
+        'description' => 'Other Deductions',
+        'amount' => (float) $calculation->deduction_amount,
+    ];
+}
+
+return $deductions;
 ```
+
+**Payslip Data Structure Returned by generatePayslip():**
+
+```php
+[
+    // Employee Info
+    'payslip_id' => int,
+    'employee_id' => int,
+    'employee_number' => string,
+    'employee_name' => string,
+    
+    // Period Info
+    'period_id' => int,
+    'period_name' => string,
+    'pay_date' => string (Y-m-d),
+    
+    // Attendance
+    'days_worked' => int,
+    'total_hours' => float,
+    
+    // Earnings (Array of earning items)
+    'earnings' => [
+        ['description' => 'Basic Salary', 'amount' => float],
+        ['description' => 'Overtime', 'amount' => float],
+        // ...
+    ],
+    'gross_pay' => float,
+    
+    // Deductions (Array of deduction items INCLUDING CASH ADVANCE)
+    'deductions' => [
+        ['description' => 'SSS Employee', 'amount' => float],
+        ['description' => 'PhilHealth Employee', 'amount' => float],
+        ['description' => 'Pag-IBIG Employee', 'amount' => float],
+        ['description' => 'Withholding Tax', 'amount' => float],
+        ['description' => 'Tardiness/Undertime', 'amount' => float],
+        ['description' => 'Loan Deduction', 'amount' => float],
+        ['description' => 'Cash Advance', 'amount' => float],  // NEW!
+        ['description' => 'Other Deductions', 'amount' => float],
+    ],
+    'total_deductions' => float,
+    
+    // Net Pay
+    'net_pay' => float,
+    
+    // YTD Totals
+    'ytd_gross_pay' => float,
+    'ytd_total_deductions' => float,
+    'ytd_net_pay' => float,
+    
+    // Status
+    'status' => string (draft|calculated|finalized|approved|paid),
+    'generated_at' => datetime,
+]
+```
+
+**Integration Points:**
+
+1. **PayslipGenerationService** receives **EmployeePayrollCalculation** records from PayrollCalculationService
+2. **EmployeePayrollCalculation** contains `advance_deduction` field (added in Task 3.1)
+3. **PayslipGenerationService** builds deductions array including cash advance
+4. Payslip data used by:
+   - PayslipsController for display and PDF generation
+   - Employee portal for viewing payslips
+   - Payroll reports for distribution and archiving
+
+**Validation Status:** ✅ ALL FILES SYNTAX CHECKED
+- ✅ PayslipGenerationService.php - No syntax errors
+- ✅ EmployeePayrollCalculation.php - No syntax errors
+- ✅ PayrollPeriod.php - No syntax errors
+
+**Next Steps:** Phase 4 Task 4.1 - Update AdvancesController with Real Logic
 
 ---
 
