@@ -2528,6 +2528,7 @@ export interface CashAdvanceApprovalData {
     deduction_schedule: 'single_period' | 'installments' | 'custom';
     number_of_installments?: number;
     approval_notes: string;
+    rejection_reason?: string;                      // If rejected
 }
 
 /**
