@@ -3,273 +3,122 @@
 namespace App\Http\Controllers\Payroll;
 
 use App\Http\Controllers\Controller;
+use App\Models\CashAdvance;
+use App\Models\Employee;
+use App\Services\Payroll\AdvanceManagementService;
+use App\Services\Payroll\AdvanceDeductionService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Log;
 
 class AdvancesController extends Controller
 {
+    public function __construct(
+        private AdvanceManagementService $advanceService,
+        private AdvanceDeductionService $deductionService
+    ) {}
+
     /**
      * Display a listing of cash advances
      */
     public function index(Request $request)
     {
-        // Mock cash advances data
-        $advances = [
-            [
-                'id' => 'ADV001',
-                'employee_id' => 'EMP001',
-                'employee_name' => 'Juan dela Cruz',
-                'employee_number' => 'EMP-2023-001',
-                'department_id' => 'DEPT-ENG',
-                'department_name' => 'Engineering',
-                'advance_type' => 'Cash Advance',
-                'amount_requested' => 50000.00,
-                'amount_approved' => 50000.00,
-                'approval_status' => 'approved',
-                'approval_status_label' => 'Approved',
-                'approval_status_color' => 'blue',
-                'approved_by' => 'HR Manager',
-                'approved_at' => now()->subDays(15)->toDateTimeString(),
-                'approval_notes' => 'Approved for emergency home repair',
-                'deduction_status' => 'active',
-                'deduction_status_label' => 'Active',
-                'remaining_balance' => 30000.00,
-                'deduction_schedule' => 'installments',
-                'number_of_installments' => 5,
-                'installments_completed' => 2,
-                'requested_date' => now()->subDays(20)->toDateString(),
-                'purpose' => 'Home repair and maintenance',
-                'priority_level' => 'normal',
-                'supporting_documents' => [],
-                'created_by' => 'Juan dela Cruz',
-                'created_at' => now()->subDays(20)->toDateTimeString(),
-                'updated_by' => 'HR Manager',
-                'updated_at' => now()->subDays(15)->toDateTimeString(),
-            ],
-            [
-                'id' => 'ADV002',
-                'employee_id' => 'EMP002',
-                'employee_name' => 'Maria Santos',
-                'employee_number' => 'EMP-2023-002',
-                'department_id' => 'DEPT-FIN',
-                'department_name' => 'Finance',
-                'advance_type' => 'Travel Advance',
-                'amount_requested' => 35000.00,
-                'amount_approved' => 35000.00,
-                'approval_status' => 'approved',
-                'approval_status_label' => 'Approved',
-                'approval_status_color' => 'blue',
-                'approved_by' => 'CFO',
-                'approved_at' => now()->subDays(10)->toDateTimeString(),
-                'approval_notes' => 'Approved for business trip to Manila',
-                'deduction_status' => 'active',
-                'deduction_status_label' => 'Active',
-                'remaining_balance' => 17500.00,
-                'deduction_schedule' => 'installments',
-                'number_of_installments' => 2,
-                'installments_completed' => 1,
-                'requested_date' => now()->subDays(15)->toDateString(),
-                'purpose' => 'Business trip travel and accommodation',
-                'priority_level' => 'normal',
-                'supporting_documents' => [],
-                'created_by' => 'Maria Santos',
-                'created_at' => now()->subDays(15)->toDateTimeString(),
-                'updated_by' => 'CFO',
-                'updated_at' => now()->subDays(10)->toDateTimeString(),
-            ],
-            [
-                'id' => 'ADV003',
-                'employee_id' => 'EMP003',
-                'employee_name' => 'Carlos Reyes',
-                'employee_number' => 'EMP-2023-003',
-                'department_id' => 'DEPT-OPS',
-                'department_name' => 'Operations',
-                'advance_type' => 'Medical Advance',
-                'amount_requested' => 25000.00,
-                'amount_approved' => 20000.00,
-                'approval_status' => 'approved',
-                'approval_status_label' => 'Approved',
-                'approval_status_color' => 'blue',
-                'approved_by' => 'HR Manager',
-                'approved_at' => now()->subDays(8)->toDateTimeString(),
-                'approval_notes' => 'Partial approval limited to 20000',
-                'deduction_status' => 'active',
-                'deduction_status_label' => 'Active',
-                'remaining_balance' => 20000.00,
-                'deduction_schedule' => 'installments',
-                'number_of_installments' => 4,
-                'installments_completed' => 0,
-                'requested_date' => now()->subDays(12)->toDateString(),
-                'purpose' => 'Medical treatment for surgery',
-                'priority_level' => 'urgent',
-                'supporting_documents' => [],
-                'created_by' => 'Carlos Reyes',
-                'created_at' => now()->subDays(12)->toDateTimeString(),
-                'updated_by' => 'HR Manager',
-                'updated_at' => now()->subDays(8)->toDateTimeString(),
-            ],
-            [
-                'id' => 'ADV004',
-                'employee_id' => 'EMP004',
-                'employee_name' => 'Ana Garcia',
-                'employee_number' => 'EMP-2023-004',
-                'department_id' => 'DEPT-SAL',
-                'department_name' => 'Sales',
-                'advance_type' => 'Cash Advance',
-                'amount_requested' => 15000.00,
-                'amount_approved' => 15000.00,
-                'approval_status' => 'pending',
-                'approval_status_label' => 'Pending',
-                'approval_status_color' => 'yellow',
-                'approved_by' => null,
-                'approved_at' => null,
-                'approval_notes' => null,
-                'deduction_status' => 'pending',
-                'deduction_status_label' => 'Pending',
-                'remaining_balance' => 15000.00,
-                'deduction_schedule' => null,
-                'number_of_installments' => null,
-                'installments_completed' => 0,
-                'requested_date' => now()->toDateString(),
-                'purpose' => 'Emergency household expenses',
-                'priority_level' => 'urgent',
-                'supporting_documents' => [],
-                'created_by' => 'Ana Garcia',
-                'created_at' => now()->toDateTimeString(),
-                'updated_by' => 'Ana Garcia',
-                'updated_at' => now()->toDateTimeString(),
-            ],
-            [
-                'id' => 'ADV005',
-                'employee_id' => 'EMP005',
-                'employee_name' => 'Miguel Torres',
-                'employee_number' => 'EMP-2023-005',
-                'department_id' => 'DEPT-ENG',
-                'department_name' => 'Engineering',
-                'advance_type' => 'Equipment Advance',
-                'amount_requested' => 45000.00,
-                'amount_approved' => 0.00,
-                'approval_status' => 'rejected',
-                'approval_status_label' => 'Rejected',
-                'approval_status_color' => 'red',
-                'approved_by' => 'Engineering Manager',
-                'approved_at' => now()->subDays(5)->toDateTimeString(),
-                'approval_notes' => 'Equipment purchase should go through procurement',
-                'deduction_status' => 'cancelled',
-                'deduction_status_label' => 'Cancelled',
-                'remaining_balance' => 0.00,
-                'deduction_schedule' => null,
-                'number_of_installments' => null,
-                'installments_completed' => 0,
-                'requested_date' => now()->subDays(7)->toDateString(),
-                'purpose' => 'Laptop and technical equipment',
-                'priority_level' => 'normal',
-                'supporting_documents' => [],
-                'created_by' => 'Miguel Torres',
-                'created_at' => now()->subDays(7)->toDateTimeString(),
-                'updated_by' => 'Engineering Manager',
-                'updated_at' => now()->subDays(5)->toDateTimeString(),
-            ],
-            [
-                'id' => 'ADV006',
-                'employee_id' => 'EMP006',
-                'employee_name' => 'Rosa Mendoza',
-                'employee_number' => 'EMP-2023-006',
-                'department_id' => 'DEPT-MAR',
-                'department_name' => 'Marketing',
-                'advance_type' => 'Travel Advance',
-                'amount_requested' => 28000.00,
-                'amount_approved' => 28000.00,
-                'approval_status' => 'approved',
-                'approval_status_label' => 'Approved',
-                'approval_status_color' => 'blue',
-                'approved_by' => 'Marketing Manager',
-                'approved_at' => now()->subDays(3)->toDateTimeString(),
-                'approval_notes' => 'Approved for conference attendance',
-                'deduction_status' => 'active',
-                'deduction_status_label' => 'Active',
-                'remaining_balance' => 28000.00,
-                'deduction_schedule' => 'single_period',
-                'number_of_installments' => 1,
-                'installments_completed' => 0,
-                'requested_date' => now()->subDays(5)->toDateString(),
-                'purpose' => 'Annual marketing conference Bangkok',
-                'priority_level' => 'normal',
-                'supporting_documents' => [],
-                'created_by' => 'Rosa Mendoza',
-                'created_at' => now()->subDays(5)->toDateTimeString(),
-                'updated_by' => 'Marketing Manager',
-                'updated_at' => now()->subDays(3)->toDateTimeString(),
-            ],
-            [
-                'id' => 'ADV007',
-                'employee_id' => 'EMP007',
-                'employee_name' => 'Luis Fernandez',
-                'employee_number' => 'EMP-2023-007',
-                'department_id' => 'DEPT-FIN',
-                'department_name' => 'Finance',
-                'advance_type' => 'Cash Advance',
-                'amount_requested' => 60000.00,
-                'amount_approved' => 60000.00,
-                'approval_status' => 'approved',
-                'approval_status_label' => 'Approved',
-                'approval_status_color' => 'blue',
-                'approved_by' => 'CFO',
-                'approved_at' => now()->subDays(30)->toDateTimeString(),
-                'approval_notes' => 'Approved for family emergency',
-                'deduction_status' => 'completed',
-                'deduction_status_label' => 'Completed',
-                'remaining_balance' => 0.00,
-                'deduction_schedule' => 'installments',
-                'number_of_installments' => 6,
-                'installments_completed' => 6,
-                'requested_date' => now()->subDays(35)->toDateString(),
-                'purpose' => 'Family emergency unexpected medical bills',
-                'priority_level' => 'urgent',
-                'supporting_documents' => [],
-                'created_by' => 'Luis Fernandez',
-                'created_at' => now()->subDays(35)->toDateTimeString(),
-                'updated_by' => 'CFO',
-                'updated_at' => now()->subDays(1)->toDateTimeString(),
-            ],
-            [
-                'id' => 'ADV008',
-                'employee_id' => 'EMP008',
-                'employee_name' => 'Patricia Diaz',
-                'employee_number' => 'EMP-2023-008',
-                'department_id' => 'DEPT-HR',
-                'department_name' => 'Human Resources',
-                'advance_type' => 'Cash Advance',
-                'amount_requested' => 20000.00,
-                'amount_approved' => null,
-                'approval_status' => 'pending',
-                'approval_status_label' => 'Pending',
-                'approval_status_color' => 'yellow',
-                'approved_by' => null,
-                'approved_at' => null,
-                'approval_notes' => null,
-                'deduction_status' => 'pending',
-                'deduction_status_label' => 'Pending',
-                'remaining_balance' => 20000.00,
-                'deduction_schedule' => null,
-                'number_of_installments' => null,
-                'installments_completed' => 0,
-                'requested_date' => now()->subDays(2)->toDateString(),
-                'purpose' => 'Child school fees and supplies',
-                'priority_level' => 'normal',
-                'supporting_documents' => [],
-                'created_by' => 'Patricia Diaz',
-                'created_at' => now()->subDays(2)->toDateTimeString(),
-                'updated_by' => 'Patricia Diaz',
-                'updated_at' => now()->subDays(2)->toDateTimeString(),
-            ],
-        ];
+        try {
+            $query = CashAdvance::with(['employee', 'department', 'approvedBy', 'createdBy', 'advanceDeductions'])
+                ->orderBy('created_at', 'desc');
 
-        return Inertia::render('Payroll/Advances/Index', [
-            'advances' => $advances,
-            'filters' => [],
-            'employees' => $this->getEmployeesList(),
-        ]);
+            // Apply filters
+            if ($request->has('search') && !empty($request->search)) {
+                $search = $request->search;
+                $query->whereHas('employee', function ($q) use ($search) {
+                    $q->where('full_name', 'like', "%{$search}%")
+                      ->orWhere('employee_number', 'like', "%{$search}%");
+                });
+            }
+
+            if ($request->has('status') && !empty($request->status)) {
+                $status = $request->status;
+                if (in_array($status, ['pending', 'approved', 'rejected'])) {
+                    $query->where('approval_status', $status);
+                } elseif (in_array($status, ['active', 'completed', 'cancelled'])) {
+                    $query->where('deduction_status', $status);
+                }
+            }
+
+            if ($request->has('department') && !empty($request->department)) {
+                $query->where('department_id', $request->department);
+            }
+
+            if ($request->has('date_from') && !empty($request->date_from)) {
+                $query->where('requested_date', '>=', $request->date_from);
+            }
+
+            if ($request->has('date_to') && !empty($request->date_to)) {
+                $query->where('requested_date', '<=', $request->date_to);
+            }
+
+            $advances = $query->paginate(20)->withQueryString();
+
+            // Transform for frontend
+            $advancesData = $advances->through(function ($advance) {
+                return [
+                    'id' => $advance->id,
+                    'advance_number' => $advance->advance_number,
+                    'employee_id' => $advance->employee_id,
+                    'employee_name' => $advance->employee?->full_name ?? 'N/A',
+                    'employee_number' => $advance->employee?->employee_number ?? 'N/A',
+                    'department_id' => $advance->department_id,
+                    'department_name' => $advance->department?->name ?? 'N/A',
+                    'advance_type' => $advance->advance_type,
+                    'amount_requested' => (float) $advance->amount_requested,
+                    'amount_approved' => (float) ($advance->amount_approved ?? 0),
+                    'approval_status' => $advance->approval_status,
+                    'approval_status_label' => ucfirst(str_replace('_', ' ', $advance->approval_status)),
+                    'approval_status_color' => $this->getStatusColor($advance->approval_status),
+                    'approved_by' => $advance->approvedBy?->name ?? null,
+                    'approved_at' => $advance->approved_at?->toDateTimeString(),
+                    'approval_notes' => $advance->approval_notes,
+                    'deduction_status' => $advance->deduction_status,
+                    'deduction_status_label' => ucfirst(str_replace('_', ' ', $advance->deduction_status)),
+                    'remaining_balance' => (float) ($advance->remaining_balance ?? 0),
+                    'deduction_schedule' => $advance->deduction_schedule,
+                    'number_of_installments' => $advance->number_of_installments ?? 0,
+                    'installments_completed' => $advance->installments_completed ?? 0,
+                    'requested_date' => $advance->requested_date?->toDateString(),
+                    'purpose' => $advance->purpose,
+                    'priority_level' => $advance->priority_level,
+                    'created_at' => $advance->created_at?->toDateTimeString(),
+                    'created_by' => $advance->createdBy?->name ?? 'N/A',
+                ];
+            });
+
+            $employees = Employee::select('id', 'full_name as name', 'employee_number', 'department_id')
+                ->with('department:id,name')
+                ->where('employment_status', 'active')
+                ->get()
+                ->map(function ($emp) {
+                    return [
+                        'id' => $emp->id,
+                        'name' => $emp->name,
+                        'employee_number' => $emp->employee_number,
+                        'department' => $emp->department?->name ?? 'N/A',
+                    ];
+                });
+
+            return Inertia::render('Payroll/Advances/Index', [
+                'advances' => $advancesData,
+                'filters' => $request->only(['search', 'status', 'department', 'date_from', 'date_to']),
+                'employees' => $employees,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error loading advances', ['error' => $e->getMessage()]);
+            return Inertia::render('Payroll/Advances/Index', [
+                'advances' => [],
+                'filters' => [],
+                'employees' => [],
+                'error' => 'Failed to load advances. Please try again.',
+            ]);
+        }
     }
 
     /**
@@ -277,15 +126,33 @@ class AdvancesController extends Controller
      */
     public function create()
     {
-        return response()->json([
-            'employees' => $this->getEmployeesList(),
-            'advance_types' => [
-                'Cash Advance',
-                'Equipment Advance',
-                'Travel Advance',
-                'Medical Advance',
-            ],
-        ]);
+        try {
+            $employees = Employee::select('id', 'full_name as name', 'employee_number', 'department_id')
+                ->with('department:id,name')
+                ->where('employment_status', 'active')
+                ->get()
+                ->map(function ($emp) {
+                    return [
+                        'id' => $emp->id,
+                        'name' => $emp->name,
+                        'employee_number' => $emp->employee_number,
+                        'department' => $emp->department?->name ?? 'N/A',
+                    ];
+                });
+
+            return response()->json([
+                'employees' => $employees,
+                'advance_types' => [
+                    ['value' => 'cash_advance', 'label' => 'Cash Advance'],
+                    ['value' => 'medical_advance', 'label' => 'Medical Advance'],
+                    ['value' => 'travel_advance', 'label' => 'Travel Advance'],
+                    ['value' => 'equipment_advance', 'label' => 'Equipment Advance'],
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error loading create form data', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to load form data'], 500);
+        }
     }
 
     /**
@@ -294,68 +161,132 @@ class AdvancesController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'employee_id' => 'required|string',
-            'advance_type' => 'required|string',
-            'amount_requested' => 'required|numeric|min:1',
-            'purpose' => 'required|string',
+            'employee_id' => 'required|exists:employees,id',
+            'advance_type' => 'required|in:cash_advance,medical_advance,travel_advance,equipment_advance',
+            'amount_requested' => 'required|numeric|min:1000',
+            'purpose' => 'required|string|min:10|max:500',
             'requested_date' => 'required|date',
             'priority_level' => 'required|in:normal,urgent',
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Advance request submitted successfully',
-            'advance_id' => 'ADV' . str_pad(rand(1, 9999), 3, '0', STR_PAD_LEFT),
-        ]);
+        try {
+            $advance = $this->advanceService->createAdvanceRequest($validated, $request->user());
+
+            return redirect()
+                ->route('payroll.advances.index')
+                ->with('success', "Advance request {$advance->advance_number} created successfully");
+        } catch (\Exception $e) {
+            Log::error('Error creating advance', ['error' => $e->getMessage(), 'data' => $validated]);
+            return redirect()
+                ->back()
+                ->withInput()
+                ->withErrors(['error' => $e->getMessage()]);
+        }
     }
 
     /**
      * Approve a pending cash advance
      */
-    public function approve(Request $request, $id)
+    public function approve(Request $request, int $id)
     {
-        $validated = $request->validate([
-            'amount_approved' => 'required|numeric|min:0',
-            'deduction_schedule' => 'required|in:single_period,installments',
-            'number_of_installments' => 'required|integer|min:1|max:12',
-            'approval_notes' => 'nullable|string',
-        ]);
+        try {
+            $advance = CashAdvance::findOrFail($id);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Advance approved successfully',
-        ]);
+            if ($advance->approval_status !== 'pending') {
+                return redirect()
+                    ->back()
+                    ->withErrors(['error' => 'Only pending advances can be approved.']);
+            }
+
+            $validated = $request->validate([
+                'amount_approved' => 'required|numeric|min:1000|max:' . ($advance->amount_requested),
+                'deduction_schedule' => 'required|in:single_period,installments',
+                'number_of_installments' => 'required|integer|min:1|max:6',
+                'approval_notes' => 'nullable|string|max:500',
+            ]);
+
+            $this->advanceService->approveAdvance($advance, $validated, $request->user());
+
+            return redirect()
+                ->route('payroll.advances.index')
+                ->with('success', "Advance {$advance->advance_number} approved successfully");
+        } catch (\Exception $e) {
+            Log::error('Error approving advance', ['error' => $e->getMessage(), 'advance_id' => $id]);
+            return redirect()
+                ->back()
+                ->withErrors(['error' => $e->getMessage()]);
+        }
     }
 
     /**
      * Reject a pending cash advance
      */
-    public function reject(Request $request, $id)
+    public function reject(Request $request, int $id)
     {
-        $validated = $request->validate([
-            'approval_notes' => 'required|string|min:10',
-        ]);
+        try {
+            $advance = CashAdvance::findOrFail($id);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Advance rejected',
-        ]);
+            if ($advance->approval_status !== 'pending') {
+                return redirect()
+                    ->back()
+                    ->withErrors(['error' => 'Only pending advances can be rejected.']);
+            }
+
+            $validated = $request->validate([
+                'rejection_reason' => 'required|string|min:10|max:500',
+            ]);
+
+            $this->advanceService->rejectAdvance($advance, $validated['rejection_reason'], $request->user());
+
+            return redirect()
+                ->route('payroll.advances.index')
+                ->with('success', "Advance {$advance->advance_number} rejected");
+        } catch (\Exception $e) {
+            Log::error('Error rejecting advance', ['error' => $e->getMessage(), 'advance_id' => $id]);
+            return redirect()
+                ->back()
+                ->withErrors(['error' => $e->getMessage()]);
+        }
     }
 
     /**
-     * Get list of employees for advance requests
+     * Cancel an active advance
      */
-    private function getEmployeesList()
+    public function cancel(Request $request, int $id)
     {
-        return [
-            ['id' => 1, 'name' => 'Juan dela Cruz', 'employee_number' => 'EMP-2023-001', 'department' => 'Engineering'],
-            ['id' => 2, 'name' => 'Maria Santos', 'employee_number' => 'EMP-2023-002', 'department' => 'Finance'],
-            ['id' => 3, 'name' => 'Carlos Reyes', 'employee_number' => 'EMP-2023-003', 'department' => 'Operations'],
-            ['id' => 4, 'name' => 'Ana Garcia', 'employee_number' => 'EMP-2023-004', 'department' => 'Sales'],
-            ['id' => 5, 'name' => 'Miguel Torres', 'employee_number' => 'EMP-2023-005', 'department' => 'Engineering'],
-            ['id' => 6, 'name' => 'Rosa Mendoza', 'employee_number' => 'EMP-2023-006', 'department' => 'Marketing'],
-            ['id' => 7, 'name' => 'Luis Fernandez', 'employee_number' => 'EMP-2023-007', 'department' => 'Finance'],
-            ['id' => 8, 'name' => 'Patricia Diaz', 'employee_number' => 'EMP-2023-008', 'department' => 'Human Resources'],
-        ];
+        try {
+            $advance = CashAdvance::findOrFail($id);
+
+            $validated = $request->validate([
+                'cancellation_reason' => 'required|string|min:10|max:500',
+            ]);
+
+            $this->advanceService->cancelAdvance($advance, $validated['cancellation_reason'], $request->user());
+
+            return redirect()
+                ->route('payroll.advances.index')
+                ->with('success', "Advance {$advance->advance_number} cancelled");
+        } catch (\Exception $e) {
+            Log::error('Error cancelling advance', ['error' => $e->getMessage(), 'advance_id' => $id]);
+            return redirect()
+                ->back()
+                ->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Get status color for UI badges
+     */
+    private function getStatusColor(string $status): string
+    {
+        return match ($status) {
+            'pending' => 'yellow',
+            'approved' => 'blue',
+            'rejected' => 'red',
+            'active' => 'green',
+            'completed' => 'gray',
+            'cancelled' => 'red',
+            default => 'gray',
+        };
     }
 }
