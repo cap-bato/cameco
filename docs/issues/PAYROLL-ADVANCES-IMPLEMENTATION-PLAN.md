@@ -531,36 +531,67 @@ class AdvanceDeduction extends Model
 
 ---
 
-### **Phase 2: Core Services & Business Logic (Week 2: Feb 13-19)**
+### **Phase 2: Core Services & Business Logic (Week 2: Feb 13-19)** ✅ COMPLETE
 
-#### Task 2.1: Create AdvanceManagementService
+#### Task 2.1: Create AdvanceManagementService ✅
 
 **File:** `app/Services/Payroll/AdvanceManagementService.php`
-- **Action:** CREATE
+- **Status:** CREATE ✅ COMPLETE (480+ lines)
 - **Responsibility:** Core business logic for advance management
-- **Methods:**
-  - `createAdvanceRequest()` - Create new advance request
-  - `approveAdvance()` - Approve advance with schedule
+- **Methods** (8):
+  - `createAdvanceRequest()` - Create new advance request with validation
+  - `approveAdvance()` - Approve advance, schedule deductions, calculate installments
   - `rejectAdvance()` - Reject advance with reason
-  - `cancelAdvance()` - Cancel advance (before or after approval)
-  - `checkEmployeeEligibility()` - Validate if employee can request advance
-  - `calculateMaxAdvanceAmount()` - Calculate max eligible amount
-  - `generateAdvanceNumber()` - Auto-generate unique advance number
-  - `scheduleDeductions()` - Create advance_deductions records
+  - `cancelAdvance()` - Cancel advance (before or after approval), delete pending deductions
+  - `checkEmployeeEligibility()` - Validate 4 eligibility rules:
+    1. Employee must be active
+    2. Must be regular/permanent (not probationary)
+    3. Minimum 3 months employment
+    4. Only 1 active advance allowed
+  - `calculateMaxAdvanceAmount()` - Max = 50% of monthly basic salary
+  - `generateAdvanceNumber()` - Auto-generate ADV-YYYY-NNNN
+  - `scheduleDeductions()` - Create AdvanceDeduction records for payroll periods
+- **Features:**
+  - Database transactions for data consistency
+  - Comprehensive audit logging
+  - Automatic deduction scheduling with rounding handling
+  - Eligibility validation at every step
 
-```php
-<?php
+#### Task 2.2: Create AdvanceDeductionService ✅
 
-namespace App\Services\Payroll;
+**File:** `app/Services/Payroll/AdvanceDeductionService.php`
+- **Status:** CREATE ✅ COMPLETE (420+ lines)
+- **Responsibility:** Handle advance deductions during payroll calculation
+- **Methods** (6):
+  - `getPendingDeductionsForEmployee()` - Get pending deductions for payroll period
+  - `getTotalPendingDeductionsForEmployee()` - Get total pending deduction amount
+  - `processDeductions()` - Process deductions, handle insufficient net pay (partial deduction + reschedule)
+  - `updateAdvanceBalance()` - Update totals, mark as completed when fully paid
+  - `allowEarlyRepayment()` - Support early full/partial repayment
+  - `rescheduleSkippedDeductions()` - Move skipped deductions to next period
+- **Features:**
+  - Handles insufficient net pay scenario
+  - Supports partial deductions with rescheduling
+  - Early repayment support
+  - Auto-completes advance when fully paid
+  - Rounding tolerance (1 cent) for floating point errors
+  - Database transactions for data integrity
+  - Complete deduction tracking with audit notes
 
-use App\Models\CashAdvance;
-use App\Models\AdvanceDeduction;
-use App\Models\Employee;
-use App\Models\User;
-use App\Models\PayrollPeriod;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+---
+
+**Phase 2 Summary: Core Services & Business Logic ✅ 100% COMPLETE**
+- ✅ 2 service files created (900+ lines total)
+- ✅ 14 methods with complete business logic
+- ✅ 4 eligibility rules implemented
+- ✅ Transaction-safe operations
+- ✅ Full audit logging
+- ✅ Commit: 1eb2140
+- ✅ Next: Phase 3 - Payroll Calculation Integration
+
+---
+
+### **Phase 3: Payroll Calculation Integration (Week 2-3: Feb 17-21)**
 
 class AdvanceManagementService
 {
