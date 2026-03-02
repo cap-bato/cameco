@@ -43,6 +43,7 @@ class PayrollCalculationService
         private SalaryComponentService $componentService,
         private AllowanceDeductionService $allowanceDeductionService,
         private LoanManagementService $loanManagementService,
+        private AdvanceDeductionService $advanceDeductionService,
     ) {}
 
     /**
@@ -157,15 +158,40 @@ class PayrollCalculationService
             $allDeductions = $sssContribution + $philhealthContribution + $pagibigContribution
                 + $withholdingTax + $totalDeductions + $loanDeductions + $lateDeduction + $undertimeDeduction;
 
-            // Step 15: Calculate net pay
-            $netPay = $grossPay - $allDeductions;
+            // Step 15: Calculate net pay before advances
+            $netPayBeforeAdvances = $grossPay - $allDeductions;
 
-            // Step 16: Delete any existing calculation (for recalculation)
+            // Step 16: Process advance deductions
+            $advanceResult = $this->advanceDeductionService->processDeductions(
+                $employee->id,
+                $period->id,
+                $netPayBeforeAdvances,
+                null  // calculationId will be set after creating the record
+            );
+
+            $advanceDeduction = $advanceResult['total_deduction'];
+
+            // Step 17: Calculate final net pay after advance deductions
+            $netPay = $netPayBeforeAdvances - $advanceDeduction;
+
+            // Log if insufficient pay for full advance deduction
+            if ($advanceResult['insufficient_pay']) {
+                Log::warning("Insufficient net pay for full advance deduction", [
+                    'employee_id' => $employee->id,
+                    'payroll_period_id' => $period->id,
+                    'net_pay_before_advances' => $netPayBeforeAdvances,
+                    'advance_deduction_applied' => $advanceDeduction,
+                    'deductions_applied' => $advanceResult['deductions_applied'],
+                    'skipped_count' => $advanceResult['skipped_count'],
+                ]);
+            }
+
+            // Step 18: Delete any existing calculation (for recalculation)
             EmployeePayrollCalculation::where('employee_id', $employee->id)
                 ->where('payroll_period_id', $period->id)
                 ->delete();
 
-            // Step 17: Create calculation record
+            // Step 19: Create calculation record
             $calculation = EmployeePayrollCalculation::create([
                 'payroll_period_id' => $period->id,
                 'employee_id' => $employee->id,
@@ -188,7 +214,8 @@ class PayrollCalculationService
                 'loan_deduction' => (float) $loanDeductions,
                 'late_deduction' => (float) $lateDeduction,
                 'undertime_deduction' => (float) $undertimeDeduction,
-                'total_deductions' => (float) $allDeductions,
+                'advance_deduction' => (float) $advanceDeduction,
+                'total_deductions' => (float) ($allDeductions + $advanceDeduction),
                 'net_pay' => (float) $netPay,
                 'status' => 'calculated',
                 'calculated_at' => Carbon::now(),

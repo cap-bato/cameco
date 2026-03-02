@@ -591,7 +591,7 @@ class AdvanceDeduction extends Model
 
 ---
 
-### **Phase 3: Payroll Calculation Integration (Week 2-3: Feb 17-21)**
+### **Phase 3: Payroll Calculation Integration (Week 2-3: Feb 17-21)** - IN PROGRESS
 
 class AdvanceManagementService
 {
@@ -1103,16 +1103,80 @@ if ($advanceResult['insufficient_pay']) {
 }
 ```
 
-**Subtask 3.1.1: Update employee_payroll_calculations schema**
-- **File:** `database/migrations/XXXX_XX_XX_XXXXXX_update_employee_payroll_calculations_add_advance_deduction.php`
-- **Action:** CREATE
-- **Change:** Add `advance_deduction` column to employee_payroll_calculations table
+**Subtask 3.1.1: Update employee_payroll_calculations schema** ✅ COMPLETE
+- **File:** `database/migrations/2026_02_14_000001_create_employee_payroll_calculations_table.php` (Created table)
+- **File:** `database/migrations/2026_02_15_000001_add_advance_deduction_to_employee_payroll_calculations.php` (Added column)
+- **Action:** CREATE ✅
+- **Status:** IMPLEMENTED & MIGRATED ✅
+- **Change:** Added `advance_deduction` column to employee_payroll_calculations table
+
+**Implementation Details:**
+
+1. **Created employee_payroll_calculations table** (Migration 2026_02_14_000001)
+   - 63 columns covering attendance, earnings, deductions, and calculations
+   - Relationships to payroll_periods and employees tables
+   - Unique constraint on (payroll_period_id, employee_id)
+   - Status tracking: draft, calculated, finalized, approved, paid
+   - Soft deletes for audit retention
+
+2. **Added advance_deduction column** (Migration 2026_02_15_000001)
+   - Column type: `decimal(10, 2)` default 0
+   - Position: After `other_deductions` column
+   - Tracks cash advance deductions for payroll period
+   - Comment: "Cash advance deduction for payroll period"
+
+3. **Integrated with PayrollCalculationService** (Modified app/Services/Payroll/PayrollCalculationService.php)
+   - Injected AdvanceDeductionService into constructor
+   - Added advance deduction processing in calculateEmployee() method (Steps 16-17)
+   - Process flow:
+     * Calculate net pay before advances (Step 15)
+     * Call AdvanceDeductionService::processDeductions() (Step 16)
+     * Get advance_deduction amount and insufficient_pay flag
+     * Subtract from net pay to get final net pay (Step 17)
+     * Log warning if insufficient pay for full deduction
+   - Create calculation record with advance_deduction field
+   - Updated total_deductions to include advance_deduction
+
+**Code Changes:**
 
 ```php
-Schema::table('employee_payroll_calculations', function (Blueprint $table) {
-    $table->decimal('advance_deduction', 10, 2)->default(0)->after('other_deductions');
-});
+// In PayrollCalculationService::calculateEmployee()
+
+// Step 15: Calculate net pay before advances
+$netPayBeforeAdvances = $grossPay - $allDeductions;
+
+// Step 16: Process advance deductions
+$advanceResult = $this->advanceDeductionService->processDeductions(
+    $employee->id,
+    $period->id,
+    $netPayBeforeAdvances,
+    null  // calculationId will be set after creating the record
+);
+
+$advanceDeduction = $advanceResult['total_deduction'];
+
+// Step 17: Calculate final net pay after advance deductions
+$netPay = $netPayBeforeAdvances - $advanceDeduction;
+
+// Log if insufficient pay for full advance deduction
+if ($advanceResult['insufficient_pay']) {
+    Log::warning("Insufficient net pay for full advance deduction", [
+        'employee_id' => $employee->id,
+        'payroll_period_id' => $period->id,
+        'net_pay_before_advances' => $netPayBeforeAdvances,
+        'advance_deduction_applied' => $advanceDeduction,
+        'deductions_applied' => $advanceResult['deductions_applied'],
+        'skipped_count' => $advanceResult['skipped_count'],
+    ]);
+}
 ```
+
+**Migration Status:** ✅ SUCCESSFULLY EXECUTED
+- `php artisan migrate` completed without errors
+- Both migrations ran successfully
+- Table structure verified in database
+
+**Next Steps:** Task 3.2 - Add Advance Deduction to Payslip
 
 ---
 
