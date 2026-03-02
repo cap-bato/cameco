@@ -105,10 +105,11 @@ class RfidLedger extends Model
         return $this->hasMany(AttendanceEvent::class, 'ledger_sequence_id', 'sequence_id');
     }
 
-    // Relationship: Employee (via employee_rfid mapped to rfid_card field)
-    public function employee()
+    // Relationship: Employee (via RfidCardMapping)
+    // Note: This is accessed via eager loading of RfidCardMapping first
+    public function rfidCardMapping()
     {
-        return $this->belongsTo(\App\Models\Employee::class, 'employee_rfid', 'rfid_card');
+        return $this->belongsTo(\App\Models\RfidCardMapping::class, 'employee_rfid', 'card_uid');
     }
 
     // Relationship: RFID Device

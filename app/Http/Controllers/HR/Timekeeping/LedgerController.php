@@ -31,8 +31,8 @@ class LedgerController extends Controller
         
         // Build query for rfid_ledger with filters (eager load relationships)
         $query = RfidLedger::with([
-            'employee:id,employee_number,profile_id',
-            'employee.profile:id,first_name,last_name',
+            'rfidCardMapping.employee:id,employee_number,profile_id',
+            'rfidCardMapping.employee.profile:id,first_name,last_name',
             'device:id,device_id,device_name,location'
         ])->orderBy('sequence_id', 'desc');
         
@@ -59,10 +59,11 @@ class LedgerController extends Controller
         
         if ($request->filled('employee_search')) {
             $search = $request->employee_search;
-            $query->whereHas('employee', function ($q) use ($search) {
+            $query->whereHas('employee.profile', function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('employee_id', 'like', "%{$search}%");
+                  ->orWhere('last_name', 'like', "%{$search}%");
+            })->orWhereHas('employee', function ($q) use ($search) {
+                $q->where('employee_number', 'like', "%{$search}%");
             });
         }
         
@@ -71,7 +72,7 @@ class LedgerController extends Controller
         
         // Transform for frontend
         $transformedLogs = $logs->getCollection()->map(function ($log) {
-            $employee = $log->employee;
+            $employee = $log->rfidCardMapping ? $log->rfidCardMapping->employee : null;
             return [
                 'id' => $log->id,
                 'sequence_id' => $log->sequence_id,
@@ -141,7 +142,7 @@ class LedgerController extends Controller
         }
         
         // Transform ledger entry to event format
-        $employee = $ledgerEntry->employee;
+        $employee = $ledgerEntry->rfidCardMapping ? $ledgerEntry->rfidCardMapping->employee : null;
         $event = [
             'id' => $ledgerEntry->id,
             'sequence_id' => $ledgerEntry->sequence_id,
@@ -187,8 +188,8 @@ class LedgerController extends Controller
         
         // Build query for rfid_ledger with filters (eager load relationships for performance)
         $query = RfidLedger::with([
-            'employee:id,employee_number,profile_id',
-            'employee.profile:id,first_name,last_name',
+            'rfidCardMapping.employee:id,employee_number,profile_id',
+            'rfidCardMapping.employee.profile:id,first_name,last_name',
             'device:id,device_id,device_name,location'
         ])->orderBy('sequence_id', 'desc');
         
@@ -218,7 +219,9 @@ class LedgerController extends Controller
             $query->whereHas('employee.profile', function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
                   ->orWhere('last_name', 'like', "%{$search}%");
-            })->orWhere('employee_number', 'like', "%{$search}%");
+            })->orWhereHas('employee', function ($q) use ($search) {
+                $q->where('employee_number', 'like', "%{$search}%");
+            });
         }
         
         // Paginate results using Eloquent pagination
@@ -226,7 +229,7 @@ class LedgerController extends Controller
         
         // Transform for API response
         $transformedLogs = $logs->getCollection()->map(function ($log) {
-            $employee = $log->employee;
+            $employee = $log->rfidCardMapping ? $log->rfidCardMapping->employee : null;
             return [
                 'id' => $log->id,
                 'sequence_id' => $log->sequence_id,
@@ -295,7 +298,7 @@ class LedgerController extends Controller
         }
         
         // Transform to event format
-        $employee = $ledgerEntry->employee;
+        $employee = $ledgerEntry->rfidCardMapping ? $ledgerEntry->rfidCardMapping->employee : null;
         $event = [
             'id' => $ledgerEntry->id,
             'sequence_id' => $ledgerEntry->sequence_id,
@@ -380,14 +383,18 @@ class LedgerController extends Controller
         
         // Task 4.1.2: Calculate average processing time from rfid_ledger table
         // Processing time = when ledger entry was processed (processed_at) - when scan occurred (scan_timestamp)
-        // PostgreSQL: Use EXTRACT(EPOCH FROM ...) to get time difference in seconds
-        $avgProcessingTime = RfidLedger::whereDate('scan_timestamp', today())
+        // Database-agnostic approach: Calculate in PHP instead of using database-specific functions
+        $processingTimes = RfidLedger::whereDate('scan_timestamp', today())
             ->whereNotNull('processed_at')
-            ->selectRaw('AVG(EXTRACT(EPOCH FROM (processed_at - scan_timestamp))) as avg_seconds')
-            ->first();
-        $avgProcessingTimeMs = $avgProcessingTime && $avgProcessingTime->avg_seconds 
-            ? round($avgProcessingTime->avg_seconds * 1000, 0) 
-            : 0;
+            ->get(['scan_timestamp', 'processed_at']);
+        
+        $avgProcessingTimeMs = 0;
+        if ($processingTimes->count() > 0) {
+            $totalMs = $processingTimes->sum(function ($log) {
+                return $log->processed_at->diffInMilliseconds($log->scan_timestamp);
+            });
+            $avgProcessingTimeMs = round($totalMs / $processingTimes->count(), 0);
+        }
         
         // Task 4.1.3: Get hash verification failures from health logs today
         $hashFailures = LedgerHealthLog::whereDate('created_at', today())
@@ -521,15 +528,15 @@ class LedgerController extends Controller
         
         // Get previous event by sequence_id
         $previousEvent = RfidLedger::with([
-            'employee:id,employee_number,profile_id',
-            'employee.profile:id,first_name,last_name',
+            'rfidCardMapping.employee:id,employee_number,profile_id',
+            'rfidCardMapping.employee.profile:id,first_name,last_name',
             'device:id,device_id,device_name,location'
         ])->where('sequence_id', '<', $currentEvent->sequence_id)
           ->orderByDesc('sequence_id')
           ->first();
         
         if ($previousEvent) {
-            $employee = $previousEvent->employee;
+            $employee = $previousEvent->rfidCardMapping ? $previousEvent->rfidCardMapping->employee : null;
             $related['previous'] = [
                 'id' => $previousEvent->id,
                 'sequence_id' => $previousEvent->sequence_id,
@@ -545,15 +552,15 @@ class LedgerController extends Controller
         
         // Get next event by sequence_id
         $nextEvent = RfidLedger::with([
-            'employee:id,employee_number,profile_id',
-            'employee.profile:id,first_name,last_name',
+            'rfidCardMapping.employee:id,employee_number,profile_id',
+            'rfidCardMapping.employee.profile:id,first_name,last_name',
             'device:id,device_id,device_name,location'
         ])->where('sequence_id', '>', $currentEvent->sequence_id)
           ->orderBy('sequence_id')
           ->first();
         
         if ($nextEvent) {
-            $employee = $nextEvent->employee;
+            $employee = $nextEvent->rfidCardMapping ? $nextEvent->rfidCardMapping->employee : null;
             $related['next'] = [
                 'id' => $nextEvent->id,
                 'sequence_id' => $nextEvent->sequence_id,
@@ -569,15 +576,15 @@ class LedgerController extends Controller
         
         // Get same employee events today
         $employeeTodayEvents = RfidLedger::with([
-            'employee:id,employee_number,profile_id',
-            'employee.profile:id,first_name,last_name',
+            'rfidCardMapping.employee:id,employee_number,profile_id',
+            'rfidCardMapping.employee.profile:id,first_name,last_name',
             'device:id,device_id,device_name,location'
         ])->where('employee_rfid', $currentEvent->employee_rfid)
           ->whereDate('scan_timestamp', today())
           ->orderBy('sequence_id')
           ->get()
           ->map(function ($event) {
-              $employee = $event->employee;
+              $employee = $event->rfidCardMapping ? $event->rfidCardMapping->employee : null;
               return [
                   'id' => $event->id,
                   'sequence_id' => $event->sequence_id,
