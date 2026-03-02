@@ -133,17 +133,22 @@ export default function AllowancesDeductionsIndex({
   const handleAssignComponent = async (data: EmployeeComponentAssignmentFormData) => {
     setIsLoading(true);
     try {
-      // In a real app, this would call the backend API with the data parameter
-      // TODO: Replace with actual API call using POST request with data
-      console.log('Assigning component with data:', data);
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Call the backend API to assign component
+      const url = editingAssignment
+        ? `/payroll/allowances-deductions/${data.employee_id}`
+        : '/payroll/allowances-deductions';
 
-      alert('Component assigned successfully');
-      setIsModalOpen(false);
-      setEditingAssignment(undefined);
+      const method = editingAssignment ? 'PUT' : 'POST';
 
-      // Reload page or update local state
-      window.location.reload();
+      router[method as 'post' | 'put'](url, data as unknown as Record<string, string>, {
+        onSuccess: () => {
+          setIsModalOpen(false);
+          setEditingAssignment(undefined);
+        },
+        onError: (errors) => {
+          console.error('Component assignment failed:', errors);
+        },
+      });
     } finally {
       setIsLoading(false);
     }
@@ -215,25 +220,27 @@ export default function AllowancesDeductionsIndex({
   const handleViewHistory = async (employeeId: number, componentId: number) => {
     setIsLoading(true);
     try {
-      // In a real app, this would fetch from the backend API
-      // Mock data structure shown
-      setHistoryData([
+      // Call the backend API to fetch history
+      const response = await fetch(
+        `/payroll/allowances-deductions/history?employee_id=${employeeId}&component_id=${componentId}`,
         {
-          id: 1,
-          employee_id: employeeId,
-          component_id: componentId,
-          component_name: 'Component Name',
-          amount: 2000,
-          percentage: null,
-          frequency: 'per_payroll',
-          effective_date: '2025-01-01',
-          end_date: '2025-10-31',
-          status: 'expired',
-          changed_at: '2025-10-31',
-          changed_by: 'Admin User',
-        },
-      ]);
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch history');
+      }
+
+      const data = await response.json();
+      setHistoryData(data.history || []);
       setShowHistory(true);
+    } catch (error) {
+      console.error('Error fetching history:', error);
+      alert('Failed to load component history');
     } finally {
       setIsLoading(false);
     }
