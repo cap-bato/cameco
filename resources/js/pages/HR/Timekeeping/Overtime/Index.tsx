@@ -1,9 +1,9 @@
-import { Head, usePage } from '@inertiajs/react';
+import { Head, usePage, Link } from '@inertiajs/react';
 import { useState, useMemo } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Eye, Edit } from 'lucide-react';
+import { Plus, Eye, Edit, ChevronLeft, ChevronRight } from 'lucide-react';
 import { OvertimeFormModal } from '@/components/timekeeping/overtime-form-modal';
 import { OvertimeDetailModal } from '@/components/timekeeping/overtime-detail-modal';
 import { OvertimeRecord, EmployeeBasic } from '@/types/timekeeping-pages';
@@ -164,7 +164,7 @@ export default function OvertimeIndex() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {overtime.data.slice(0, 10).map((record) => (
+                                    {overtime.data.map((record) => (
                                         <tr key={record.id} className="border-b hover:bg-muted/50">
                                             <td className="py-3 px-4">{record.employee_name}</td>
                                             <td className="py-3 px-4">{record.overtime_date}</td>
@@ -188,6 +188,58 @@ export default function OvertimeIndex() {
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+
+                        {/* Pagination Controls */}
+                        <div className="flex items-center justify-between mt-6 pt-6 border-t">
+                            <div className="text-sm text-gray-600">
+                                Showing {overtime.data.length > 0 ? ((overtime.current_page - 1) * overtime.per_page) + 1 : 0} to{' '}
+                                {Math.min(overtime.current_page * overtime.per_page, overtime.total)} of {overtime.total} records
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Link href={overtime.links?.prev} preserve={['page']}>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={!overtime.links?.prev}
+                                        className="gap-1"
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                        Previous
+                                    </Button>
+                                </Link>
+
+                                <div className="flex items-center gap-1">
+                                    {Array.from({ length: overtime.last_page }, (_, i) => i + 1).map((page) => (
+                                        <Link
+                                            key={page}
+                                            href={`/hr/timekeeping/overtime?page=${page}`}
+                                            preserve={['filters']}
+                                        >
+                                            <Button
+                                                variant={page === overtime.current_page ? "default" : "outline"}
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                            >
+                                                {page}
+                                            </Button>
+                                        </Link>
+                                    ))}
+                                </div>
+
+                                <Link href={overtime.links?.next} preserve={['page']}>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={!overtime.links?.next}
+                                        className="gap-1"
+                                    >
+                                        Next
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                </Link>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
