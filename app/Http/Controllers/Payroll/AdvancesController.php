@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Payroll;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Payroll\StoreAdvanceRequest;
 use App\Http\Requests\Payroll\ApproveAdvanceRequest;
+use App\Http\Requests\Payroll\RejectAdvanceRequest;
+use App\Http\Requests\Payroll\CancelAdvanceRequest;
 use App\Models\CashAdvance;
 use App\Models\Employee;
 use App\Services\Payroll\AdvanceManagementService;
@@ -214,7 +216,7 @@ class AdvancesController extends Controller
     /**
      * Reject a pending cash advance
      */
-    public function reject(Request $request, int $id)
+    public function reject(RejectAdvanceRequest $request, int $id)
     {
         try {
             $advance = CashAdvance::findOrFail($id);
@@ -225,9 +227,7 @@ class AdvancesController extends Controller
                     ->withErrors(['error' => 'Only pending advances can be rejected.']);
             }
 
-            $validated = $request->validate([
-                'rejection_reason' => 'required|string|min:10|max:500',
-            ]);
+            $validated = $request->validated();
 
             $this->advanceService->rejectAdvance($advance, $validated['rejection_reason'], $request->user());
 
@@ -245,14 +245,12 @@ class AdvancesController extends Controller
     /**
      * Cancel an active advance
      */
-    public function cancel(Request $request, int $id)
+    public function cancel(CancelAdvanceRequest $request, int $id)
     {
         try {
             $advance = CashAdvance::findOrFail($id);
 
-            $validated = $request->validate([
-                'cancellation_reason' => 'required|string|min:10|max:500',
-            ]);
+            $validated = $request->validated();
 
             $this->advanceService->cancelAdvance($advance, $validated['cancellation_reason'], $request->user());
 

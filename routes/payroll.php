@@ -97,6 +97,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::post('/advances', [AdvancesController::class, 'store'])->name('advances.store');
         Route::post('/advances/{id}/approve', [AdvancesController::class, 'approve'])->name('advances.approve');
         Route::post('/advances/{id}/reject', [AdvancesController::class, 'reject'])->name('advances.reject');
+        Route::post('/advances/{id}/cancel', [AdvancesController::class, 'cancel'])->name('advances.cancel');
 
         // Payroll Review & Approval - Phase 2.4
         Route::get('/review', [PayrollReviewController::class, 'index'])->name('review.index');

@@ -1645,21 +1645,57 @@ class ApproveAdvanceRequest extends FormRequest
 
 #### Task 4.3: Add API Routes
 
-**File:** `routes/payroll.php`
-- **Action:** MODIFY
-- **Change:** Add advance routes
+**Status:** ✅ COMPLETE
 
+**Files Created/Modified:**
+1. `app/Http/Requests/Payroll/RejectAdvanceRequest.php` - NEW
+2. `app/Http/Requests/Payroll/CancelAdvanceRequest.php` - NEW
+3. `app/Http/Controllers/Payroll/AdvancesController.php` - MODIFIED (updated imports and method signatures)
+4. `routes/payroll.php` - MODIFIED (added cancel route)
+
+**Implementation Details:**
+
+**RejectAdvanceRequest (New Form Request)**
+- Authorization: `approve_cash_advances` permission
+- Validation Rules:
+  - `rejection_reason`: required, string, min 10, max 500 characters
+- Custom Error Messages: 4 messages for validation feedback
+- Type Conversion: Trims whitespace from reason
+
+**CancelAdvanceRequest (New Form Request)**
+- Authorization: `approve_cash_advances` permission
+- Validation Rules:
+  - `cancellation_reason`: required, string, min 10, max 500 characters
+- Custom Error Messages: 4 messages for validation feedback
+- Type Conversion: Trims whitespace from reason
+
+**AdvancesController Updates:**
+- Added imports: `RejectAdvanceRequest`, `CancelAdvanceRequest`
+- Updated `reject()` method signature: `Request $request` → `RejectAdvanceRequest $request`
+- Updated `cancel()` method signature: `Request $request` → `CancelAdvanceRequest $request`
+- Replaced inline validation with `$request->validated()`
+
+**Routes Configuration (routes/payroll.php):**
 ```php
 // Cash Advances
-Route::prefix('advances')->name('advances.')->group(function () {
-    Route::get('/', [AdvancesController::class, 'index'])->name('index');
-    Route::post('/', [AdvancesController::class, 'store'])->name('store');
-    Route::post('/{id}/approve', [AdvancesController::class, 'approve'])->name('approve');
-    Route::post('/{id}/reject', [AdvancesController::class, 'reject'])->name('reject');
-    Route::post('/{id}/cancel', [AdvancesController::class, 'cancel'])->name('cancel');
-    Route::get('/{id}/deductions', [AdvancesController::class, 'getDeductions'])->name('deductions');
-});
+Route::get('/advances', [AdvancesController::class, 'index'])->name('advances.index');
+Route::post('/advances', [AdvancesController::class, 'store'])->name('advances.store');
+Route::post('/advances/{id}/approve', [AdvancesController::class, 'approve'])->name('advances.approve');
+Route::post('/advances/{id}/reject', [AdvancesController::class, 'reject'])->name('advances.reject');
+Route::post('/advances/{id}/cancel', [AdvancesController::class, 'cancel'])->name('advances.cancel');
 ```
+
+**Validation Enhancements:**
+- Both reject and cancel requests validate reason fields (10-500 characters)
+- Authorization checks ensure only users with `approve_cash_advances` permission can perform these actions
+- Form requests centralize validation logic instead of inline controller validation
+- Consistent error messaging across all advance operations
+
+**Testing Performed:**
+- ✅ PHP syntax validation on all files (0 errors)
+- ✅ Form request classes follow established patterns
+- ✅ Controller method signatures updated correctly
+- ✅ Routes added and formatted properly
 
 ---
 
