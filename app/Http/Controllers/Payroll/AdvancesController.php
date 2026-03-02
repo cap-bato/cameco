@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Payroll;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Payroll\StoreAdvanceRequest;
+use App\Http\Requests\Payroll\ApproveAdvanceRequest;
 use App\Models\CashAdvance;
 use App\Models\Employee;
 use App\Services\Payroll\AdvanceManagementService;
@@ -158,16 +160,9 @@ class AdvancesController extends Controller
     /**
      * Store a newly created cash advance in storage
      */
-    public function store(Request $request)
+    public function store(StoreAdvanceRequest $request)
     {
-        $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'advance_type' => 'required|in:cash_advance,medical_advance,travel_advance,equipment_advance',
-            'amount_requested' => 'required|numeric|min:1000',
-            'purpose' => 'required|string|min:10|max:500',
-            'requested_date' => 'required|date',
-            'priority_level' => 'required|in:normal,urgent',
-        ]);
+        $validated = $request->validated();
 
         try {
             $advance = $this->advanceService->createAdvanceRequest($validated, $request->user());
@@ -176,7 +171,7 @@ class AdvancesController extends Controller
                 ->route('payroll.advances.index')
                 ->with('success', "Advance request {$advance->advance_number} created successfully");
         } catch (\Exception $e) {
-            Log::error('Error creating advance', ['error' => $e->getMessage(), 'data' => $validated]);
+            Log::error('Error creating advance', ['error' => $e->getMessage()]);
             return redirect()
                 ->back()
                 ->withInput()
@@ -187,7 +182,10 @@ class AdvancesController extends Controller
     /**
      * Approve a pending cash advance
      */
-    public function approve(Request $request, int $id)
+    /**
+     * Approve a pending cash advance
+     */
+    public function approve(ApproveAdvanceRequest $request, int $id)
     {
         try {
             $advance = CashAdvance::findOrFail($id);
@@ -198,12 +196,7 @@ class AdvancesController extends Controller
                     ->withErrors(['error' => 'Only pending advances can be approved.']);
             }
 
-            $validated = $request->validate([
-                'amount_approved' => 'required|numeric|min:1000|max:' . ($advance->amount_requested),
-                'deduction_schedule' => 'required|in:single_period,installments',
-                'number_of_installments' => 'required|integer|min:1|max:6',
-                'approval_notes' => 'nullable|string|max:500',
-            ]);
+            $validated = $request->validated();
 
             $this->advanceService->approveAdvance($advance, $validated, $request->user());
 
