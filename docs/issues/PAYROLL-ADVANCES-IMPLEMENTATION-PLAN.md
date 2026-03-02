@@ -1489,6 +1489,64 @@ return $deductions;
 
 ---
 
+#### Task 4.2: Create Form Request Classes ✅ COMPLETE
+
+**Subtask 4.2.1: Create StoreAdvanceRequest ✅ COMPLETE**
+- **File:** `app/Http/Requests/Payroll/StoreAdvanceRequest.php`
+- **Status:** IMPLEMENTED & TESTED ✅
+- **Action:** CREATE
+
+**Features:**
+- ✅ Authorization: User must have `create_cash_advances` permission
+- ✅ Validates employee exists in database
+- ✅ Validates advance type from allowed list
+- ✅ Validates amount minimum (₱1,000)
+- ✅ Validates purpose (min 10, max 500 characters)
+- ✅ Validates requested date format
+- ✅ Validates priority level
+- ✅ Optional file upload support (max 5MB per file)
+- ✅ Custom error messages for user-friendly feedback
+- ✅ Type conversion for numeric/integer fields
+
+**Subtask 4.2.2: Create ApproveAdvanceRequest ✅ COMPLETE**
+- **File:** `app/Http/Requests/Payroll/ApproveAdvanceRequest.php`
+- **Status:** IMPLEMENTED & TESTED ✅
+- **Action:** CREATE
+
+**Features:**
+- ✅ Authorization: User must have `approve_cash_advances` permission
+- ✅ Dynamic validation: max amount based on advance request amount
+- ✅ Validates amount minimum (₱1,000)
+- ✅ Validates amount doesn't exceed requested amount
+- ✅ Validates deduction schedule type
+- ✅ Validates number of installments (min 1, max 6)
+- ✅ Optional approval notes
+- ✅ Custom error messages for user-friendly feedback
+- ✅ Type conversion for numeric/integer fields
+- ✅ Safe route parameter handling with null checks
+
+**Task 4.3: Update AdvancesController to Use Form Requests ✅ COMPLETE**
+- **File:** `app/Http/Controllers/Payroll/AdvancesController.php`
+- **Status:** UPDATED & TESTED ✅
+- **Changes:**
+  1. ✅ Added imports for `StoreAdvanceRequest` and `ApproveAdvanceRequest`
+  2. ✅ Updated `store()` method to use `StoreAdvanceRequest` parameter
+  3. ✅ Updated `store()` method to call `$request->validated()`
+  4. ✅ Updated `approve()` method to use `ApproveAdvanceRequest` parameter
+  5. ✅ Updated `approve()` method to call `$request->validated()`
+
+**Benefits:**
+- ✅ Cleaner controller code
+- ✅ Centralized validation logic
+- ✅ Reusable form request classes
+- ✅ Authorization checks built-in
+- ✅ Custom error messages
+- ✅ Type conversion handling
+- ✅ Better maintainability
+- ✅ Follows Laravel best practices
+
+---
+
 #### Task 4.2: Create Form Request Classes
 
 **Subtask 4.2.1: Create StoreAdvanceRequest**
