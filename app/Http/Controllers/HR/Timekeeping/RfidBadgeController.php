@@ -153,28 +153,8 @@ class RfidBadgeController extends Controller
     }
 
     /**
-     * Paginate badges array
-     */
-    private function paginateBadges($items, $page, $perPage)
-    {
-        $total = count($items);
-        $lastPage = max(1, ceil($total / $perPage));
-        $page = max(1, min($page, $lastPage));
-
-        $items = array_slice($items, ($page - 1) * $perPage, $perPage);
-
-        return [
-            'data' => $items,
-            'current_page' => $page,
-            'last_page' => $lastPage,
-            'total' => $total,
-            'per_page' => $perPage,
-        ];
-    }
-
-    /**
      * Show the form for creating a new badge.
-     * TODO: Implement in Phase 1, Task 1.3
+     * Task 3.1.1: Provide list of active employees and existing badge UIDs for validation
      */
     public function create()
     {
@@ -184,8 +164,50 @@ class RfidBadgeController extends Controller
             'You do not have permission to issue badges.'
         );
         
-        // Will implement badge issuance form in Task 1.3
-        return Inertia::render('HR/Timekeeping/Badges/Create');
+        try {
+            // Get all active employees with their current badge status
+            $employees = Employee::where('status', 'active')
+                ->with(['department', 'rfidCardMappings' => function ($query) {
+                    $query->where('is_active', true);
+                }])
+                ->orderBy('first_name')
+                ->orderBy('last_name')
+                ->get()
+                ->map(function ($employee) {
+                    $activeBadge = $employee->rfidCardMappings->first();
+                    
+                    return [
+                        'id' => $employee->id,
+                        'name' => $employee->full_name,
+                        'employee_id' => $employee->employee_number,
+                        'department' => $employee->department?->name ?? 'N/A',
+                        'position' => $employee->position ?? 'N/A',
+                        'photo' => $employee->photo_url ?? null,
+                        'badge' => $activeBadge ? [
+                            'card_uid' => $activeBadge->card_uid,
+                            'issued_at' => $activeBadge->issued_at->toDateTimeString(),
+                            'expires_at' => $activeBadge->expires_at?->toDateString(),
+                            'last_used_at' => $activeBadge->last_used_at?->toDateTimeString(),
+                            'is_active' => $activeBadge->is_active,
+                        ] : null,
+                    ];
+                });
+
+            // Get all existing badge UIDs for uniqueness validation
+            $existingBadgeUids = RfidCardMapping::pluck('card_uid')->toArray();
+
+            return Inertia::render('HR/Timekeeping/Badges/Create', [
+                'employees' => $employees,
+                'existingBadgeUids' => $existingBadgeUids,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to load badge creation form', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return back()->withErrors(['error' => 'Failed to load employee data. Please try again.']);
+        }
     }
 
     /**
@@ -383,128 +405,6 @@ class RfidBadgeController extends Controller
 
             return back()->withErrors(['error' => 'Failed to load badge details. Please try again.']);
         }
-    }
-
-    /**
-     * Generate mock scans data for a badge
-     * Task 1.4.2: Badge Usage Timeline
-     */
-    private function getMockScans($badgeId)
-    {
-        return [
-            [
-                'id' => '1',
-                'timestamp' => now()->subHours(2)->toDateTimeString(),
-                'device_id' => 'GATE-01',
-                'device_name' => 'Main Gate (Gate-01)',
-                'event_type' => 'time_out',
-                'duration_minutes' => null,
-            ],
-            [
-                'id' => '2',
-                'timestamp' => now()->subHours(10)->toDateTimeString(),
-                'device_id' => 'GATE-01',
-                'device_name' => 'Main Gate (Gate-01)',
-                'event_type' => 'time_in',
-                'duration_minutes' => 515,
-            ],
-            [
-                'id' => '3',
-                'timestamp' => now()->subDays(1)->subHours(1)->toDateTimeString(),
-                'device_id' => 'GATE-01',
-                'device_name' => 'Main Gate (Gate-01)',
-                'event_type' => 'time_out',
-                'duration_minutes' => null,
-            ],
-            [
-                'id' => '4',
-                'timestamp' => now()->subDays(1)->subHours(9)->toDateTimeString(),
-                'device_id' => 'LOADING-DOCK',
-                'device_name' => 'Loading Dock (LOAD-02)',
-                'event_type' => 'time_in',
-                'duration_minutes' => 520,
-            ],
-            [
-                'id' => '5',
-                'timestamp' => now()->subDays(1)->subHours(16)->toDateTimeString(),
-                'device_id' => 'CAFETERIA',
-                'device_name' => 'Cafeteria (CAF-03)',
-                'event_type' => 'break_end',
-                'duration_minutes' => 45,
-            ],
-            [
-                'id' => '6',
-                'timestamp' => now()->subDays(1)->subHours(16.75)->toDateTimeString(),
-                'device_id' => 'CAFETERIA',
-                'device_name' => 'Cafeteria (CAF-03)',
-                'event_type' => 'break_start',
-                'duration_minutes' => null,
-            ],
-        ];
-    }
-
-    /**
-     * Generate mock daily scans data
-     * Task 1.4.3: Badge Analytics - Scans per Day
-     */
-    private function getMockDailyScans()
-    {
-        return [
-            ['date' => now()->subDays(6)->format('M d'), 'scans' => 2],
-            ['date' => now()->subDays(5)->format('M d'), 'scans' => 2],
-            ['date' => now()->subDays(4)->format('M d'), 'scans' => 2],
-            ['date' => now()->subDays(3)->format('M d'), 'scans' => 2],
-            ['date' => now()->subDays(2)->format('M d'), 'scans' => 3],
-            ['date' => now()->subDays(1)->format('M d'), 'scans' => 2],
-            ['date' => now()->format('M d'), 'scans' => 1],
-        ];
-    }
-
-    /**
-     * Generate mock hourly peak data (heatmap)
-     * Task 1.4.3: Badge Analytics - Peak Hours
-     */
-    private function getMockHourlyPeaks()
-    {
-        return [
-            ['hour' => 0, 'scans' => 0],
-            ['hour' => 1, 'scans' => 0],
-            ['hour' => 2, 'scans' => 0],
-            ['hour' => 3, 'scans' => 0],
-            ['hour' => 4, 'scans' => 0],
-            ['hour' => 5, 'scans' => 0],
-            ['hour' => 6, 'scans' => 0],
-            ['hour' => 7, 'scans' => 2],
-            ['hour' => 8, 'scans' => 18],
-            ['hour' => 9, 'scans' => 25],
-            ['hour' => 10, 'scans' => 20],
-            ['hour' => 11, 'scans' => 15],
-            ['hour' => 12, 'scans' => 8],
-            ['hour' => 13, 'scans' => 12],
-            ['hour' => 14, 'scans' => 10],
-            ['hour' => 15, 'scans' => 5],
-            ['hour' => 16, 'scans' => 28],
-            ['hour' => 17, 'scans' => 45],
-            ['hour' => 18, 'scans' => 30],
-            ['hour' => 19, 'scans' => 5],
-            ['hour' => 20, 'scans' => 2],
-            ['hour' => 21, 'scans' => 0],
-            ['hour' => 22, 'scans' => 0],
-            ['hour' => 23, 'scans' => 0],
-        ];
-    }
-
-    /**
-     * Generate mock device usage data
-     * Task 1.4.3: Badge Analytics - Most Used Devices
-     */
-    private function getMockDeviceUsage()
-    {
-        return [
-            ['device' => 'Main Gate (Gate-01)', 'scans' => 687],
-            ['device' => 'Loading Dock (LOAD-02)', 'scans' => 412],
-            ['device' => 'Cafeteria (CAF-03)', 'scans' => 148],
-        ];
     }
 
     /**
