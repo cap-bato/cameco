@@ -319,6 +319,17 @@ Route::prefix('job-postings')->name('public.job-postings.')->group(function () {
 - ✅ Rate limiting prevents spam applications
 - ✅ Route names follow convention: `public.job-postings.*`
 
+**Completion Notes (March 3, 2026):**
+- ✅ Added `use App\Http\Controllers\Public\JobPostingsController;` import to routes/web.php
+- ✅ Created public routes group with 'public.job-postings.' naming convention
+- ✅ GET /job-postings → index() - List all open job postings
+- ✅ GET /job-postings/{id} → show() - Display specific job posting
+- ✅ POST /job-postings/{id}/apply → apply() - Submit application with throttle:5,1
+- ✅ All routes tested and registered in artisan route:list
+- ✅ No authentication middleware on public routes
+- ✅ PHP syntax validation passed on routes/web.php
+- ✅ Git commit: feat(#ats-public): phase 2 - add public job postings routes
+
 ---
 
 ## Phase 3: Frontend - Public Job Postings Index Page
@@ -2126,7 +2137,7 @@ php artisan test --filter=PublicJobPostingsTest
 | Phase | Duration | Tasks | Status |
 |-------|----------|-------|--------|
 | **Phase 1** | 0.5 days | Public Job Postings Controller | ✅ Complete |
-| **Phase 2** | 0.25 days | Routes Configuration | ⏳ Pending |
+| **Phase 2** | 0.25 days | Routes Configuration | ✅ Complete |
 | **Phase 3** | 1 day | Public Job Postings Index Page | ⏳ Pending |
 | **Phase 4** | 1 day | Job Detail & Application Page | ⏳ Pending |
 | **Phase 5** | 0.25 days | Update Landing Page | ⏳ Pending |
