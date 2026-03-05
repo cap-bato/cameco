@@ -351,6 +351,31 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 ->middleware('permission:hr.ats.candidates.update')
                 ->name('job-postings.close');
 
+            // Facebook Integration Routes
+            Route::post('/job-postings/{jobPosting}/post-to-facebook', [JobPostingController::class, 'postToFacebook'])
+                ->middleware('permission:hr.ats.candidates.update')
+                ->name('job-postings.post-to-facebook');
+            
+            Route::get('/job-postings/{jobPosting}/facebook-preview', [JobPostingController::class, 'previewFacebookPost'])
+                ->middleware('permission:hr.ats.candidates.view')
+                ->name('job-postings.facebook-preview');
+            
+            Route::get('/job-postings/{jobPosting}/facebook-logs', [JobPostingController::class, 'getFacebookLogs'])
+                ->middleware('permission:hr.ats.candidates.view')
+                ->name('job-postings.facebook-logs');
+            
+            Route::post('/job-postings/{jobPosting}/refresh-facebook-metrics', [JobPostingController::class, 'refreshEngagementMetrics'])
+                ->middleware('permission:hr.ats.candidates.update')
+                ->name('job-postings.refresh-facebook-metrics');
+            
+            Route::delete('/job-postings/{jobPosting}/delete-facebook-post', [JobPostingController::class, 'deleteFacebookPost'])
+                ->middleware('permission:hr.ats.candidates.update')
+                ->name('job-postings.delete-facebook-post');
+            
+            Route::get('/job-postings/{jobPosting}/facebook-status', [JobPostingController::class, 'getFacebookStatus'])
+                ->middleware('permission:hr.ats.candidates.view')
+                ->name('job-postings.facebook-status');
+
             // Candidates
             Route::get('/candidates', [CandidateController::class, 'index'])
                 ->middleware('permission:hr.ats.candidates.view')

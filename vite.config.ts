@@ -3,21 +3,14 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import laravel from 'laravel-vite-plugin';
 import { defineConfig } from 'vite';
-import fs from 'fs';
-
 
 export default defineConfig({
     server: {
-        host: true,
+        host: '0.0.0.0',
         port: 5173,
         strictPort: true,
-        https: {
-            key: fs.readFileSync('./cameco.local-key.pem'),
-            cert: fs.readFileSync('./cameco.local.pem'),
-        },
         hmr: {
             host: 'cameco.local',
-            protocol: 'https',  // Add this
         }
     },
     plugins: [

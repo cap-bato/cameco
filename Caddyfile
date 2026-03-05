@@ -1,12 +1,11 @@
 cameco.local {
     reverse_proxy localhost:8000
     
-    handle_path /@vite* {
-        reverse_proxy https://localhost:5173 {
-            transport http {
-                tls
-                tls_insecure_skip_verify
-            }
-        }
+    @viteAssets {
+        path /@vite/* /resources/* /@react-refresh /@id/*
+    }
+    
+    handle @viteAssets {
+        reverse_proxy localhost:5173
     }
 }
