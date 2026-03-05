@@ -111,11 +111,15 @@ class GovernmentContributionRate extends Model
 
     /**
      * Find SSS bracket based on monthly compensation
+     *
+     * @param  \DateTimeInterface|string|null  $date  Effective date for the bracket lookup. Defaults to now().
      */
-    public static function findSSSBracket(float $monthlyCompensation)
+    public static function findSSSBracket(float $monthlyCompensation, \DateTimeInterface|string|null $date = null)
     {
         return self::active()
             ->sss()
+            ->where('rate_type', 'bracket')
+            ->effectiveOn($date)
             ->where('compensation_min', '<=', $monthlyCompensation)
             ->where(function ($q) use ($monthlyCompensation) {
                 $q->whereNull('compensation_max')
@@ -127,19 +131,29 @@ class GovernmentContributionRate extends Model
 
     /**
      * Get PhilHealth premium rate
+     *
+     * @param  \DateTimeInterface|string|null  $date  Effective date for the rate lookup. Defaults to now().
      */
-    public static function getPhilHealthRate()
+    public static function getPhilHealthRate(\DateTimeInterface|string|null $date = null)
     {
-        return self::active()->philHealth()->first();
+        return self::active()
+            ->philHealth()
+            ->where('rate_type', 'premium_rate')
+            ->effectiveOn($date)
+            ->first();
     }
 
     /**
      * Get Pag-IBIG rate based on salary
+     *
+     * @param  \DateTimeInterface|string|null  $date  Effective date for the rate lookup. Defaults to now().
      */
-    public static function getPagIbigRate(float $salary)
+    public static function getPagIbigRate(float $salary, \DateTimeInterface|string|null $date = null)
     {
         return self::active()
             ->pagIbig()
+            ->where('rate_type', 'contribution_rate')
+            ->effectiveOn($date)
             ->where('compensation_min', '<=', $salary)
             ->where(function ($q) use ($salary) {
                 $q->whereNull('compensation_max')
