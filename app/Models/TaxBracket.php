@@ -104,7 +104,7 @@ class TaxBracket extends Model
      */
     public function calculateTax(float $annualizedIncome): float
     {
-        if ($annualizedIncome <= $this->income_from) {
+        if ($annualizedIncome < $this->income_from) {
             return 0;
         }
 
