@@ -82,6 +82,11 @@ export interface JobPosting {
     created_at: string;
     updated_at: string;
     deleted_at?: string | null;
+    // Facebook Integration fields
+    facebook_post_id?: string | null;
+    facebook_post_url?: string | null;
+    facebook_posted_at?: string | null;
+    auto_post_facebook?: boolean;
 }
 
 /**
@@ -460,6 +465,7 @@ export interface JobPostingFormData {
     requirements: string;
     status: JobStatus;
     closed_at?: string | null;
+    auto_post_facebook?: boolean;
 }
 
 /**

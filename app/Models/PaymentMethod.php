@@ -59,10 +59,6 @@ class PaymentMethod extends Model
         'api_credentials', // Sensitive data
     ];
 
-    // ============================================================
-    // Relationships
-    // ============================================================
-
     public function configuredBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'configured_by');
@@ -83,9 +79,10 @@ class PaymentMethod extends Model
         return $this->hasMany(BankFileBatch::class);
     }
 
-    // ============================================================
-    // Scopes
-    // ============================================================
+    public function providers(): HasMany
+    {
+        return $this->hasMany(PaymentMethodProvider::class);
+    }
 
     public function scopeEnabled($query)
     {
@@ -111,10 +108,6 @@ class PaymentMethod extends Model
     {
         return $query->orderBy('sort_order');
     }
-
-    // ============================================================
-    // Helper Methods
-    // ============================================================
 
     public function isCash(): bool
     {
@@ -155,7 +148,6 @@ class PaymentMethod extends Model
             return false;
         }
 
-        // Check cutoff time for same-day settlement
         if ($this->settlement_speed === 'same_day' && $this->cutoff_time) {
             $now = now();
             $cutoff = Carbon::parse($this->cutoff_time);

@@ -75,8 +75,9 @@ class RfidBadgeController extends Controller
 
             // Department filter
             if ($request->filled('department')) {
-                $query->whereHas('employee', function ($q) {
-                    $q->where('department_id', $q->getModel()->input('department'));
+                $departmentId = $request->input('department');
+                $query->whereHas('employee', function ($q) use ($departmentId) {
+                    $q->where('department_id', $departmentId);
                 });
             }
 
@@ -168,6 +169,8 @@ class RfidBadgeController extends Controller
                     'employeesWithoutBadges' => 0,
                 ],
                 'filters' => $request->only(['search', 'status', 'department', 'card_type']),
+                'employees' => [],
+                'employeesWithoutBadges' => [],
                 'error' => 'Failed to load badges. Please try again later.',
             ]);
         }

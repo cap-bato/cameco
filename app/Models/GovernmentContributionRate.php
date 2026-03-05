@@ -127,10 +127,26 @@ class GovernmentContributionRate extends Model
 
     /**
      * Get PhilHealth premium rate
+     *
+     * @param  string|null  $date  Effective date (Y-m-d) to evaluate the rate for; if null, use latest effective rate.
      */
-    public static function getPhilHealthRate()
+    public static function getPhilHealthRate(?string $date = null)
     {
-        return self::active()->philHealth()->first();
+        $query = self::active()
+            ->philHealth()
+            ->where('rate_type', 'premium_rate');
+
+        if ($date !== null) {
+            $query->where('effective_from', '<=', $date)
+                  ->where(function ($q) use ($date) {
+                      $q->whereNull('effective_to')
+                        ->orWhere('effective_to', '>=', $date);
+                  });
+        } else {
+            $query->orderBy('effective_from', 'desc');
+        }
+
+        return $query->first();
     }
 
     /**
@@ -138,13 +154,25 @@ class GovernmentContributionRate extends Model
      */
     public static function getPagIbigRate(float $salary)
     {
+        $today = now()->toDateString();
+
         return self::active()
             ->pagIbig()
+            ->where('rate_type', 'contribution_rate')
+            ->where(function ($q) use ($today) {
+                $q->whereNull('effective_from')
+                  ->orWhere('effective_from', '<=', $today);
+            })
+            ->where(function ($q) use ($today) {
+                $q->whereNull('effective_to')
+                  ->orWhere('effective_to', '>=', $today);
+            })
             ->where('compensation_min', '<=', $salary)
             ->where(function ($q) use ($salary) {
                 $q->whereNull('compensation_max')
                   ->orWhere('compensation_max', '>=', $salary);
             })
+            ->orderBy('effective_from', 'desc')
             ->first();
     }
 }

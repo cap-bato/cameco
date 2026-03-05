@@ -77,11 +77,10 @@ class SalaryComponentController extends Controller
     public function index(Request $request)
     {
         $query = SalaryComponent::query()
-            ->with(['referenceComponent', 'createdBy', 'updatedBy'])
-            ->where('is_active', true);
+            ->with(['referenceComponent', 'createdBy', 'updatedBy']);
 
         // Apply search filter
-        if ($request->has('search') && $request->input('search')) {
+        if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
@@ -90,24 +89,24 @@ class SalaryComponentController extends Controller
         }
 
         // Apply component type filter
-        if ($request->has('component_type') && $request->input('component_type')) {
+        if ($request->filled('component_type')) {
             $query->where('component_type', $request->input('component_type'));
         }
 
         // Apply category filter
-        if ($request->has('category') && $request->input('category')) {
+        if ($request->filled('category')) {
             $query->where('category', $request->input('category'));
         }
 
-        // Apply status filter
-        if ($request->has('status')) {
-            $status = $request->input('status');
-            if ($status === 'inactive') {
-                $query->where('is_active', false);
-            }
+        // Apply status filter (default to all)
+        $status = $request->input('status', 'all');
+        if ($status === 'active') {
+            $query->where('is_active', true);
+        } elseif ($status === 'inactive') {
+            $query->where('is_active', false);
         }
 
-        $components = $query->orderBy('display_order')->paginate(50);
+        $components = $query->orderBy('display_order')->orderBy('name')->get();
 
         // Get reference components for dropdown
         $referenceComponents = SalaryComponent::where('is_active', true)

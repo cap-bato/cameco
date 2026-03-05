@@ -9,6 +9,7 @@ use App\Models\LeaveBalance;
 use App\Models\LeavePolicy;
 use App\Services\HR\Leave\LeaveApprovalService;
 use App\Services\HR\Leave\LeaveBalanceService;
+use App\Services\LeaveAccrualService;
 use App\Events\HR\Leave\LeaveRequestSubmitted;
 use App\Events\HR\Leave\LeaveRequestApproved;
 use App\Events\HR\Leave\LeaveRequestRejected;
@@ -74,7 +75,8 @@ class LeaveRequestController extends Controller
      */
     public function __construct(
         protected LeaveApprovalService $approvalService,
-        protected LeaveBalanceService $balanceService
+        protected LeaveBalanceService $balanceService,
+        protected LeaveAccrualService $accrualService
     ) {}
 
     /**
@@ -456,7 +458,7 @@ class LeaveRequestController extends Controller
         $validated = $request->validated();
         $action = $validated['action'] ?? 'approve'; // 'approve', 'reject', 'cancel'
         
-        $leaveRequest = LeaveRequest::with(['employee.user'])->findOrFail($id);
+        $leaveRequest = LeaveRequest::with(['employee.user', 'leavePolicy'])->findOrFail($id);
         $user = auth()->user();
 
         // Determine user's primary role for approval
@@ -506,22 +508,29 @@ class LeaveRequestController extends Controller
             
             $leaveRequest->update($updateData);
             
-            // Deduct balance using service
-            $startDate = \Carbon\Carbon::parse($leaveRequest->start_date);
-            $endDate = \Carbon\Carbon::parse($leaveRequest->end_date);
-            $duration = $startDate->diffInDays($endDate) + 1;
-            
-            $this->balanceService->deductBalance(
-                $leaveRequest->employee_id,
-                $leaveRequest->leave_policy_id,
-                $duration,
-                "Leave approved by {$user->name}"
-            );
+            // Deduct balance using LeaveAccrualService
+            try {
+                $startDate = \Carbon\Carbon::parse($leaveRequest->start_date);
+                $duration = $startDate->diffInDays(\Carbon\Carbon::parse($leaveRequest->end_date)) + 1;
+                
+                $this->accrualService->deductLeave(
+                    $leaveRequest->employee,
+                    $leaveRequest->leavePolicy,
+                    $duration,
+                    $startDate
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Leave balance deduction failed', [
+                    'leave_request_id' => $leaveRequest->id,
+                    'error' => $e->getMessage(),
+                ]);
+                return back()->with('error', 'Failed to deduct leave balance: ' . $e->getMessage());
+            }
             
             // Dispatch event
             event(new LeaveRequestApproved($leaveRequest->fresh(), $user->hasRole('HR Manager') ? 'manager' : 'admin'));
             
-            return back()->with('success', 'Leave request approved successfully!');
+            return back()->with('success', 'Leave request approved successfully! Leave balance has been deducted.');
         }
         
         if ($action === 'reject') {
@@ -538,18 +547,25 @@ class LeaveRequestController extends Controller
         }
         
         if ($action === 'cancel') {
-            // Restore balance if leave was already approved
+            // Restore balance if leave was already approved and deducted
             if ($leaveRequest->status === 'approved') {
-                $startDate = \Carbon\Carbon::parse($leaveRequest->start_date);
-                $endDate = \Carbon\Carbon::parse($leaveRequest->end_date);
-                $duration = $startDate->diffInDays($endDate) + 1;
-                
-                $this->balanceService->restoreBalance(
-                    $leaveRequest->employee_id,
-                    $leaveRequest->leave_policy_id,
-                    $duration,
-                    "Leave cancelled by {$user->name}"
-                );
+                try {
+                    $startDate = \Carbon\Carbon::parse($leaveRequest->start_date);
+                    $duration = $startDate->diffInDays(\Carbon\Carbon::parse($leaveRequest->end_date)) + 1;
+                    
+                    $this->accrualService->restoreLeave(
+                        $leaveRequest->employee,
+                        $leaveRequest->leavePolicy,
+                        $duration,
+                        $startDate
+                    );
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Leave balance restoration failed', [
+                        'leave_request_id' => $leaveRequest->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    return back()->with('error', 'Failed to restore leave balance: ' . $e->getMessage());
+                }
             }
             
             $leaveRequest->update([
@@ -561,7 +577,7 @@ class LeaveRequestController extends Controller
             // Dispatch event
             event(new LeaveRequestCancelled($leaveRequest->fresh(), $user, $validated['reason'] ?? null));
             
-            return back()->with('success', 'Leave request cancelled.');
+            return back()->with('success', 'Leave request cancelled. Leave balance has been restored.');
         }
 
         return back()->with('error', 'Invalid action specified.');

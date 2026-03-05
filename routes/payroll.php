@@ -93,6 +93,18 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
 
         // Loans & Advances - Phase 1.5 & 1.5b
         Route::get('/loans', [LoansController::class, 'index'])->name('loans.index');
+
+        // Loan CRUD and payment routes can be enabled via feature flag once
+        // LoansController and LoanManagementService are fully aligned.
+        if (config('features.enable_loan_crud_routes')) {
+            Route::post('/loans', [LoansController::class, 'store'])->name('loans.store');
+            Route::get('/loans/{id}', [LoansController::class, 'show'])->name('loans.show');
+            Route::put('/loans/{id}', [LoansController::class, 'update'])->name('loans.update');
+            Route::post('/loans/{id}/early-payment', [LoansController::class, 'earlyPayment'])->name('loans.early-payment');
+            Route::post('/loans/{id}/cancel', [LoansController::class, 'cancel'])->name('loans.cancel');
+            Route::delete('/loans/{id}', [LoansController::class, 'destroy'])->name('loans.destroy');
+            Route::get('/loans/{id}/payments', [LoansController::class, 'getPayments'])->name('loans.payments');
+        }
         Route::get('/advances', [AdvancesController::class, 'index'])->name('advances.index');
         Route::post('/advances', [AdvancesController::class, 'store'])->name('advances.store');
         Route::post('/advances/{id}/approve', [AdvancesController::class, 'approve'])->name('advances.approve');

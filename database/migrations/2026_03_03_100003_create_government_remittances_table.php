@@ -24,7 +24,7 @@ return new class extends Migration
             // Amounts
             $table->decimal('employee_share', 12, 2)->default(0);
             $table->decimal('employer_share', 12, 2)->default(0);
-            $table->decimal('ec_share', 8, 2)->default(0); // SSS EC
+            $table->decimal('ec_share', 12, 2)->default(0); // SSS EC
             $table->decimal('total_amount', 12, 2);
             
             // Employee Count

@@ -10,20 +10,19 @@ class Candidate extends Model
     use HasFactory;
 
     protected $fillable = [
-        'first_name',
-        'last_name',
-        'email',
-        'phone',
+        'profile_id',
         'source',
         'status',
-        'resume_path',
-        'cover_letter',
-        'linkedin_url',
-        'portfolio_url',
         'applied_at',
+        'notes',
     ];
 
     // Relationships
+    public function profile()
+    {
+        return $this->belongsTo(Profile::class);
+    }
+
     public function applications()
     {
         return $this->hasMany(Application::class);

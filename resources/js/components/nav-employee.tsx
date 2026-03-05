@@ -45,6 +45,12 @@ export function NavEmployee() {
             href: '/employee/payslips',
             description: 'View and download payslips',
         },
+        {
+            title: 'Documents',
+            href: '/employee/documents',
+            icon: FileText,
+            description: 'View and manage documents',
+        }
     ];
 
     // Leave Management submenu

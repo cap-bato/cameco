@@ -9,9 +9,21 @@ use Inertia\Response;
 use App\Models\JobPosting;
 use App\Models\Application;
 use App\Models\Department;
+use App\Services\Social\FacebookService;
+use Illuminate\Support\Facades\Auth;
 
 class JobPostingController extends Controller
 {
+    protected FacebookService $facebookService;
+
+    /**
+     * Inject FacebookService via constructor
+     */
+    public function __construct(FacebookService $facebookService)
+    {
+        $this->facebookService = $facebookService;
+    }
+
     /**
      * Display a listing of job postings with real database queries.
      */
@@ -145,6 +157,11 @@ class JobPostingController extends Controller
             'posted_at' => now(),
         ]);
 
+        // Auto-post to Facebook if enabled
+        if ($this->facebookService->isEnabled() && $jobPosting->auto_post_facebook) {
+            $this->facebookService->postJob($jobPosting, Auth::id(), true);
+        }
+
         return redirect()->back()->with('success', 'Job posting published.');
     }
 
@@ -170,5 +187,210 @@ class JobPostingController extends Controller
 
         return redirect()->route('hr.ats.job-postings.index')
             ->with('success', 'Job posting deleted successfully.');
+    }
+
+    /**
+     * Post job to Facebook Page
+     */
+    public function postToFacebook(JobPosting $jobPosting)
+    {
+        // Check if already posted
+        if ($jobPosting->isPostedToFacebook()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This job has already been posted to Facebook.',
+            ], 400);
+        }
+
+        try {
+            // Post to Facebook
+            $result = $this->facebookService->postJob($jobPosting, Auth::id(), false);
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Job posted to Facebook successfully!',
+                    'data' => $result,
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to post to Facebook: ' . ($result['error'] ?? 'Unknown error'),
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Exception: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Preview Facebook post message
+     */
+    public function previewFacebookPost(JobPosting $jobPosting)
+    {
+        try {
+            // Use reflection to access protected formatJobMessage method
+            $reflectionClass = new \ReflectionClass($this->facebookService);
+            $method = $reflectionClass->getMethod('formatJobMessage');
+            $method->setAccessible(true);
+
+            $message = $method->invoke($this->facebookService, $jobPosting);
+            $link = url("/job-postings/{$jobPosting->id}");
+
+            return response()->json([
+                'success' => true,
+                'preview' => [
+                    'message' => $message,
+                    'link' => $link,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate preview: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get Facebook post logs for a job posting
+     */
+    public function getFacebookLogs(JobPosting $jobPosting)
+    {
+        try {
+            $logs = $jobPosting->facebookPostLogs()
+                ->with('postedBy:id,name')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(fn($log) => [
+                    'id' => $log->id,
+                    'facebook_post_id' => $log->facebook_post_id,
+                    'facebook_post_url' => $log->facebook_post_url,
+                    'post_type' => $log->post_type,
+                    'status' => $log->status,
+                    'error_message' => $log->error_message,
+                    'engagement_metrics' => $log->engagement_metrics,
+                    'metrics_updated_at' => $log->metrics_updated_at?->format('Y-m-d H:i:s'),
+                    'posted_by' => $log->postedBy?->name ?? 'Unknown',
+                    'created_at' => $log->created_at->format('Y-m-d H:i:s'),
+                ]);
+
+            return response()->json([
+                'success' => true,
+                'logs' => $logs,
+                'count' => $logs->count(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve logs: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Refresh engagement metrics for a Facebook post
+     */
+    public function refreshEngagementMetrics(JobPosting $jobPosting)
+    {
+        try {
+            if (!$jobPosting->isPostedToFacebook()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Job has not been posted to Facebook.',
+                ], 400);
+            }
+
+            $updated = $this->facebookService->updateEngagementMetrics($jobPosting);
+
+            if ($updated) {
+                $log = $jobPosting->latestFacebookPost();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Engagement metrics updated successfully.',
+                    'metrics' => $log?->engagement_metrics,
+                    'metrics_updated_at' => $log?->metrics_updated_at?->format('Y-m-d H:i:s'),
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update engagement metrics.',
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Exception: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete a Facebook post
+     */
+    public function deleteFacebookPost(JobPosting $jobPosting)
+    {
+        try {
+            if (!$jobPosting->isPostedToFacebook()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Job has not been posted to Facebook.',
+                ], 400);
+            }
+
+            $facebookPostId = $jobPosting->facebook_post_id;
+            $deleted = $this->facebookService->deletePost($facebookPostId);
+
+            if ($deleted) {
+                // Update job posting to clear Facebook data
+                $jobPosting->update([
+                    'facebook_post_id' => null,
+                    'facebook_post_url' => null,
+                    'facebook_posted_at' => null,
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Facebook post deleted successfully.',
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to delete Facebook post.',
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Exception: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get Facebook integration status
+     */
+    public function getFacebookStatus(JobPosting $jobPosting)
+    {
+        try {
+            return response()->json([
+                'success' => true,
+                'integration_enabled' => $this->facebookService->isEnabled(),
+                'is_posted' => $jobPosting->isPostedToFacebook(),
+                'post_id' => $jobPosting->facebook_post_id,
+                'post_url' => $jobPosting->facebook_post_url,
+                'posted_at' => $jobPosting->facebook_posted_at?->format('Y-m-d H:i:s'),
+                'auto_post_enabled' => $jobPosting->auto_post_facebook,
+                'latest_log' => $jobPosting->latestFacebookPostLog()?->load('postedBy')->toArray(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get status: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

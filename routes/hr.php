@@ -34,6 +34,14 @@ use App\Http\Controllers\HR\Appraisal\AppraisalController;
 use App\Http\Controllers\HR\Appraisal\PerformanceMetricsController;
 use App\Http\Controllers\HR\Appraisal\RehireRecommendationController;
 use App\Http\Controllers\HR\Employee\EmployeeDocumentController;
+use App\Http\Controllers\HR\Offboarding\OffboardingCaseController;
+use App\Http\Controllers\HR\Offboarding\ClearanceController;
+use App\Http\Controllers\HR\Offboarding\ExitInterviewController;
+use App\Http\Controllers\HR\Offboarding\CompanyAssetController;
+use App\Http\Controllers\HR\Offboarding\OffboardingDocumentController;
+use App\Http\Controllers\HR\Offboarding\OffboardingDashboardController;
+use App\Http\Controllers\HR\Offboarding\AnalyticsController as OffboardingAnalyticsController;
+use App\Http\Controllers\HR\Offboarding\ReportController as OffboardingReportController;
 use App\Http\Middleware\EnsureHRAccess;
 // use App\Http\Middleware\EnsureProfileComplete; for future useronboarding workflow
 
@@ -351,6 +359,31 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 ->middleware('permission:hr.ats.candidates.update')
                 ->name('job-postings.close');
 
+            // Facebook Integration Routes
+            Route::post('/job-postings/{jobPosting}/post-to-facebook', [JobPostingController::class, 'postToFacebook'])
+                ->middleware('permission:hr.ats.candidates.update')
+                ->name('job-postings.post-to-facebook');
+            
+            Route::get('/job-postings/{jobPosting}/facebook-preview', [JobPostingController::class, 'previewFacebookPost'])
+                ->middleware('permission:hr.ats.candidates.view')
+                ->name('job-postings.facebook-preview');
+            
+            Route::get('/job-postings/{jobPosting}/facebook-logs', [JobPostingController::class, 'getFacebookLogs'])
+                ->middleware('permission:hr.ats.candidates.view')
+                ->name('job-postings.facebook-logs');
+            
+            Route::post('/job-postings/{jobPosting}/refresh-facebook-metrics', [JobPostingController::class, 'refreshEngagementMetrics'])
+                ->middleware('permission:hr.ats.candidates.update')
+                ->name('job-postings.refresh-facebook-metrics');
+            
+            Route::delete('/job-postings/{jobPosting}/delete-facebook-post', [JobPostingController::class, 'deleteFacebookPost'])
+                ->middleware('permission:hr.ats.candidates.update')
+                ->name('job-postings.delete-facebook-post');
+            
+            Route::get('/job-postings/{jobPosting}/facebook-status', [JobPostingController::class, 'getFacebookStatus'])
+                ->middleware('permission:hr.ats.candidates.view')
+                ->name('job-postings.facebook-status');
+
             // Candidates
             Route::get('/candidates', [CandidateController::class, 'index'])
                 ->middleware('permission:hr.ats.candidates.view')
@@ -586,6 +619,150 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/assignments/api/coverage-analysis', [AssignmentController::class, 'getCoverageAnalysis'])
                 ->middleware('permission:hr.workforce.assignments.view')
                 ->name('assignments.coverage-analysis');
+        });
+
+        // Offboarding Module
+        Route::prefix('offboarding')->name('offboarding.')->group(function () {
+            // Offboarding Dashboard
+            Route::get('/dashboard', [OffboardingDashboardController::class, 'index'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('dashboard');
+
+            // Exit Analytics
+            Route::get('/analytics', [OffboardingAnalyticsController::class, 'index'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('analytics');
+
+            // Offboarding Cases
+            Route::get('/cases', [OffboardingCaseController::class, 'index'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('cases.index');
+            Route::get('/cases/create', [OffboardingCaseController::class, 'create'])
+                ->middleware('permission:hr.offboarding.create')
+                ->name('cases.create');
+            Route::post('/cases', [OffboardingCaseController::class, 'store'])
+                ->middleware('permission:hr.offboarding.create')
+                ->name('cases.store');
+            Route::get('/cases/{id}', [OffboardingCaseController::class, 'show'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('cases.show');
+            Route::get('/cases/{id}/edit', [OffboardingCaseController::class, 'edit'])
+                ->middleware('permission:hr.offboarding.update')
+                ->name('cases.edit');
+            Route::put('/cases/{id}', [OffboardingCaseController::class, 'update'])
+                ->middleware('permission:hr.offboarding.update')
+                ->name('cases.update');
+            Route::post('/cases/{id}/cancel', [OffboardingCaseController::class, 'cancel'])
+                ->middleware('permission:hr.offboarding.cancel')
+                ->name('cases.cancel');
+            Route::post('/cases/{id}/complete', [OffboardingCaseController::class, 'complete'])
+                ->middleware('permission:hr.offboarding.complete')
+                ->name('cases.complete');
+            Route::get('/cases/{id}/export', [OffboardingCaseController::class, 'exportReport'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('cases.export');
+
+            // Clearance Items
+            Route::get('/clearance', [ClearanceController::class, 'indexAll'])
+                ->middleware('permission:hr.offboarding.clearance.view')
+                ->name('clearance.all');
+            Route::get('/clearance/{caseId}', [ClearanceController::class, 'index'])
+                ->middleware('permission:hr.offboarding.clearance.view')
+                ->name('clearance.index');
+            Route::post('/clearance/{id}/approve', [ClearanceController::class, 'approve'])
+                ->middleware('permission:hr.offboarding.clearance.approve')
+                ->name('clearance.approve');
+            Route::post('/clearance/{id}/waive', [ClearanceController::class, 'waive'])
+                ->middleware('permission:hr.offboarding.clearance.waive')
+                ->name('clearance.waive');
+            Route::post('/clearance/{id}/issue', [ClearanceController::class, 'reportIssue'])
+                ->middleware('permission:hr.offboarding.clearance.edit')
+                ->name('clearance.issue');
+            Route::post('/clearance/bulk-approve', [ClearanceController::class, 'bulkApprove'])
+                ->middleware('permission:hr.offboarding.clearance.approve')
+                ->name('clearance.bulk-approve');
+            Route::get('/clearance/{id}/proof', [ClearanceController::class, 'downloadProof'])
+                ->middleware('permission:hr.offboarding.clearance.view')
+                ->name('clearance.proof');
+
+            // Exit Interview
+            Route::get('/exit-interview/{caseId}', [ExitInterviewController::class, 'show'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('exit-interview.show');
+            Route::post('/exit-interview/{caseId}/submit', [ExitInterviewController::class, 'submit'])
+                ->middleware('permission:hr.offboarding.exit-interview.complete')
+                ->name('exit-interview.submit');
+            Route::get('/exit-interview/{caseId}/results', [ExitInterviewController::class, 'viewResults'])
+                ->middleware('permission:hr.offboarding.exit-interview.view')
+                ->name('exit-interview.results');
+            Route::get('/exit-interview/analytics', [ExitInterviewController::class, 'analytics'])
+                ->middleware('permission:hr.offboarding.exit-interview.view')
+                ->name('exit-interview.analytics');
+
+            // Company Assets
+            Route::get('/assets/employee/{employeeId}', [CompanyAssetController::class, 'index'])
+                ->middleware('permission:hr.offboarding.assets.view')
+                ->name('assets.index');
+            Route::post('/assets', [CompanyAssetController::class, 'store'])
+                ->middleware('permission:hr.offboarding.assets.create')
+                ->name('assets.store');
+            Route::put('/assets/{assetId}/return', [CompanyAssetController::class, 'markReturned'])
+                ->middleware('permission:hr.offboarding.assets.update')
+                ->name('assets.return');
+            Route::post('/assets/{assetId}/issue', [CompanyAssetController::class, 'reportIssue'])
+                ->middleware('permission:hr.offboarding.assets.update')
+                ->name('assets.issue');
+            Route::get('/assets/inventory', [CompanyAssetController::class, 'inventory'])
+                ->middleware('permission:hr.offboarding.assets.view')
+                ->name('assets.inventory');
+
+            // Offboarding Documents
+            Route::post('/documents/{caseId}/generate-clearance-certificate', [OffboardingDocumentController::class, 'generateClearanceCertificate'])
+                ->middleware('permission:hr.offboarding.documents.generate')
+                ->name('documents.generate-clearance');
+            Route::post('/documents/{caseId}/generate-coe', [OffboardingDocumentController::class, 'generateCOE'])
+                ->middleware('permission:hr.offboarding.documents.generate')
+                ->name('documents.generate-coe');
+            Route::post('/documents/{caseId}/generate-final-pay', [OffboardingDocumentController::class, 'generateFinalPay'])
+                ->middleware('permission:hr.offboarding.documents.generate')
+                ->name('documents.generate-final-pay');
+            Route::post('/documents/{caseId}/upload', [OffboardingDocumentController::class, 'upload'])
+                ->middleware('permission:hr.offboarding.documents.upload')
+                ->name('documents.upload');
+            Route::get('/documents/{documentId}/download', [OffboardingDocumentController::class, 'download'])
+                ->middleware('permission:hr.offboarding.documents.view')
+                ->name('documents.download');
+            Route::post('/documents/{documentId}/approve', [OffboardingDocumentController::class, 'approve'])
+                ->middleware('permission:hr.offboarding.documents.approve')
+                ->name('documents.approve');
+
+            // Offboarding Reports
+            Route::prefix('reports')->name('reports.')->group(function () {
+                Route::get('/monthly-separation/{format?}', [OffboardingReportController::class, 'monthlySeparationReport'])
+                    ->middleware('permission:hr.offboarding.reports.view')
+                    ->where('format', 'pdf|csv')
+                    ->name('monthly-separation');
+
+                Route::get('/clearance-compliance/{format?}', [OffboardingReportController::class, 'clearanceComplianceReport'])
+                    ->middleware('permission:hr.offboarding.reports.view')
+                    ->where('format', 'pdf|csv')
+                    ->name('clearance-compliance');
+
+                Route::get('/exit-interview-insights/{format?}', [OffboardingReportController::class, 'exitInterviewInsights'])
+                    ->middleware('permission:hr.offboarding.reports.view')
+                    ->where('format', 'pdf')
+                    ->name('exit-interview-insights');
+
+                Route::get('/asset-liability/{format?}', [OffboardingReportController::class, 'assetLiabilityReport'])
+                    ->middleware('permission:hr.offboarding.reports.view')
+                    ->where('format', 'pdf|csv')
+                    ->name('asset-liability');
+
+                Route::get('/rehire-eligibility/{format?}', [OffboardingReportController::class, 'rehireEligibilityReport'])
+                    ->middleware('permission:hr.offboarding.reports.view')
+                    ->where('format', 'pdf|csv')
+                    ->name('rehire-eligibility');
+            });
         });
 
         // Timekeeping Module

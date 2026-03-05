@@ -55,6 +55,12 @@ return new class extends Migration
             $table->index(['agency', 'is_active', 'effective_from']);
             $table->index(['bracket_code', 'agency']);
             $table->index(['compensation_min', 'compensation_max']);
+
+            // Ensure deterministic selection of active rates per agency/rate_type/bracket/effective_from
+            $table->unique(
+                ['agency', 'rate_type', 'bracket_code', 'effective_from', 'is_active'],
+                'gov_contribution_rates_unique_active'
+            );
         });
     }
 

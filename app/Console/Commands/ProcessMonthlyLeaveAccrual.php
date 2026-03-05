@@ -2,71 +2,48 @@
 
 namespace App\Console\Commands;
 
-use App\Services\HR\LeaveManagementService;
+use App\Services\LeaveAccrualService;
 use Illuminate\Console\Command;
+use Carbon\Carbon;
 
-/**
- * Process Monthly Leave Accrual Command
- * 
- * This command should be scheduled to run on the first day of each month.
- * It adds monthly leave credits to all active employees.
- */
 class ProcessMonthlyLeaveAccrual extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    protected $signature = 'leave:process-monthly-accrual';
-
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
+    protected $signature = 'leave:process-monthly-accrual {--date=}';
+    
     protected $description = 'Process monthly leave accrual for all active employees';
 
     /**
      * Execute the console command.
      */
-    public function handle(LeaveManagementService $leaveService): int
+    public function handle(LeaveAccrualService $service): int
     {
-        $this->info('Starting monthly leave accrual processing...');
+        $date = $this->option('date') 
+            ? Carbon::parse($this->option('date'))
+            : now();
 
-        try {
-            $result = $leaveService->processMonthlyAccrual();
+        $this->info("Processing monthly accrual for {$date->format('Y-m-d')}...");
 
-            if ($result['success']) {
-                $this->info('✓ Monthly leave accrual processed successfully');
-                $this->table(
-                    ['Metric', 'Value'],
-                    [
-                        ['Year', $result['year']],
-                        ['Month', $result['month']],
-                        ['Employees Processed', $result['employees_processed']],
-                        ['Policies Processed', $result['policies_processed']],
-                        ['Balances Updated', $result['balances_updated']],
-                        ['Balances Created', $result['balances_created']],
-                        ['Errors', count($result['errors'])],
-                    ]
-                );
+        $results = $service->processMonthlyAccrualForAllEmployees($date);
 
-                if (!empty($result['errors'])) {
-                    $this->warn('Some errors occurred during processing:');
-                    foreach ($result['errors'] as $error) {
-                        $this->error("Employee ID {$error['employee_id']}, Policy ID {$error['policy_id']}: {$error['error']}");
-                    }
-                }
+        $this->table(
+            ['Metric', 'Value'],
+            [
+                ['Date Processed', $date->format('Y-m-d')],
+                ['Successfully Processed', $results['processed']],
+                ['Skipped', $results['skipped']],
+                ['Errors', count($results['errors'])],
+            ]
+        );
 
-                return Command::SUCCESS;
+        if (count($results['errors']) > 0) {
+            $this->warn("\n⚠ Errors occurred during processing:");
+            foreach ($results['errors'] as $error) {
+                $this->error("  - Employee {$error['employee_id']}, Policy {$error['policy_id']}: {$error['error']}");
             }
-
-            $this->error('Failed to process monthly leave accrual');
-            return Command::FAILURE;
-        } catch (\Exception $e) {
-            $this->error('Error processing monthly leave accrual: ' . $e->getMessage());
             return Command::FAILURE;
         }
+
+        $this->info("✅ Monthly accrual processing completed successfully!");
+        return Command::SUCCESS;
     }
 }
