@@ -2224,12 +2224,12 @@ class EmployeePayrollInfoService
 #### Task 4.4: Update LoansController
 
 **File:** `app/Http/Controllers/Payroll/EmployeePayroll/LoansController.php`
-- **Status:** ✅ COMPLETED (February 23, 2026)
-- **Change:** Replace mock data with real database queries
+- **Status:** ✅ COMPLETED (March 5, 2026)
+- **Change:** Replace mock data with real database queries + Add destroy() and getPayments() methods
 
 **Implementation Summary:**
-- **Lines of Code:** 390+ lines of implementation
-- **Methods Updated:** 6 (index, show, store, update, earlyPayment, cancel)
+- **Lines of Code:** 410+ lines of implementation
+- **Methods Implemented:** 8 (index, show, store, update, earlyPayment, cancel, destroy, getPayments)
 - **Helper Methods Added:** 3 (getLoanTypeLabel, getLoanTypeColor, getStatusColor)
 
 **Database Operations:**
@@ -2239,15 +2239,28 @@ class EmployeePayrollInfoService
 - `update()`: Update loan interest rate or monthly amortization
 - `earlyPayment()`: Process early loan payment using service
 - `cancel()`: Cancel existing loan by updating status
+- `destroy()`: Delete loan record (soft delete) - only if not active
+- `getPayments()`: Retrieve deduction/payment history with formatted response
 
 **Service Integration:**
 - LoanManagementService (constructor injection)
   - Methods: createLoan(), makeEarlyPayment(), getLoanDetails(), getLoanDeductionHistory()
 
 **Models Integrated:**
-- EmployeeLoan (primary model)
+- EmployeeLoan (primary model with relationships)
+- LoanDeduction (for payment history with installment details)
 - Employee (with user, department relationships)
 - Department
+
+**API Routes (Added/Verified):**
+- `GET /payroll/loans` - List all loans with filters
+- `POST /payroll/loans` - Create new loan
+- `GET /payroll/loans/{id}` - Get loan details
+- `PUT /payroll/loans/{id}` - Update loan
+- `POST /payroll/loans/{id}/cancel` - Cancel loan
+- `POST /payroll/loans/{id}/early-payment` - Process early payment
+- `DELETE /payroll/loans/{id}` - Delete loan (NEW - Added March 5)
+- `GET /payroll/loans/{id}/payments` - Get payment history (NEW - Added March 5)
 
 **Filtering Support:**
 - Search: By employee name or employee number
@@ -2267,6 +2280,58 @@ class EmployeePayrollInfoService
 - cancelled: Loan cancelled
 - restructured: Loan terms restructured
 
+**New Methods Detail:**
+
+**destroy() Method:**
+- Authorization: delete permission (Employee class)
+- Validation: Cannot delete active loans (returns 422 error)
+- Operation: Soft delete loan + cascade delete deductions
+- Response: Success/failure JSON with message
+- Line: 286-313
+- Purpose: Allow deletion of cancelled/completed loans from system
+
+**getPayments() Method:**
+- Authorization: viewAny permission (Employee class)
+- Functionality: Retrieves all installments/deductions for a loan
+- Response Structure:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "loan_id": integer,
+      "loan_number": string,
+      "loan_type": string,
+      "total_installments": integer,
+      "installments_paid": integer,
+      "principal_amount": float,
+      "total_amount": float (with interest),
+      "monthly_amortization": float,
+      "remaining_balance": float,
+      "payments": [
+        {
+          "id": integer,
+          "installment_number": integer,
+          "due_date": date,
+          "principal_deduction": float,
+          "interest_deduction": float,
+          "total_deduction": float,
+          "penalty_amount": float,
+          "amount_deducted": float,
+          "amount_paid": float,
+          "balance_after_payment": float,
+          "status": string (pending/paid/overdue),
+          "is_paid": boolean,
+          "paid_date": date nullable,
+          "deducted_at": datetime nullable,
+          "reference_number": string nullable
+        }
+      ]
+    }
+  }
+  ```
+- Line: 318-367
+- Purpose: Frontend payment history display in LoanDetailsModal component
+
 **Features:**
 ✅ Real database queries with relationships
 ✅ Service layer integration for loan processing
@@ -2275,9 +2340,10 @@ class EmployeePayrollInfoService
 ✅ Error handling with try-catch
 ✅ Remaining balance calculation
 ✅ Early payment processing
-✅ Deduction history tracking
+✅ Deduction history tracking with full payment details
 ✅ Color-coded loan types and statuses
-✅ Removed all mock data generation logic
+✅ Soft delete with cascade operations
+✅ Comprehensive payment history response formatting
 
 ---
 
@@ -2286,8 +2352,11 @@ class EmployeePayrollInfoService
 **Status:** ✅ 100% COMPLETED
 
 **Overall Implementation:**
-- 4 Controllers fully implemented: 1,665+ total lines of code
+- 4 Controllers fully implemented: 1,710+ total lines of code
 - Task 4.1: EmployeePayrollInfoController (450+ lines)
+- Task 4.2: SalaryComponentController (400+ lines)
+- Task 4.3: AllowancesDeductionsController (480+ lines)
+- Task 4.4: LoansController (410+ lines) - **UPDATED March 5 with 2 new methods**
 - Task 4.2: SalaryComponentController (350+ lines)
 - Task 4.3: AllowancesDeductionsController (475+ lines)
 - Task 4.4: LoansController (390+ lines)
