@@ -47,6 +47,11 @@ class LeavePolicy extends Model
         return $this->hasMany(LeaveRequest::class);
     }
 
+    public function carryForwardRule()
+    {
+        return $this->hasOne(LeaveCarryForwardRule::class);
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);

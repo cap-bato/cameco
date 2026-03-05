@@ -177,6 +177,11 @@ class DatabaseSeeder extends Seeder
             $this->call(\Database\Seeders\EmployeeAccountSeeder::class);
         }
 
+        // Seed Leave Balances (must run after employees and leave policies)
+        if (class_exists(\Database\Seeders\LeaveBalanceSeeder::class)) {
+            $this->call(\Database\Seeders\LeaveBalanceSeeder::class);
+        }
+
         // Seed Overtime Requests (must run after employees)
         if (class_exists(\Database\Seeders\OvertimeRequestSeeder::class)) {
             $this->call(\Database\Seeders\OvertimeRequestSeeder::class);
