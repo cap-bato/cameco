@@ -5,6 +5,7 @@ namespace App\Jobs\Payroll;
 use App\Events\Payroll\EmployeePayrollCalculated;
 use App\Models\Employee;
 use App\Models\EmployeePayrollCalculation;
+use App\Models\PayrollCalculationLog;
 use App\Models\PayrollPeriod;
 use App\Services\Payroll\PayrollCalculationService;
 use Illuminate\Bus\Queueable;
@@ -49,7 +50,7 @@ class CalculateEmployeePayrollJob implements ShouldQueue
                 'employee_id' => $this->employee->id,
                 'employee_name' => $this->employee->full_name,
                 'period_id' => $this->payrollPeriod->id,
-                'period_name' => $this->payrollPeriod->name,
+                'period_name' => $this->payrollPeriod->period_name,
             ]);
 
             // Call the payroll calculation service
@@ -82,18 +83,19 @@ class CalculateEmployeePayrollJob implements ShouldQueue
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            // Create failed calculation record for tracking
+            // Create exception calculation record for tracking
             try {
                 EmployeePayrollCalculation::create([
                     'employee_id' => $this->employee->id,
                     'payroll_period_id' => $this->payrollPeriod->id,
-                    'status' => 'failed',
-                    'error_message' => $e->getMessage(),
+                    'calculation_status' => 'exception',
+                    'has_exceptions' => true,
+                    'exception_flags' => [$e->getMessage()],
                     'basic_pay' => 0,
                     'gross_pay' => 0,
                     'total_deductions' => 0,
                     'net_pay' => 0,
-                    'created_by' => $this->userId,
+                    'calculated_by' => $this->userId,
                 ]);
             } catch (\Exception $createException) {
                 Log::error('Failed to create failed calculation record', [
@@ -117,23 +119,35 @@ class CalculateEmployeePayrollJob implements ShouldQueue
             'error' => $exception->getMessage(),
         ]);
 
-        // Try to create a failed calculation record
+        // Try to create an exception calculation record
         try {
             EmployeePayrollCalculation::create([
                 'employee_id' => $this->employee->id,
                 'payroll_period_id' => $this->payrollPeriod->id,
-                'status' => 'failed',
-                'error_message' => $exception->getMessage(),
+                'calculation_status' => 'exception',
+                'has_exceptions' => true,
+                'exception_flags' => [$exception->getMessage()],
                 'basic_pay' => 0,
                 'gross_pay' => 0,
                 'total_deductions' => 0,
                 'net_pay' => 0,
-                'created_by' => $this->userId,
+                'calculated_by' => $this->userId,
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to record failed calculation', [
                 'error' => $e->getMessage(),
             ]);
+        }
+
+        // Write permanent failure to DB audit log
+        try {
+            PayrollCalculationLog::logCalculationFailed(
+                $this->payrollPeriod->id,
+                "Employee #{$this->employee->id} ({$this->employee->full_name}) payroll calculation failed permanently: {$exception->getMessage()}",
+                ['employee_id' => $this->employee->id, 'trace' => $exception->getTraceAsString()],
+            );
+        } catch (\Exception $e) {
+            Log::error('Failed to write calculation failure log', ['error' => $e->getMessage()]);
         }
     }
 }

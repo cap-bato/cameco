@@ -342,6 +342,15 @@ export interface PayrollCalculationsPageProps {
     };
 }
 
+/**
+ * Payroll Calculation Show Page Props
+ * Per-period detail page with breakdown per employee
+ */
+export interface PayrollCalculationShowPageProps {
+    calculation: PayrollCalculation;
+    employee_calculations: EmployeeCalculation[];
+}
+
 // ============================================================================
 // Phase 1.4: Payroll Adjustments
 // ============================================================================

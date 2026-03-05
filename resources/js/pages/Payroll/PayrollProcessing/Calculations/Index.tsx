@@ -94,8 +94,12 @@ export default function PayrollCalculations({
     };
 
     const handleViewDetails = (calculation: PayrollCalculation) => {
-        setSelectedCalculation(calculation);
-        setIsProgressModalOpen(true);
+        if (calculation.status === 'completed') {
+            router.visit(`/payroll/calculations/${calculation.id}`);
+        } else {
+            setSelectedCalculation(calculation);
+            setIsProgressModalOpen(true);
+        }
     };
 
     const handleRecalculate = (calculation: PayrollCalculation) => {

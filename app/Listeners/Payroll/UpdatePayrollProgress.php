@@ -3,10 +3,10 @@
 namespace App\Listeners\Payroll;
 
 use App\Events\Payroll\EmployeePayrollCalculated;
+use App\Models\EmployeePayrollCalculation;
 use App\Models\PayrollPeriod;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class UpdatePayrollProgress implements ShouldQueue
@@ -24,14 +24,13 @@ class UpdatePayrollProgress implements ShouldQueue
                 'period_id' => $event->payrollPeriod->id,
             ]);
 
-            // Get total employees for this period
-            $totalEmployees = $event->payrollPeriod->employees()
-                ->where('status', 'active')
+            // Get total employees for this period (all calculation records dispatched)
+            $totalEmployees = EmployeePayrollCalculation::where('payroll_period_id', $event->payrollPeriod->id)
                 ->count();
 
             // Get completed calculations
-            $completedCount = $event->payrollPeriod->calculations()
-                ->where('status', 'success')
+            $completedCount = EmployeePayrollCalculation::where('payroll_period_id', $event->payrollPeriod->id)
+                ->where('calculation_status', 'calculated')
                 ->count();
 
             // Calculate progress percentage

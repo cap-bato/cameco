@@ -3,7 +3,11 @@
 namespace App\Http\Controllers\Payroll\PayrollProcessing;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\Payroll\CalculatePayrollJob;
+use App\Models\PayrollCalculationLog;
+use App\Models\PayrollPeriod;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Carbon\Carbon;
 
@@ -14,158 +18,32 @@ class PayrollPeriodController extends Controller
      */
     public function index(Request $request)
     {
-        // Mock payroll periods data - In production, this would be from the database
-        $allPeriods = [
-            [
-                'id' => 1,
-                'name' => 'November 2025 - 1st Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-11-01',
-                'end_date' => '2025-11-15',
-                'cutoff_date' => '2025-11-15',
-                'pay_date' => '2025-11-20',
-                'status' => 'calculating',
-                'total_employees' => 245,
-                'total_gross_pay' => 2850000.00,
-                'total_deductions' => 485000.00,
-                'total_net_pay' => 2365000.00,
-                'total_employer_cost' => 450000.00,
-                'processed_at' => null,
-                'approved_by' => null,
-                'approved_at' => null,
-                'finalized_by' => null,
-                'finalized_at' => null,
-                'created_at' => '2025-10-28 09:00:00',
-                'updated_at' => '2025-11-01 14:30:00',
-            ],
-            [
-                'id' => 2,
-                'name' => 'October 2025 - 2nd Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-10-16',
-                'end_date' => '2025-10-31',
-                'cutoff_date' => '2025-10-31',
-                'pay_date' => '2025-11-05',
-                'status' => 'paid',
-                'total_employees' => 244,
-                'total_gross_pay' => 2780000.00,
-                'total_deductions' => 465000.00,
-                'total_net_pay' => 2315000.00,
-                'total_employer_cost' => 435000.00,
-                'processed_at' => '2025-11-01 10:30:00',
-                'approved_by' => 'Maria Santos',
-                'approved_at' => '2025-11-02 14:15:00',
-                'finalized_by' => 'Maria Santos',
-                'finalized_at' => '2025-11-03 08:00:00',
-                'created_at' => '2025-10-13 09:00:00',
-                'updated_at' => '2025-11-03 08:00:00',
-            ],
-            [
-                'id' => 3,
-                'name' => 'October 2025 - 1st Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-10-01',
-                'end_date' => '2025-10-15',
-                'cutoff_date' => '2025-10-15',
-                'pay_date' => '2025-10-20',
-                'status' => 'closed',
-                'total_employees' => 243,
-                'total_gross_pay' => 2920000.00,
-                'total_deductions' => 495000.00,
-                'total_net_pay' => 2425000.00,
-                'total_employer_cost' => 460000.00,
-                'processed_at' => '2025-10-18 09:45:00',
-                'approved_by' => 'Maria Santos',
-                'approved_at' => '2025-10-19 11:20:00',
-                'finalized_by' => 'Maria Santos',
-                'finalized_at' => '2025-10-20 07:00:00',
-                'created_at' => '2025-09-28 09:00:00',
-                'updated_at' => '2025-10-20 07:00:00',
-            ],
-            [
-                'id' => 4,
-                'name' => 'November 2025 - 2nd Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-11-16',
-                'end_date' => '2025-11-30',
-                'cutoff_date' => '2025-11-30',
-                'pay_date' => '2025-12-05',
-                'status' => 'draft',
-                'total_employees' => 0,
-                'total_gross_pay' => 0.00,
-                'total_deductions' => 0.00,
-                'total_net_pay' => 0.00,
-                'total_employer_cost' => 0.00,
-                'processed_at' => null,
-                'approved_by' => null,
-                'approved_at' => null,
-                'finalized_by' => null,
-                'finalized_at' => null,
-                'created_at' => '2025-11-01 09:00:00',
-                'updated_at' => '2025-11-01 09:00:00',
-            ],
-            [
-                'id' => 5,
-                'name' => 'December 2025 - Monthly',
-                'period_type' => 'monthly',
-                'start_date' => '2025-12-01',
-                'end_date' => '2025-12-31',
-                'cutoff_date' => '2025-12-31',
-                'pay_date' => '2026-01-05',
-                'status' => 'draft',
-                'total_employees' => 0,
-                'total_gross_pay' => 0.00,
-                'total_deductions' => 0.00,
-                'total_net_pay' => 0.00,
-                'total_employer_cost' => 0.00,
-                'processed_at' => null,
-                'approved_by' => null,
-                'approved_at' => null,
-                'finalized_by' => null,
-                'finalized_at' => null,
-                'created_at' => '2025-11-01 09:00:00',
-                'updated_at' => '2025-11-01 09:00:00',
-            ],
-        ];
+        $query = PayrollPeriod::with(['approvedBy:id,name', 'lockedBy:id,name'])
+            ->orderByDesc('period_start');
 
-        // Apply filters
-        $periods = collect($allPeriods);
-
-        // Filter by search term (search in period name)
         if ($request->filled('search')) {
-            $search = strtolower($request->input('search'));
-            $periods = $periods->filter(function ($period) use ($search) {
-                return strpos(strtolower($period['name']), $search) !== false;
-            });
+            $query->where('period_name', 'like', '%' . $request->input('search') . '%');
         }
 
-        // Filter by status
         if ($request->filled('status') && $request->input('status') !== 'all') {
-            $status = $request->input('status');
-            $periods = $periods->filter(function ($period) use ($status) {
-                return $period['status'] === $status;
-            });
+            $dbStatuses = $this->frontendStatusToDb($request->input('status'));
+            $query->whereIn('status', (array) $dbStatuses);
         }
 
-        // Filter by period type
-        if ($request->filled('period_type') && $request->input('period_type') !== 'all') {
-            $periodType = $request->input('period_type');
-            $periods = $periods->filter(function ($period) use ($periodType) {
-                return $period['period_type'] === $periodType;
-            });
+        if ($request->filled('year') && $request->input('year') !== 'all') {
+            $query->where('period_year', (int) $request->input('year'));
         }
 
-        // Collect filter values for display in component
-        $filters = [
-            'search' => $request->input('search'),
-            'status' => $request->input('status'),
-            'period_type' => $request->input('period_type'),
-            'year' => $request->input('year', date('Y')),
-        ];
+        $periods = $query->get()->map(fn($p) => $this->transformPeriod($p));
 
         return Inertia::render('Payroll/PayrollProcessing/Periods/Index', [
-            'periods' => $periods->values()->all(),
-            'filters' => $filters,
+            'periods' => $periods->values(),
+            'filters' => [
+                'search'      => $request->input('search'),
+                'status'      => $request->input('status'),
+                'period_type' => $request->input('period_type'),
+                'year'        => $request->input('year', date('Y')),
+            ],
         ]);
     }
 
@@ -174,21 +52,42 @@ class PayrollPeriodController extends Controller
      */
     public function store(Request $request)
     {
-        // Validate input
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name'        => 'required|string|max:255',
             'period_type' => 'required|in:weekly,bi_weekly,semi_monthly,monthly',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
+            'start_date'  => 'required|date',
+            'end_date'    => 'required|date|after:start_date',
             'cutoff_date' => 'required|date',
-            'pay_date' => 'required|date|after:end_date',
+            'pay_date'    => 'required|date|after:end_date',
         ]);
 
-        // In production, save to database
-        // $period = PayrollPeriod::create($validated);
+        try {
+            $start = Carbon::parse($validated['start_date']);
 
-        return redirect()->route('payroll.periods.index')
-            ->with('success', "Payroll period '{$validated['name']}' created successfully.");
+            PayrollPeriod::create([
+                'period_number'           => $this->generatePeriodNumber($validated['start_date']),
+                'period_name'             => $validated['name'],
+                'period_type'             => 'regular',
+                'period_start'            => $validated['start_date'],
+                'period_end'              => $validated['end_date'],
+                'payment_date'            => $validated['pay_date'],
+                'period_month'            => $start->format('Y-m'),
+                'period_year'             => $start->year,
+                'timekeeping_cutoff_date' => $validated['cutoff_date'],
+                'leave_cutoff_date'       => $validated['cutoff_date'],
+                'adjustment_deadline'     => $validated['cutoff_date'],
+                'status'                  => 'draft',
+                'created_by'              => auth()->id(),
+            ]);
+
+            return redirect()->route('payroll.periods.index')
+                ->with('success', "Payroll period '{$validated['name']}' created successfully.");
+        } catch (\Exception $e) {
+            Log::error('Failed to create payroll period', ['error' => $e->getMessage()]);
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Failed to create payroll period. Please try again.');
+        }
     }
 
     /**
@@ -196,33 +95,8 @@ class PayrollPeriodController extends Controller
      */
     public function show($id)
     {
-        // Mock: fetch period by ID
-        $mockPeriods = [
-            1 => [
-                'id' => 1,
-                'name' => 'November 2025 - 1st Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-11-01',
-                'end_date' => '2025-11-15',
-                'cutoff_date' => '2025-11-15',
-                'pay_date' => '2025-11-20',
-                'status' => 'calculating',
-                'total_employees' => 245,
-                'total_gross_pay' => 2850000.00,
-                'total_deductions' => 485000.00,
-                'total_net_pay' => 2365000.00,
-                'total_employer_cost' => 450000.00,
-            ],
-        ];
-
-        $period = $mockPeriods[$id] ?? null;
-
-        if (!$period) {
-            return redirect()->route('payroll.periods.index')
-                ->with('error', 'Payroll period not found.');
-        }
-
-        // For now, redirect back to periods index since detail page doesn't exist
+        $period = PayrollPeriod::findOrFail($id);
+        // Redirect to index for now — detail page not yet built
         return redirect()->route('payroll.periods.index');
     }
 
@@ -231,33 +105,13 @@ class PayrollPeriodController extends Controller
      */
     public function edit($id)
     {
-        // Mock: fetch period by ID for editing
-        $mockPeriods = [
-            1 => [
-                'id' => 1,
-                'name' => 'November 2025 - 1st Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-11-01',
-                'end_date' => '2025-11-15',
-                'cutoff_date' => '2025-11-15',
-                'pay_date' => '2025-11-20',
-                'status' => 'draft',
-                'total_employees' => 0,
-                'total_gross_pay' => 0,
-                'total_deductions' => 0,
-                'total_net_pay' => 0,
-                'total_employer_cost' => 0,
-            ],
-        ];
+        $period = PayrollPeriod::findOrFail($id);
 
-        $period = $mockPeriods[$id] ?? null;
-
-        if (!$period || $period['status'] !== 'draft') {
+        if ($period->status !== 'draft') {
             return redirect()->route('payroll.periods.index')
                 ->with('error', 'Only draft periods can be edited.');
         }
 
-        // For now, redirect back to periods index since edit page doesn't exist
         return redirect()->route('payroll.periods.index');
     }
 
@@ -266,22 +120,45 @@ class PayrollPeriodController extends Controller
      */
     public function update(Request $request, $id)
     {
-        // Validate input
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name'        => 'required|string|max:255',
             'period_type' => 'required|in:weekly,bi_weekly,semi_monthly,monthly',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
+            'start_date'  => 'required|date',
+            'end_date'    => 'required|date|after:start_date',
             'cutoff_date' => 'required|date',
-            'pay_date' => 'required|date|after:end_date',
+            'pay_date'    => 'required|date|after:end_date',
         ]);
 
-        // In production, update in database
-        // $period = PayrollPeriod::findOrFail($id);
-        // $period->update($validated);
+        try {
+            $period = PayrollPeriod::findOrFail($id);
 
-        return redirect()->route('payroll.periods.index')
-            ->with('success', "Payroll period '{$validated['name']}' updated successfully.");
+            if ($period->status !== 'draft') {
+                return redirect()->back()
+                    ->with('error', 'Only draft periods can be edited.');
+            }
+
+            $start = Carbon::parse($validated['start_date']);
+
+            $period->update([
+                'period_name'             => $validated['name'],
+                'period_start'            => $validated['start_date'],
+                'period_end'              => $validated['end_date'],
+                'payment_date'            => $validated['pay_date'],
+                'period_month'            => $start->format('Y-m'),
+                'period_year'             => $start->year,
+                'timekeeping_cutoff_date' => $validated['cutoff_date'],
+                'leave_cutoff_date'       => $validated['cutoff_date'],
+                'adjustment_deadline'     => $validated['cutoff_date'],
+            ]);
+
+            return redirect()->route('payroll.periods.index')
+                ->with('success', "Payroll period '{$validated['name']}' updated successfully.");
+        } catch (\Exception $e) {
+            Log::error('Failed to update payroll period', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Failed to update payroll period. Please try again.');
+        }
     }
 
     /**
@@ -289,12 +166,23 @@ class PayrollPeriodController extends Controller
      */
     public function destroy($id)
     {
-        // In production, delete from database
-        // $period = PayrollPeriod::findOrFail($id);
-        // $period->delete();
+        try {
+            $period = PayrollPeriod::findOrFail($id);
 
-        return redirect()->route('payroll.periods.index')
-            ->with('success', 'Payroll period deleted successfully.');
+            if (!in_array($period->status, ['draft', 'cancelled'])) {
+                return redirect()->back()
+                    ->with('error', 'Only draft or cancelled periods can be deleted.');
+            }
+
+            $period->delete();
+
+            return redirect()->route('payroll.periods.index')
+                ->with('success', 'Payroll period deleted successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to delete payroll period', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', 'Failed to delete payroll period. Please try again.');
+        }
     }
 
     /**
@@ -302,12 +190,34 @@ class PayrollPeriodController extends Controller
      */
     public function calculate(Request $request, $id)
     {
-        // In production, trigger calculation job
-        // $period = PayrollPeriod::findOrFail($id);
-        // CalculatePayrollJob::dispatch($period);
+        try {
+            $period = PayrollPeriod::findOrFail($id);
 
-        return redirect()->back()
-            ->with('success', 'Payroll calculation started. This may take a few moments.');
+            $period->update([
+                'status'                  => 'calculating',
+                'calculation_started_at'  => now(),
+            ]);
+
+            CalculatePayrollJob::dispatch($period, auth()->id());
+
+            PayrollCalculationLog::create([
+                'payroll_period_id' => $period->id,
+                'log_type'          => 'calculation_started',
+                'severity'          => 'info',
+                'message'           => "Payroll calculation started for period: {$period->period_name}",
+                'actor_type'        => 'user',
+                'actor_id'          => auth()->id(),
+                'actor_name'        => auth()->user()->name,
+                'created_at'        => now(),
+            ]);
+
+            return redirect()->back()
+                ->with('success', 'Payroll calculation started. This may take a few moments.');
+        } catch (\Exception $e) {
+            Log::error('Failed to start payroll calculation', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', 'Failed to start calculation. Please try again.');
+        }
     }
 
     /**
@@ -315,16 +225,126 @@ class PayrollPeriodController extends Controller
      */
     public function approve(Request $request, $id)
     {
-        // In production, update period status and log approval
-        // $period = PayrollPeriod::findOrFail($id);
-        // $period->update([
-        //     'status' => 'approved',
-        //     'approved_by' => auth()->id(),
-        //     'approved_at' => now(),
-        // ]);
+        try {
+            $period = PayrollPeriod::findOrFail($id);
 
-        return redirect()->back()
-            ->with('success', 'Payroll period approved successfully.');
+            $period->update([
+                'status'      => 'approved',
+                'approved_by' => auth()->id(),
+                'approved_at' => now(),
+            ]);
+
+            return redirect()->back()
+                ->with('success', 'Payroll period approved successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to approve payroll period', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', 'Failed to approve period. Please try again.');
+        }
+    }
+
+    // =========================================================================
+    // Private helpers
+    // =========================================================================
+
+    /**
+     * Map a PayrollPeriod model to the shape expected by the frontend.
+     */
+    private function transformPeriod(PayrollPeriod $p): array
+    {
+        return [
+            'id'                 => $p->id,
+            'name'               => $p->period_name,
+            'period_type'        => $this->inferFrequency($p->period_start, $p->period_end),
+            'start_date'         => $p->period_start?->toDateString(),
+            'end_date'           => $p->period_end?->toDateString(),
+            'cutoff_date'        => $p->timekeeping_cutoff_date?->toDateString(),
+            'pay_date'           => $p->payment_date?->toDateString(),
+            'status'             => $this->dbStatusToFrontend($p->status),
+            'total_employees'    => $p->total_employees ?? 0,
+            'total_gross_pay'    => (float) ($p->total_gross_pay ?? 0),
+            'total_deductions'   => (float) ($p->total_deductions ?? 0),
+            'total_net_pay'      => (float) ($p->total_net_pay ?? 0),
+            'total_employer_cost'=> (float) ($p->total_government_contributions ?? 0),
+            'processed_at'       => $p->calculation_completed_at?->toISOString(),
+            'approved_by'        => $p->approvedBy?->name,
+            'approved_at'        => $p->approved_at?->toISOString(),
+            'finalized_by'       => $p->lockedBy?->name,
+            'finalized_at'       => $p->finalized_at?->toISOString() ?? $p->locked_at?->toISOString(),
+            'created_at'         => $p->created_at?->toISOString(),
+            'updated_at'         => $p->updated_at?->toISOString(),
+        ];
+    }
+
+    /**
+     * Infer pay frequency from date range (used as frontend period_type).
+     */
+    private function inferFrequency($start, $end): string
+    {
+        if (!$start || !$end) {
+            return 'semi_monthly';
+        }
+
+        $days = Carbon::parse($start)->diffInDays(Carbon::parse($end));
+
+        return match(true) {
+            $days <= 7  => 'weekly',
+            $days <= 10 => 'bi_weekly',
+            $days <= 17 => 'semi_monthly',
+            default     => 'monthly',
+        };
+    }
+
+    /**
+     * Map a DB status value to what the frontend PayrollPeriod type expects.
+     */
+    private function dbStatusToFrontend(string $status): string
+    {
+        return match($status) {
+            'draft', 'active'                    => 'draft',
+            'calculating'                         => 'calculating',
+            'calculated'                          => 'calculated',
+            'under_review', 'pending_approval'   => 'reviewing',
+            'approved', 'finalized'               => 'approved',
+            'processing_payment', 'completed'    => 'paid',
+            'cancelled'                           => 'closed',
+            default                               => 'draft',
+        };
+    }
+
+    /**
+     * Map a frontend status filter value to one or more DB status values.
+     *
+     * @return string|string[]
+     */
+    private function frontendStatusToDb(string $status): array
+    {
+        return match($status) {
+            'draft'      => ['draft', 'active'],
+            'calculating'=> ['calculating'],
+            'calculated' => ['calculated'],
+            'reviewing'  => ['under_review', 'pending_approval'],
+            'approved'   => ['approved', 'finalized'],
+            'paid'       => ['processing_payment', 'completed'],
+            'closed'     => ['cancelled'],
+            default      => [],
+        };
+    }
+
+    /**
+     * Generate a unique period number from a start date.
+     * Format: YYYY-MM-DD (padded with microseconds when duplicate).
+     */
+    private function generatePeriodNumber(string $startDate): string
+    {
+        $base = Carbon::parse($startDate)->format('Y-m-d');
+        $number = $base;
+        $suffix = 1;
+
+        while (PayrollPeriod::where('period_number', $number)->exists()) {
+            $number = $base . '-' . $suffix++;
+        }
+
+        return $number;
     }
 }
-

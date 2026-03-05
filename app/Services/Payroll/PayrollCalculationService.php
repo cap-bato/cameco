@@ -59,14 +59,14 @@ class PayrollCalculationService
             // Update period status to calculating
             $period->update([
                 'status' => 'calculating',
-                'processed_at' => Carbon::now(),
+                'calculation_started_at' => Carbon::now(),
             ]);
 
             Log::info("Payroll calculation started", [
                 'period_id' => $period->id,
-                'period_name' => $period->name,
-                'start_date' => $period->start_date,
-                'end_date' => $period->end_date,
+                'period_name' => $period->period_name,
+                'start_date' => $period->period_start,
+                'end_date' => $period->period_end,
                 'initiated_by' => $initiator->id,
             ]);
 
@@ -104,7 +104,7 @@ class PayrollCalculationService
             // Step 2: Fetch attendance data from timekeeping
             $attendanceSummaries = DailyAttendanceSummary::query()
                 ->where('employee_id', $employee->id)
-                ->whereBetween('attendance_date', [$period->start_date, $period->end_date])
+                ->whereBetween('attendance_date', [$period->period_start, $period->period_end])
                 ->where('is_finalized', true)
                 ->get();
 
@@ -160,38 +160,54 @@ class PayrollCalculationService
             // Step 15: Calculate net pay
             $netPay = $grossPay - $allDeductions;
 
-            // Step 16: Delete any existing calculation (for recalculation)
+            // Step 16: Force-delete any existing calculation (for recalculation).
+            // Must use forceDelete() because SoftDeletes leaves the row in the DB,
+            // which would still violate the unique_employee_period_version constraint.
             EmployeePayrollCalculation::where('employee_id', $employee->id)
                 ->where('payroll_period_id', $period->id)
-                ->delete();
+                ->forceDelete();
 
             // Step 17: Create calculation record
             $calculation = EmployeePayrollCalculation::create([
-                'payroll_period_id' => $period->id,
-                'employee_id' => $employee->id,
-                'days_worked' => $daysWorked,
-                'total_hours' => $totalHours,
-                'regular_hours' => $regularHours,
-                'overtime_hours' => $overtimeHours,
-                'late_minutes' => $lateMinutes,
-                'undertime_minutes' => $undertimeMinutes,
-                'basic_pay' => (float) $basicPay,
-                'overtime_pay' => (float) $overtimePay,
-                'component_amount' => (float) $componentAmounts,
-                'allowance_amount' => (float) $totalAllowances,
-                'gross_pay' => (float) $grossPay,
-                'sss_contribution' => (float) $sssContribution,
-                'philhealth_contribution' => (float) $philhealthContribution,
-                'pagibig_contribution' => (float) $pagibigContribution,
-                'withholding_tax' => (float) $withholdingTax,
-                'deduction_amount' => (float) $totalDeductions,
-                'loan_deduction' => (float) $loanDeductions,
-                'late_deduction' => (float) $lateDeduction,
-                'undertime_deduction' => (float) $undertimeDeduction,
-                'total_deductions' => (float) $allDeductions,
-                'net_pay' => (float) $netPay,
-                'status' => 'calculated',
-                'calculated_at' => Carbon::now(),
+                'payroll_period_id'          => $period->id,
+                'employee_id'                => $employee->id,
+                'employee_number'            => $employee->employee_number,
+                'employee_name'              => $employee->profile?->full_name ?? $employee->user?->name ?? 'Unknown',
+                'department'                 => $employee->department?->name ?? null,
+                'position'                   => $employee->position?->title ?? null,
+                'employment_status'          => $employee->employment_type,
+                'hire_date'                  => $employee->date_hired?->toDateString(),
+                'basic_monthly_salary'       => (float) $payrollInfo->basic_salary,
+                'daily_rate'                 => (float) $payrollInfo->daily_rate,
+                'hourly_rate'                => (float) $payrollInfo->hourly_rate,
+                'working_days_per_month'     => 26,
+                'working_hours_per_day'      => 8,
+                'expected_days'              => $period->period_end->diffInWeekdays($period->period_start) + 1,
+                'present_days'               => $daysWorked,
+                'absent_days'                => max(0, ($period->period_end->diffInWeekdays($period->period_start) + 1) - $daysWorked),
+                'late_hours'                 => round($lateMinutes / 60, 2),
+                'undertime_hours'            => round($undertimeMinutes / 60, 2),
+                'regular_overtime_hours'     => (float) $overtimeHours,
+                'total_overtime_hours'       => (float) $overtimeHours,
+                'basic_pay'                  => (float) $basicPay,
+                'regular_overtime_pay'       => (float) $overtimePay,
+                'total_overtime_pay'         => (float) $overtimePay,
+                'other_allowances'           => (float) $componentAmounts,
+                'total_allowances'           => (float) ($totalAllowances + $componentAmounts),
+                'gross_pay'                  => (float) $grossPay,
+                'sss_contribution'           => (float) $sssContribution,
+                'philhealth_contribution'    => (float) $philhealthContribution,
+                'pagibig_contribution'       => (float) $pagibigContribution,
+                'withholding_tax'            => (float) $withholdingTax,
+                'total_government_deductions'=> (float) ($sssContribution + $philhealthContribution + $pagibigContribution),
+                'total_loan_deductions'      => (float) $loanDeductions,
+                'tardiness_deduction'        => (float) ($lateDeduction + $undertimeDeduction),
+                'miscellaneous_deductions'   => (float) $totalDeductions,
+                'total_deductions'           => (float) $allDeductions,
+                'net_pay'                    => (float) $netPay,
+                'final_net_pay'              => (float) $netPay,
+                'calculation_status'         => 'calculated',
+                'calculated_at'             => Carbon::now(),
             ]);
 
             DB::commit();

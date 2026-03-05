@@ -6,6 +6,7 @@ use App\Events\Payroll\EmployeePayrollCalculated;
 use App\Events\Payroll\PayrollCalculationCompleted;
 use App\Events\Payroll\PayrollCalculationFailed;
 use App\Events\Payroll\PayrollCalculationStarted;
+use App\Models\PayrollCalculationLog;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
@@ -74,5 +75,16 @@ class LogPayrollCalculation implements ShouldQueue
             'period_status' => $event->payrollPeriod->status,
             'timestamp' => now(),
         ]);
+
+        // Write batch-level failure to DB audit log
+        try {
+            PayrollCalculationLog::logCalculationFailed(
+                $event->payrollPeriod->id,
+                $event->errorMessage,
+                ['period_name' => $event->payrollPeriod->period_name, 'period_status' => $event->payrollPeriod->status],
+            );
+        } catch (\Exception $e) {
+            Log::error('Failed to write calculation failure log to DB', ['error' => $e->getMessage()]);
+        }
     }
 }

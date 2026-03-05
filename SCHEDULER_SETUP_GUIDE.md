@@ -292,7 +292,88 @@ This indicates possible tampering or data corruption!
 
 ---
 
-## 📚 Related Documentation
+## � Payroll Queue Worker Setup
+
+The payroll calculation pipeline dispatches jobs to the `payroll` queue. These must be processed by a dedicated queue worker.
+
+### Queue
+
+| Queue name | Used by |
+|---|---|
+| `payroll` | `CalculatePayrollJob`, `CalculateEmployeePayrollJob`, `FinalizePayrollJob` |
+| `default` | Everything else |
+
+### Development
+
+Start in a second terminal alongside `php artisan serve`:
+
+```bash
+php artisan queue:work --queue=payroll,default --tries=3 --timeout=120
+```
+
+Options explained:
+- `--queue=payroll,default` — processes payroll jobs first, then falls back to default
+- `--tries=3` — retries failed jobs up to 3 times before marking as failed
+- `--timeout=120` — kills a job that runs longer than 120 seconds (prevents stalls)
+
+Verify the worker sees queued jobs:
+
+```bash
+# Check how many jobs are pending
+php artisan queue:monitor payroll
+```
+
+### Production (Supervisor)
+
+Create `/etc/supervisor/conf.d/cameco-payroll-worker.conf`:
+
+```ini
+[program:cameco-payroll-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /var/www/cameco/artisan queue:work --queue=payroll,default --tries=3 --timeout=120 --sleep=3 --max-jobs=500
+autostart=true
+autorestart=true
+user=www-data
+numprocs=2
+redirect_stderr=true
+stdout_logfile=/var/www/cameco/storage/logs/payroll-worker.log
+stopwaitsecs=130
+```
+
+Then run:
+
+```bash
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start cameco-payroll-worker:*
+sudo supervisorctl status
+```
+
+### Handling Failed Jobs
+
+```bash
+# View failed payroll jobs
+php artisan queue:failed
+
+# Retry all failed jobs
+php artisan queue:retry all
+
+# Retry a specific job by ID
+php artisan queue:retry <uuid>
+
+# Clear all failed jobs
+php artisan queue:flush
+```
+
+### Environment Variable
+
+```env
+QUEUE_CONNECTION=database   # must be set in .env (already confirmed)
+```
+
+---
+
+## �📚 Related Documentation
 
 - [Timekeeping RFID Integration Implementation](../../docs/issues/TIMEKEEPING_RFID_INTEGRATION_IMPLEMENTATION.md)
 - [FastAPI RFID Server Implementation](../../docs/issues/FASTAPI_RFID_SERVER_IMPLEMENTATION.md)

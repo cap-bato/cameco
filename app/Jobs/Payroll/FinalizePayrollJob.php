@@ -4,6 +4,7 @@ namespace App\Jobs\Payroll;
 
 use App\Events\Payroll\PayrollCalculationCompleted;
 use App\Models\EmployeePayrollCalculation;
+use App\Models\PayrollCalculationLog;
 use App\Models\PayrollPeriod;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -42,17 +43,19 @@ class FinalizePayrollJob implements ShouldQueue
      */
     public function handle(): void
     {
+        $startTime = microtime(true);
+
         try {
             Log::info('Starting payroll finalization', [
                 'period_id' => $this->payrollPeriod->id,
-                'period_name' => $this->payrollPeriod->name,
+                'period_name' => $this->payrollPeriod->period_name,
             ]);
 
-            DB::transaction(function () {
+            DB::transaction(function () use ($startTime) {
                 // Fetch all successful calculations for the period
                 $calculations = EmployeePayrollCalculation::query()
                     ->where('payroll_period_id', $this->payrollPeriod->id)
-                    ->where('status', 'calculated')
+                    ->where('calculation_status', 'calculated')
                     ->get();
 
                 Log::info('Fetched calculations for finalization', [
@@ -83,14 +86,12 @@ class FinalizePayrollJob implements ShouldQueue
 
                 // Update payroll period with totals
                 $this->payrollPeriod->update([
-                    'status' => 'calculated',
-                    'total_gross_pay' => $totalGrossPay,
-                    'total_deductions' => $totalDeductions,
-                    'total_net_pay' => $totalNetPay,
-                    'total_employer_cost' => $totalEmployerCost,
-                    'finalized_by' => $this->userId,
-                    'finalized_at' => now(),
-                    'updated_by' => $this->userId,
+                    'status'                   => 'calculated',
+                    'total_gross_pay'           => $totalGrossPay,
+                    'total_deductions'          => $totalDeductions,
+                    'total_net_pay'             => $totalNetPay,
+                    'calculation_completed_at'  => now(),
+                    'finalized_at'              => now(),
                 ]);
 
                 Log::info('Updated payroll period status to calculated', [
@@ -101,7 +102,7 @@ class FinalizePayrollJob implements ShouldQueue
                 $successCount = $calculations->count();
                 $failureCount = EmployeePayrollCalculation::query()
                     ->where('payroll_period_id', $this->payrollPeriod->id)
-                    ->where('status', 'failed')
+                    ->where('calculation_status', 'exception')
                     ->count();
 
                 Log::info('Payroll finalization complete', [
@@ -117,6 +118,16 @@ class FinalizePayrollJob implements ShouldQueue
                     $failureCount,
                     $this->userId
                 );
+
+                // Log completion to DB audit log
+                PayrollCalculationLog::logCalculationCompleted(
+                    $this->payrollPeriod->id,
+                    $successCount + $failureCount,
+                    $successCount,
+                    $failureCount,
+                    $failureCount,
+                    round(microtime(true) - $startTime, 2),
+                );
             });
 
         } catch (\Exception $e) {
@@ -126,9 +137,9 @@ class FinalizePayrollJob implements ShouldQueue
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            // Update period status to failed
+            // Update period status to 'cancelled' ('failed' is not a valid enum value)
             $this->payrollPeriod->update([
-                'status' => 'failed',
+                'status' => 'cancelled',
                 'updated_by' => $this->userId,
             ]);
 
@@ -146,9 +157,9 @@ class FinalizePayrollJob implements ShouldQueue
             'error' => $exception->getMessage(),
         ]);
 
-        // Update period status
+        // Update period status to 'cancelled' ('failed' is not a valid enum value)
         $this->payrollPeriod->update([
-            'status' => 'failed',
+            'status' => 'cancelled',
             'updated_by' => $this->userId,
         ]);
     }

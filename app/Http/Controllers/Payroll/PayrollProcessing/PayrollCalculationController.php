@@ -3,348 +3,344 @@
 namespace App\Http\Controllers\Payroll\PayrollProcessing;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\Payroll\CalculatePayrollJob;
+use App\Models\EmployeePayrollCalculation;
+use App\Models\PayrollPeriod;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class PayrollCalculationController extends Controller
 {
     /**
-     * Display a listing of payroll calculations.
+     * Display a listing of payroll calculations (one per payroll period).
      */
     public function index(Request $request): Response
     {
-        // Get filter parameters
-        $periodId = $request->input('period_id');
-        $status = $request->input('status');
+        $periodId        = $request->input('period_id');
+        $status          = $request->input('status');
         $calculationType = $request->input('calculation_type');
 
-        // Get mock calculations
-        $calculations = $this->getMockCalculations();
+        $periodsQuery = PayrollPeriod::with(['approvedBy:id,name', 'lockedBy:id,name'])
+            ->orderByDesc('period_start');
 
-        // Apply filters
         if ($periodId) {
-            $calculations = array_filter($calculations, function ($calc) use ($periodId) {
-                return $calc['payroll_period_id'] == $periodId;
-            });
+            $periodsQuery->where('id', $periodId);
         }
 
         if ($status) {
-            $calculations = array_filter($calculations, function ($calc) use ($status) {
-                return $calc['status'] === $status;
-            });
+            $dbStatuses = $this->calcStatusToDbStatuses($status);
+            if (!empty($dbStatuses)) {
+                $periodsQuery->whereIn('status', $dbStatuses);
+            }
         }
 
         if ($calculationType) {
-            $calculations = array_filter($calculations, function ($calc) use ($calculationType) {
-                return $calc['calculation_type'] === $calculationType;
-            });
+            $dbType = $this->calcTypeToDbType($calculationType);
+            if ($dbType) {
+                $periodsQuery->where('period_type', $dbType);
+            }
         }
 
-        // Re-index array after filtering
-        $calculations = array_values($calculations);
+        $periods = $periodsQuery->get();
 
-        // Get available periods for filter dropdown
-        $availablePeriods = $this->getMockPeriods();
+        $periodIds = $periods->pluck('id')->all();
+        $empCounts = EmployeePayrollCalculation::select('payroll_period_id',
+                DB::raw("COUNT(*) as total"),
+                DB::raw("SUM(CASE WHEN calculation_status IN ('calculated','adjusted','approved','locked') THEN 1 ELSE 0 END) as processed"),
+                DB::raw("SUM(CASE WHEN calculation_status = 'exception' THEN 1 ELSE 0 END) as failed")
+            )
+            ->whereIn('payroll_period_id', $periodIds)
+            ->groupBy('payroll_period_id')
+            ->get()
+            ->keyBy('payroll_period_id');
+
+        $calculations = $periods->map(fn ($p) => $this->transformToCalculation($p, $empCounts->get($p->id)));
+
+        $availablePeriods = PayrollPeriod::orderByDesc('period_start')
+            ->get()
+            ->map(fn ($p) => [
+                'id'         => $p->id,
+                'name'       => $p->period_name,
+                'start_date' => $p->period_start?->toDateString(),
+                'end_date'   => $p->period_end?->toDateString(),
+                'status'     => $this->dbStatusToCalcStatus($p->status),
+            ]);
 
         return Inertia::render('Payroll/PayrollProcessing/Calculations/Index', [
-            'calculations' => $calculations,
-            'available_periods' => $availablePeriods,
-            'filters' => [
-                'period_id' => $periodId ? (int) $periodId : null,
-                'status' => $status,
+            'calculations'      => $calculations->values(),
+            'available_periods' => $availablePeriods->values(),
+            'filters'           => [
+                'period_id'        => $periodId ? (int) $periodId : null,
+                'status'           => $status,
                 'calculation_type' => $calculationType,
             ],
         ]);
     }
 
     /**
-     * Start a new payroll calculation.
+     * Start a payroll calculation for the given period.
      */
     public function store(Request $request): \Illuminate\Http\RedirectResponse
     {
         $validated = $request->validate([
-            'payroll_period_id' => 'required|integer',
-            'calculation_type' => 'required|in:regular,adjustment,final,re-calculation',
+            'payroll_period_id' => 'required|integer|exists:payroll_periods,id',
+            'calculation_type'  => 'required|in:regular,adjustment,final,re-calculation',
         ]);
 
-        // In real implementation, this would:
-        // 1. Create a calculation record
-        // 2. Queue calculation job
-        // 3. Process employees in background
-        // For now, just redirect back with success message
+        try {
+            $period = PayrollPeriod::findOrFail($validated['payroll_period_id']);
 
-        return redirect()
-            ->route('payroll.calculations.index')
-            ->with('success', 'Payroll calculation started successfully.');
+            $period->update([
+                'status'                 => 'calculating',
+                'calculation_started_at' => now(),
+            ]);
+
+            CalculatePayrollJob::dispatch($period, auth()->id());
+
+            return redirect()
+                ->route('payroll.calculations.index')
+                ->with('success', 'Payroll calculation started successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to start payroll calculation', ['error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', 'Failed to start calculation. Please try again.');
+        }
     }
 
     /**
-     * Display a specific calculation's details.
+     * Show per-employee calculation details for a period.
      */
     public function show(int $id): Response
     {
-        $calculations = $this->getMockCalculations();
-        $calculation = collect($calculations)->firstWhere('id', $id);
+        $period = PayrollPeriod::with(['approvedBy:id,name', 'lockedBy:id,name'])->findOrFail($id);
 
-        if (!$calculation) {
-            abort(404, 'Calculation not found');
-        }
+        $empCounts = EmployeePayrollCalculation::select('payroll_period_id',
+                DB::raw("COUNT(*) as total"),
+                DB::raw("SUM(CASE WHEN calculation_status IN ('calculated','adjusted','approved','locked') THEN 1 ELSE 0 END) as processed"),
+                DB::raw("SUM(CASE WHEN calculation_status = 'exception' THEN 1 ELSE 0 END) as failed")
+            )
+            ->where('payroll_period_id', $id)
+            ->groupBy('payroll_period_id')
+            ->first();
 
-        // Get employee-level calculation details
-        $employeeCalculations = $this->getMockEmployeeCalculations($id);
+        $calculation = $this->transformToCalculation($period, $empCounts);
+
+        $employeeCalculations = EmployeePayrollCalculation::where('payroll_period_id', $id)
+            ->orderBy('employee_name')
+            ->get()
+            ->map(fn ($e) => [
+                'id'              => $e->id,
+                'employee_id'     => $e->employee_id,
+                'employee_name'   => $e->employee_name,
+                'employee_number' => $e->employee_number,
+                'department'      => $e->department,
+                'position'        => $e->position,
+                'calculation_id'  => $e->payroll_period_id,
+                'status'          => $this->empStatusToFrontend($e->calculation_status),
+                'basic_pay'       => (float) $e->basic_pay,
+                'earnings'        => [
+                    'overtime'   => (float) $e->total_overtime_pay,
+                    'allowances' => (float) $e->total_allowances,
+                    'bonuses'    => (float) $e->total_bonuses,
+                ],
+                'deductions'      => [
+                    'sss'       => (float) $e->sss_contribution,
+                    'philhealth'=> (float) $e->philhealth_contribution,
+                    'pagibig'   => (float) $e->pagibig_contribution,
+                    'tax'       => (float) $e->withholding_tax,
+                    'loans'     => (float) $e->total_loan_deductions,
+                ],
+                'gross_pay'        => (float) $e->gross_pay,
+                'total_deductions' => (float) $e->total_deductions,
+                'net_pay'          => (float) ($e->final_net_pay ?? $e->net_pay),
+                'error_message'    => $e->has_exceptions
+                    ? implode(', ', $e->exception_flags ?? [])
+                    : null,
+                'calculated_at'    => $e->calculated_at?->toISOString(),
+            ]);
 
         return Inertia::render('Payroll/PayrollProcessing/Calculations/Show', [
-            'calculation' => $calculation,
-            'employee_calculations' => $employeeCalculations,
+            'calculation'           => $calculation,
+            'employee_calculations' => $employeeCalculations->values(),
         ]);
     }
 
     /**
-     * Recalculate a failed or completed payroll.
+     * Recalculate: reset period back to calculating state.
      */
     public function recalculate(int $id): \Illuminate\Http\RedirectResponse
     {
-        // In real implementation, this would:
-        // 1. Mark existing calculation as superseded
-        // 2. Create new calculation
-        // 3. Queue recalculation job
+        try {
+            $period = PayrollPeriod::findOrFail($id);
 
-        return redirect()
-            ->route('payroll.calculations.index')
-            ->with('success', 'Payroll recalculation started successfully.');
+            $period->update([
+                'status'                  => 'calculating',
+                'calculation_started_at'  => now(),
+                'calculation_completed_at'=> null,
+            ]);
+
+            CalculatePayrollJob::dispatch($period, auth()->id());
+
+            return redirect()
+                ->route('payroll.calculations.index')
+                ->with('success', 'Payroll recalculation started successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to recalculate payroll', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', 'Failed to start recalculation. Please try again.');
+        }
     }
 
     /**
-     * Approve a completed calculation.
+     * Approve a completed/calculated period.
      */
     public function approve(int $id): \Illuminate\Http\RedirectResponse
     {
-        // In real implementation, this would:
-        // 1. Validate calculation is completed
-        // 2. Lock payroll period
-        // 3. Generate payment records
-        // 4. Update calculation status
+        try {
+            $period = PayrollPeriod::findOrFail($id);
 
-        return redirect()
-            ->route('payroll.calculations.index')
-            ->with('success', 'Payroll calculation approved successfully.');
+            $period->update([
+                'status'      => 'approved',
+                'approved_by' => auth()->id(),
+                'approved_at' => now(),
+            ]);
+
+            return redirect()
+                ->route('payroll.calculations.index')
+                ->with('success', 'Payroll calculation approved successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to approve payroll calculation', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', 'Failed to approve. Please try again.');
+        }
     }
 
     /**
-     * Cancel a pending or processing calculation.
+     * Cancel a pending/processing calculation.
      */
     public function destroy(int $id): \Illuminate\Http\RedirectResponse
     {
-        // In real implementation, this would:
-        // 1. Stop any running calculation jobs
-        // 2. Mark calculation as cancelled
-        // 3. Clean up partial data
+        try {
+            $period = PayrollPeriod::findOrFail($id);
 
-        return redirect()
-            ->route('payroll.calculations.index')
-            ->with('success', 'Payroll calculation cancelled successfully.');
+            if (!in_array($period->status, ['draft', 'active', 'calculating'])) {
+                return redirect()->back()
+                    ->with('error', 'Only pending or in-progress calculations can be cancelled.');
+            }
+
+            $period->update(['status' => 'cancelled']);
+
+            return redirect()
+                ->route('payroll.calculations.index')
+                ->with('success', 'Payroll calculation cancelled successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to cancel payroll calculation', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', 'Failed to cancel. Please try again.');
+        }
     }
 
-    // ========================================================================
-    // Mock Data Helpers
-    // ========================================================================
+    // =========================================================================
+    // Private helpers
+    // =========================================================================
 
-    /**
-     * Get mock payroll calculations with Philippine payroll data.
-     */
-    private function getMockCalculations(): array
+    private function transformToCalculation(PayrollPeriod $p, mixed $counts = null): array
     {
-        $periods = $this->getMockPeriods();
+        $total     = $p->total_employees ?? (int) ($counts?->total ?? 0);
+        $processed = (int) ($counts?->processed ?? 0);
+        $failed    = (int) ($counts?->failed ?? 0);
+        $progress  = $total > 0 ? (int) round(($processed + $failed) / $total * 100) : 0;
+
+        $calcStatus = $this->dbStatusToCalcStatus($p->status);
+
+        if (in_array($calcStatus, ['completed', 'cancelled'])) {
+            $progress = 100;
+        }
 
         return [
-            [
-                'id' => 1,
-                'payroll_period_id' => 1,
-                'payroll_period' => $periods[0],
-                'calculation_type' => 'regular',
-                'status' => 'completed',
-                'calculation_date' => '2025-11-15 14:30:00',
-                'progress_percentage' => 100,
-                'total_employees' => 156,
-                'processed_employees' => 156,
-                'failed_employees' => 0,
-                'total_gross_pay' => 3245678.50,
-                'total_deductions' => 687432.25,
-                'total_net_pay' => 2558246.25,
-                'error_message' => null,
+            'id'                  => $p->id,
+            'payroll_period_id'   => $p->id,
+            'payroll_period'      => [
+                'id'         => $p->id,
+                'name'       => $p->period_name,
+                'start_date' => $p->period_start?->toDateString(),
+                'end_date'   => $p->period_end?->toDateString(),
+                'status'     => $calcStatus,
             ],
-            [
-                'id' => 2,
-                'payroll_period_id' => 2,
-                'payroll_period' => $periods[1],
-                'calculation_type' => 'regular',
-                'status' => 'processing',
-                'calculation_date' => '2025-11-30 09:15:00',
-                'progress_percentage' => 68,
-                'total_employees' => 156,
-                'processed_employees' => 106,
-                'failed_employees' => 0,
-                'total_gross_pay' => 2208461.20,
-                'total_deductions' => 467374.85,
-                'total_net_pay' => 1741086.35,
-                'error_message' => null,
-            ],
-            [
-                'id' => 3,
-                'payroll_period_id' => 2,
-                'payroll_period' => $periods[1],
-                'calculation_type' => 'adjustment',
-                'status' => 'failed',
-                'calculation_date' => '2025-11-29 16:45:00',
-                'progress_percentage' => 42,
-                'total_employees' => 156,
-                'processed_employees' => 65,
-                'failed_employees' => 8,
-                'total_gross_pay' => 1352789.00,
-                'total_deductions' => 286337.19,
-                'total_net_pay' => 1066451.81,
-                'error_message' => 'SSS contribution table lookup failed for 8 employees. Please verify SSS rate configuration.',
-            ],
-            [
-                'id' => 4,
-                'payroll_period_id' => 3,
-                'payroll_period' => $periods[2],
-                'calculation_type' => 'regular',
-                'status' => 'pending',
-                'calculation_date' => '2025-12-02 08:00:00',
-                'progress_percentage' => 0,
-                'total_employees' => 156,
-                'processed_employees' => 0,
-                'failed_employees' => 0,
-                'total_gross_pay' => 0,
-                'total_deductions' => 0,
-                'total_net_pay' => 0,
-                'error_message' => null,
-            ],
-            [
-                'id' => 5,
-                'payroll_period_id' => 1,
-                'payroll_period' => $periods[0],
-                'calculation_type' => 're-calculation',
-                'status' => 'completed',
-                'calculation_date' => '2025-11-16 10:20:00',
-                'progress_percentage' => 100,
-                'total_employees' => 12,
-                'processed_employees' => 12,
-                'failed_employees' => 0,
-                'total_gross_pay' => 287450.00,
-                'total_deductions' => 60964.50,
-                'total_net_pay' => 226485.50,
-                'error_message' => null,
-            ],
+            'calculation_type'    => $this->dbTypeToCalcType($p->period_type),
+            'status'              => $calcStatus,
+            'total_employees'     => $total,
+            'processed_employees' => $processed,
+            'failed_employees'    => $failed,
+            'progress_percentage' => $progress,
+            'total_gross_pay'     => (float) ($p->total_gross_pay ?? 0),
+            'total_deductions'    => (float) ($p->total_deductions ?? 0),
+            'total_net_pay'       => (float) ($p->total_net_pay ?? 0),
+            'calculation_date'    => ($p->calculation_completed_at ?? $p->updated_at)?->toISOString(),
+            'started_at'          => $p->updated_at?->toISOString(),
+            'completed_at'        => $p->calculation_completed_at?->toISOString(),
+            'error_message'       => null,
+            'calculated_by'       => $p->approvedBy?->name,
+            'created_at'          => $p->created_at?->toISOString(),
+            'updated_at'          => $p->updated_at?->toISOString(),
         ];
     }
 
-    /**
-     * Get mock payroll periods for filter dropdown.
-     */
-    private function getMockPeriods(): array
+    private function dbStatusToCalcStatus(string $status): string
     {
-        return [
-            [
-                'id' => 1,
-                'name' => 'November 1-15, 2025',
-                'start_date' => '2025-11-01',
-                'end_date' => '2025-11-15',
-                'status' => 'completed',
-            ],
-            [
-                'id' => 2,
-                'name' => 'November 16-30, 2025',
-                'start_date' => '2025-11-16',
-                'end_date' => '2025-11-30',
-                'status' => 'processing',
-            ],
-            [
-                'id' => 3,
-                'name' => 'December 1-15, 2025',
-                'start_date' => '2025-12-01',
-                'end_date' => '2025-12-15',
-                'status' => 'draft',
-            ],
-            [
-                'id' => 4,
-                'name' => 'December 16-31, 2025',
-                'start_date' => '2025-12-16',
-                'end_date' => '2025-12-31',
-                'status' => 'draft',
-            ],
-        ];
+        return match ($status) {
+            'draft', 'active'                                                    => 'pending',
+            'calculating'                                                         => 'processing',
+            'calculated', 'under_review', 'pending_approval', 'approved',
+            'finalized', 'processing_payment', 'completed'                       => 'completed',
+            'cancelled'                                                           => 'cancelled',
+            default                                                               => 'pending',
+        };
     }
 
-    /**
-     * Get mock employee-level calculation details.
-     */
-    private function getMockEmployeeCalculations(int $calculationId): array
+    private function calcStatusToDbStatuses(string $status): array
     {
-        // Sample employee calculations for detail view
-        return [
-            [
-                'id' => 1,
-                'calculation_id' => $calculationId,
-                'employee_id' => 1001,
-                'employee_name' => 'Juan Dela Cruz',
-                'employee_code' => 'EMP-001',
-                'department' => 'Engineering',
-                'position' => 'Senior Software Engineer',
-                'basic_salary' => 45000.00,
-                'overtime_pay' => 3500.00,
-                'allowances' => 2000.00,
-                'gross_pay' => 50500.00,
-                'sss_contribution' => 1350.00,
-                'philhealth_contribution' => 1400.00,
-                'pagibig_contribution' => 200.00,
-                'withholding_tax' => 4256.25,
-                'total_deductions' => 7206.25,
-                'net_pay' => 43293.75,
-                'status' => 'completed',
-            ],
-            [
-                'id' => 2,
-                'calculation_id' => $calculationId,
-                'employee_id' => 1002,
-                'employee_name' => 'Maria Santos',
-                'employee_code' => 'EMP-002',
-                'department' => 'Human Resources',
-                'position' => 'HR Manager',
-                'basic_salary' => 38000.00,
-                'overtime_pay' => 0,
-                'allowances' => 1500.00,
-                'gross_pay' => 39500.00,
-                'sss_contribution' => 1350.00,
-                'philhealth_contribution' => 1100.00,
-                'pagibig_contribution' => 200.00,
-                'withholding_tax' => 2856.50,
-                'total_deductions' => 5506.50,
-                'net_pay' => 33993.50,
-                'status' => 'completed',
-            ],
-            [
-                'id' => 3,
-                'calculation_id' => $calculationId,
-                'employee_id' => 1003,
-                'employee_name' => 'Pedro Reyes',
-                'employee_code' => 'EMP-003',
-                'department' => 'Operations',
-                'position' => 'Operations Supervisor',
-                'basic_salary' => 32000.00,
-                'overtime_pay' => 2400.00,
-                'allowances' => 1200.00,
-                'gross_pay' => 35600.00,
-                'sss_contribution' => 1350.00,
-                'philhealth_contribution' => 990.00,
-                'pagibig_contribution' => 200.00,
-                'withholding_tax' => 2145.00,
-                'total_deductions' => 4685.00,
-                'net_pay' => 30915.00,
-                'status' => 'completed',
-            ],
-        ];
+        return match ($status) {
+            'pending'    => ['draft', 'active'],
+            'processing' => ['calculating'],
+            'completed'  => ['calculated', 'under_review', 'pending_approval', 'approved', 'finalized', 'processing_payment', 'completed'],
+            'cancelled'  => ['cancelled'],
+            default      => [],
+        };
+    }
+
+    private function dbTypeToCalcType(string $type): string
+    {
+        return match ($type) {
+            'adjustment'                           => 'adjustment',
+            '13th_month', 'final_pay',
+            'mid_year_bonus'                       => 'final',
+            default                                => 'regular',
+        };
+    }
+
+    private function calcTypeToDbType(string $type): ?string
+    {
+        return match ($type) {
+            'regular'    => 'regular',
+            'adjustment' => 'adjustment',
+            'final'      => 'final_pay',
+            default      => null,
+        };
+    }
+
+    private function empStatusToFrontend(string $status): string
+    {
+        return match ($status) {
+            'pending', 'calculating' => 'pending',
+            'calculated'             => 'calculated',
+            'exception'              => 'failed',
+            'adjusted'               => 'adjusted',
+            'approved', 'locked'     => 'calculated',
+            default                  => 'pending',
+        };
     }
 }

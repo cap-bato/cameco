@@ -6,6 +6,7 @@ use App\Events\Payroll\PayrollCalculationStarted;
 use App\Events\Payroll\PayrollCalculationCompleted;
 use App\Events\Payroll\PayrollCalculationFailed;
 use App\Models\Employee;
+use App\Models\PayrollCalculationLog;
 use App\Models\PayrollPeriod;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -46,8 +47,8 @@ class CalculatePayrollJob implements ShouldQueue
         try {
             Log::info('Starting payroll calculation', [
                 'period_id' => $this->payrollPeriod->id,
-                'period_name' => $this->payrollPeriod->name,
-                'employee_count' => Employee::where('is_active', true)->count(),
+                'period_name' => $this->payrollPeriod->period_name,
+                'employee_count' => Employee::where('status', 'active')->count(),
             ]);
 
             // Dispatch event - calculation started
@@ -60,13 +61,19 @@ class CalculatePayrollJob implements ShouldQueue
             ]);
 
             // Get all active employees
-            $employees = Employee::where('is_active', true)
+            $employees = Employee::where('status', 'active')
                 ->with('payrollInfo')
                 ->get();
 
             Log::info('Fetched active employees for payroll', [
                 'count' => $employees->count(),
             ]);
+
+            // Log calculation start to DB audit log
+            PayrollCalculationLog::logCalculationStarted(
+                $this->payrollPeriod->id,
+                $employees->count(),
+            );
 
             // Dispatch job for each employee
             $dispatchedCount = 0;
@@ -93,7 +100,7 @@ class CalculatePayrollJob implements ShouldQueue
 
             // Dispatch finalize job to run after all employee calculations complete
             FinalizePayrollJob::dispatch($this->payrollPeriod, $this->userId)
-                ->delay(now()->addMinutes(30)); // Wait 30 minutes for all calculations
+                ->delay(now()->addSeconds(30)); // Wait 30 seconds for all calculations
 
         } catch (\Exception $e) {
             Log::error('Payroll calculation failed', [
@@ -102,9 +109,9 @@ class CalculatePayrollJob implements ShouldQueue
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            // Update period status to 'failed'
+            // Update period status to 'cancelled' ('failed' is not a valid enum value)
             $this->payrollPeriod->update([
-                'status' => 'failed',
+                'status' => 'cancelled',
                 'updated_by' => $this->userId,
             ]);
 
@@ -129,9 +136,9 @@ class CalculatePayrollJob implements ShouldQueue
             'error' => $exception->getMessage(),
         ]);
 
-        // Update period status
+        // Update period status to 'cancelled' ('failed' is not a valid enum value)
         $this->payrollPeriod->update([
-            'status' => 'failed',
+            'status' => 'cancelled',
             'updated_by' => $this->userId,
         ]);
 
