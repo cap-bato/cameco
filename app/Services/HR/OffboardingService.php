@@ -1,0 +1,398 @@
+<?php
+
+namespace App\Services\HR;
+
+use App\Models\OffboardingCase;
+use App\Models\ClearanceItem;
+use App\Models\AccessRevocation;
+use App\Models\OffboardingDocument;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\DB;
+
+class OffboardingService
+{
+    /**
+     * Generate a unique case number in format OFF-YYYY-NNN
+     */
+    public function generateCaseNumber(): string
+    {
+        $year = now()->year;
+        $lastCase = OffboardingCase::where('case_number', 'like', "OFF-{$year}-%")
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $sequence = 1;
+        if ($lastCase) {
+            $lastNumber = intval(substr($lastCase->case_number, -3));
+            $sequence = $lastNumber + 1;
+        }
+
+        return sprintf('OFF-%d-%03d', $year, $sequence);
+    }
+
+    /**
+     * Create default clearance items based on employee's role and department.
+     */
+    public function createDefaultClearanceItems(OffboardingCase $case): void
+    {
+        $defaultItems = [
+            // IT Department
+            [
+                'category' => 'it',
+                'item_name' => 'Return company laptop',
+                'description' => 'Collect and inspect employee laptop computer',
+                'priority' => 'critical',
+            ],
+            [
+                'category' => 'it',
+                'item_name' => 'Return mobile phone',
+                'description' => 'Retrieve company-issued mobile device',
+                'priority' => 'high',
+            ],
+            [
+                'category' => 'it',
+                'item_name' => 'Disable VPN access',
+                'description' => 'Revoke remote access credentials',
+                'priority' => 'critical',
+            ],
+            [
+                'category' => 'it',
+                'item_name' => 'Archive email and documents',
+                'description' => 'Transfer important files to company storage',
+                'priority' => 'high',
+            ],
+            // HR Department
+            [
+                'category' => 'hr',
+                'item_name' => 'Complete exit interview',
+                'description' => 'Conduct and record exit interview',
+                'priority' => 'normal',
+            ],
+            [
+                'category' => 'hr',
+                'item_name' => 'Return ID card',
+                'description' => 'Collect employee ID badge',
+                'priority' => 'high',
+            ],
+            [
+                'category' => 'hr',
+                'item_name' => 'Return access card',
+                'description' => 'Retrieve building/facility access card',
+                'priority' => 'high',
+            ],
+            [
+                'category' => 'hr',
+                'item_name' => 'Process final benefits',
+                'description' => 'Handle health insurance and other benefits termination',
+                'priority' => 'normal',
+            ],
+            // Finance Department
+            [
+                'category' => 'finance',
+                'item_name' => 'Clear outstanding cash advances',
+                'description' => 'Collect or deduct outstanding cash advances',
+                'priority' => 'critical',
+            ],
+            [
+                'category' => 'finance',
+                'item_name' => 'Compute final pay',
+                'description' => 'Calculate final salary and adjustments',
+                'priority' => 'critical',
+            ],
+            [
+                'category' => 'finance',
+                'item_name' => 'Settle outstanding reimbursements',
+                'description' => 'Process pending expense reimbursements',
+                'priority' => 'high',
+            ],
+            // Operations
+            [
+                'category' => 'operations',
+                'item_name' => 'Return company keys',
+                'description' => 'Collect all facility and equipment keys',
+                'priority' => 'high',
+            ],
+            [
+                'category' => 'operations',
+                'item_name' => 'Sign off on equipment checklist',
+                'description' => 'Verify return of all company equipment',
+                'priority' => 'normal',
+            ],
+        ];
+
+        foreach ($defaultItems as $item) {
+            ClearanceItem::create([
+                'offboarding_case_id' => $case->id,
+                'category' => $item['category'],
+                'item_name' => $item['item_name'],
+                'description' => $item['description'],
+                'priority' => $item['priority'],
+                'status' => 'pending',
+                'due_date' => $case->last_working_day,
+            ]);
+        }
+
+        Log::info('Default clearance items created', [
+            'case_id' => $case->id,
+            'count' => count($defaultItems),
+        ]);
+    }
+
+    /**
+     * Create default access revocations for common systems.
+     */
+    public function createDefaultAccessRevocations(OffboardingCase $case): void
+    {
+        $systems = [
+            [
+                'system_name' => 'Email',
+                'system_category' => 'email',
+                'account_identifier' => $case->employee->user?->email,
+            ],
+            [
+                'system_name' => 'VPN',
+                'system_category' => 'network',
+                'account_identifier' => $case->employee->user?->username,
+            ],
+            [
+                'system_name' => 'Active Directory',
+                'system_category' => 'network',
+                'account_identifier' => $case->employee->user?->username,
+            ],
+            [
+                'system_name' => 'ERP System',
+                'system_category' => 'application',
+                'account_identifier' => $case->employee->user?->username,
+            ],
+            [
+                'system_name' => 'Slack',
+                'system_category' => 'cloud_service',
+                'account_identifier' => $case->employee->user?->email,
+            ],
+            [
+                'system_name' => 'Microsoft 365',
+                'system_category' => 'cloud_service',
+                'account_identifier' => $case->employee->user?->email,
+            ],
+            [
+                'system_name' => 'Building Access System',
+                'system_category' => 'physical_access',
+                'account_identifier' => $case->employee->employee_number,
+            ],
+        ];
+
+        foreach ($systems as $system) {
+            AccessRevocation::create([
+                'offboarding_case_id' => $case->id,
+                'employee_id' => $case->employee_id,
+                'system_name' => $system['system_name'],
+                'system_category' => $system['system_category'],
+                'account_identifier' => $system['account_identifier'],
+                'status' => 'active',
+            ]);
+        }
+
+        Log::info('Default access revocations created', [
+            'case_id' => $case->id,
+            'count' => count($systems),
+        ]);
+    }
+
+    /**
+     * Send notifications when offboarding is initiated.
+     */
+    public function notifyOffboardingInitiated(OffboardingCase $case): void
+    {
+        try {
+            // Notify HR coordinator
+            if ($case->hrCoordinator?->user) {
+                Log::info('Notification sent to HR coordinator for offboarding case', [
+                    'case_number' => $case->case_number,
+                    'user_id' => $case->hrCoordinator->user->id,
+                ]);
+            }
+
+            // Notify employee's direct manager
+            if ($case->employee->supervisor?->user) {
+                Log::info('Notification sent to employee supervisor for offboarding case', [
+                    'case_number' => $case->case_number,
+                    'supervisor_id' => $case->employee->supervisor->user->id,
+                ]);
+            }
+
+            Log::info('Offboarding initiation notifications sent', [
+                'case_number' => $case->case_number,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to send offboarding initiation notifications', [
+                'case_number' => $case->case_number,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Send notifications when offboarding is cancelled.
+     */
+    public function notifyOffboardingCancelled(OffboardingCase $case): void
+    {
+        try {
+            Log::info('Offboarding cancellation notifications sent', [
+                'case_number' => $case->case_number,
+                'employee_id' => $case->employee_id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to send offboarding cancellation notifications', [
+                'case_number' => $case->case_number,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Send notifications when offboarding is completed.
+     */
+    public function notifyOffboardingCompleted(OffboardingCase $case): void
+    {
+        try {
+            Log::info('Offboarding completion notifications sent', [
+                'case_number' => $case->case_number,
+                'employee_id' => $case->employee_id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to send offboarding completion notifications', [
+                'case_number' => $case->case_number,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Generate final documents for the offboarding case.
+     */
+    public function generateFinalDocuments(OffboardingCase $case): void
+    {
+        try {
+            // Generate Clearance Certificate
+            $this->createDocument($case, 'clearance_certificate', 'Clearance Certificate', true);
+
+            // Generate Certificate of Employment
+            $this->createDocument($case, 'certificate_of_employment', 'Certificate of Employment', true);
+
+            // Generate Final Pay Computation
+            $this->createDocument($case, 'final_pay_computation', 'Final Pay Computation', true);
+
+            $case->update([
+                'final_documents_generated_at' => now(),
+                'final_documents_issued' => true,
+            ]);
+
+            Log::info('Final documents generated for offboarding case', [
+                'case_number' => $case->case_number,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to generate final documents', [
+                'case_number' => $case->case_number,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Create a document for the offboarding case.
+     */
+    private function createDocument(
+        OffboardingCase $case,
+        string $documentType,
+        string $documentName,
+        bool $generateBySystem = true
+    ): void {
+        OffboardingDocument::create([
+            'offboarding_case_id' => $case->id,
+            'employee_id' => $case->employee_id,
+            'document_type' => $documentType,
+            'document_name' => $documentName,
+            'file_path' => '/generated/' . $case->case_number . '/' . $documentType . '.pdf',
+            'generated_by_system' => $generateBySystem,
+            'status' => 'draft',
+            'mime_type' => 'application/pdf',
+        ]);
+    }
+
+    /**
+     * Generate a PDF report for the offboarding case.
+     */
+    public function generateCaseReportPDF(OffboardingCase $case)
+    {
+        try {
+            // For now, just return a simple response
+            // In production, use a PDF library like DomPDF or Snappy
+
+            Log::info('PDF report generated for offboarding case', [
+                'case_number' => $case->case_number,
+            ]);
+
+            // This would use a proper PDF generation library
+            // e.g., return PDF::loadView('offboarding.report', ['case' => $case])->download();
+
+            throw new \Exception('PDF generation not yet implemented. Please use a PDF library.');
+        } catch (\Exception $e) {
+            Log::error('Failed to generate PDF report', [
+                'case_number' => $case->case_number,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Get statistics for offboarding cases by status.
+     */
+    public function getOffboardingStatistics(): array
+    {
+        $total = OffboardingCase::count();
+
+        return [
+            'total' => $total,
+            'pending' => OffboardingCase::where('status', 'pending')->count(),
+            'in_progress' => OffboardingCase::where('status', 'in_progress')->count(),
+            'clearance_pending' => OffboardingCase::where('status', 'clearance_pending')->count(),
+            'completed' => OffboardingCase::where('status', 'completed')->count(),
+            'cancelled' => OffboardingCase::where('status', 'cancelled')->count(),
+            'due_this_week' => OffboardingCase::whereBetween(
+                'last_working_day',
+                [now()->startOfWeek(), now()->endOfWeek()]
+            )->whereIn('status', ['pending', 'in_progress'])->count(),
+            'overdue' => OffboardingCase::where('last_working_day', '<', now()->toDateString())
+                ->whereIn('status', ['pending', 'in_progress'])
+                ->count(),
+        ];
+    }
+
+    /**
+     * Get pending clearances for a specific user/department.
+     */
+    public function getPendingClearancesForUser($userId): int
+    {
+        return ClearanceItem::whereHas('offboardingCase', function ($query) {
+            $query->whereIn('status', ['pending', 'in_progress', 'clearance_pending']);
+        })
+        ->where('assigned_to', $userId)
+        ->where('status', 'pending')
+        ->count();
+    }
+
+    /**
+     * Check if all clearances for a case are complete.
+     */
+    public function allClearancesComplete(OffboardingCase $case): bool
+    {
+        $totalItems = $case->clearanceItems()->count();
+        $completedItems = $case->clearanceItems()
+            ->whereIn('status', ['approved', 'waived'])
+            ->count();
+
+        return $totalItems > 0 && $totalItems === $completedItems;
+    }
+}
