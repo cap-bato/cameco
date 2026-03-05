@@ -24,25 +24,31 @@ class UpdatePayrollProgress implements ShouldQueue
                 'period_id' => $event->payrollPeriod->id,
             ]);
 
-            // Get total employees for this period
-            $totalEmployees = $event->payrollPeriod->employees()
-                ->where('status', 'active')
+            // Get total employee payroll calculations for this period
+            $totalEmployees = $event->payrollPeriod->employeePayrollCalculations()
                 ->count();
 
             // Get completed calculations
-            $completedCount = $event->payrollPeriod->calculations()
-                ->where('status', 'success')
+            $completedCount = $event->payrollPeriod->employeePayrollCalculations()
+                ->where('status', 'completed')
                 ->count();
 
             // Calculate progress percentage
-            $progressPercentage = $totalEmployees > 0 
+            $progressPercentage = $totalEmployees > 0
                 ? round(($completedCount / $totalEmployees) * 100, 2)
                 : 0;
 
-            // Update period progress
-            $event->payrollPeriod->update([
-                'progress_percentage' => $progressPercentage,
-            ]);
+            // Update period progress if the column exists
+            if (DB::getSchemaBuilder()->hasColumn($event->payrollPeriod->getTable(), 'progress_percentage')) {
+                $event->payrollPeriod->update([
+                    'progress_percentage' => $progressPercentage,
+                ]);
+            } else {
+                Log::warning('progress_percentage column does not exist on payroll periods table; skipping update', [
+                    'period_id' => $event->payrollPeriod->id,
+                    'progress' => $progressPercentage,
+                ]);
+            }
 
             Log::info('Payroll progress updated', [
                 'period_id' => $event->payrollPeriod->id,
