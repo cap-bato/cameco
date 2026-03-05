@@ -12,6 +12,7 @@ use App\Repositories\Eloquent\HR\ProfileRepository;
 use App\Repositories\Eloquent\System\CronRepository;
 use App\Repositories\Eloquent\System\SystemHealthRepository;
 use App\Repositories\Eloquent\System\SuperadminSLARepository;
+use App\Services\Social\FacebookService;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -60,7 +61,10 @@ class AppServiceProvider extends ServiceProvider
             \App\Repositories\Eloquent\System\User\UserOnboardingRepository::class
          );
 
-         
+         // Register FacebookService as singleton
+         $this->app->singleton(FacebookService::class, function ($app) {
+             return new FacebookService();
+         });
     }
 
     /**

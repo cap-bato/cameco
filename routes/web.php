@@ -6,6 +6,7 @@ use Laravel\Fortify\Features;
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\System\Onboarding\SystemOnboardingController;
+use App\Http\Controllers\Public\JobPostingsController;
 use App\Http\Controllers\HR\ATS\JobPostingController;
 use App\Http\Controllers\HR\ATS\CandidateController;
 use App\Http\Controllers\HR\ATS\ApplicationController;
@@ -20,6 +21,21 @@ Route::get('/', function () {
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
+
+// PUBLIC JOB POSTINGS (No Authentication Required)
+Route::prefix('job-postings')
+    ->name('public.job-postings.')
+    ->group(function () {
+        Route::get('/', [JobPostingsController::class, 'index'])
+            ->name('index');
+        
+        Route::get('/{id}', [JobPostingsController::class, 'show'])
+            ->name('show');
+        
+        Route::post('/{id}/apply', [JobPostingsController::class, 'apply'])
+            ->middleware('throttle:5,1')
+            ->name('apply');
+    });
 
 // HR ATS MODULE
 Route::middleware(['auth'])

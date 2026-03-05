@@ -15,6 +15,8 @@ class Application extends Model
         'status',
         'score',
         'applied_at',
+        'resume_path',
+        'cover_letter',
     ];
 
     // Relationships

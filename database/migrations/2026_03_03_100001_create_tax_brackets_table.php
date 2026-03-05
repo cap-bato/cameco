@@ -46,6 +46,7 @@ return new class extends Migration
             $table->index(['tax_status', 'is_active', 'effective_from']);
             $table->index(['income_from', 'income_to']);
             $table->index('bracket_level');
+            $table->unique(['tax_status', 'bracket_level', 'effective_from'], 'tax_brackets_status_level_from_unique');
         });
     }
 

@@ -95,6 +95,11 @@ class DatabaseSeeder extends Seeder
             $this->call(\Database\Seeders\PayrollPermissionsSeeder::class);
         }
 
+        // Seed Offboarding permissions
+        if (class_exists(\Database\Seeders\OffboardingPermissionsSeeder::class)) {
+            $this->call(\Database\Seeders\OffboardingPermissionsSeeder::class);
+        }
+
         // Seed Payroll Officer account
         if (class_exists(\Database\Seeders\PayrollOfficerAccountSeeder::class)) {
             $this->call(\Database\Seeders\PayrollOfficerAccountSeeder::class);
@@ -170,6 +175,16 @@ class DatabaseSeeder extends Seeder
         
         if (class_exists(\Database\Seeders\EmployeeSeeder::class)) {
             $this->call(\Database\Seeders\EmployeeSeeder::class);
+        }
+
+        // Seed Employee Accounts (must run after employees)
+        if (class_exists(\Database\Seeders\EmployeeAccountSeeder::class)) {
+            $this->call(\Database\Seeders\EmployeeAccountSeeder::class);
+        }
+
+        // Seed Leave Balances (must run after employees and leave policies)
+        if (class_exists(\Database\Seeders\LeaveBalanceSeeder::class)) {
+            $this->call(\Database\Seeders\LeaveBalanceSeeder::class);
         }
 
         // Seed Overtime Requests (must run after employees)

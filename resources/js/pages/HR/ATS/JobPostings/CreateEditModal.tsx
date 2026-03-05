@@ -38,6 +38,7 @@ export function JobPostingCreateEditModal({
     description: jobPosting?.description || '',
     requirements: jobPosting?.requirements || '',
     status: jobPosting?.status || 'draft',
+    auto_post_facebook: jobPosting?.auto_post_facebook || false,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -82,6 +83,7 @@ export function JobPostingCreateEditModal({
       description: '',
       requirements: '',
       status: 'draft',
+      auto_post_facebook: false,
     });
     setErrors({});
     onClose();
@@ -217,25 +219,32 @@ export function JobPostingCreateEditModal({
             />
           </div>
 
-          {/* Post to Facebook (Coming Soon) */}
+          {/* Auto-Post to Facebook */}
           <div className="space-y-2">
-            <Label className="text-sm">Social Media Posting</Label>
-            <Button
-              type="button"
-              variant="outline"
-              disabled
-              className="w-full gap-2"
-              title="Facebook integration coming in Phase 2"
-            >
-              <Facebook className="h-4 w-4" />
-              <span>Post to Facebook</span>
-              <span className="ml-auto text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                Coming Soon
-              </span>
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Automatically post this job to your Facebook page. Available in Phase 2.
-            </p>
+            <Label className="text-sm">Facebook Integration</Label>
+            <label className="flex items-start gap-3 cursor-pointer p-3 border rounded-md hover:bg-accent/50 transition-colors">
+              <input
+                type="checkbox"
+                checked={formData.auto_post_facebook || false}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  auto_post_facebook: e.target.checked
+                })}
+                disabled={isLoading}
+                className="mt-0.5 rounded"
+              />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <Facebook className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium">
+                    Automatically post to Facebook when published
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  When enabled, this job will be automatically posted to your company's Facebook Page as soon as it's published.
+                </p>
+              </div>
+            </label>
           </div>
 
           {/* Info Alert */}

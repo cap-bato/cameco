@@ -53,4 +53,12 @@ class Profile extends Model
     {
         return $this->hasOne(Employee::class);
     }
+
+    /**
+     * Get full name attribute
+     */
+    public function getFullNameAttribute(): string
+    {
+        return "{$this->first_name} {$this->last_name}";
+    }
 }

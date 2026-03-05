@@ -283,4 +283,12 @@ class Employee extends Model
     {
         return $this->date_regularized !== null;
     }
+
+    /**
+     * Get all offboarding cases for this employee.
+     */
+    public function offboardingCases()
+    {
+        return $this->hasMany(OffboardingCase::class);
+    }
 }

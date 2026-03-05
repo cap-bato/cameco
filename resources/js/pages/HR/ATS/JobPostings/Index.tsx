@@ -10,9 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Globe, Lock, Clock } from 'lucide-react';
+import { Plus, Edit, Trash2, Globe, Lock, Clock, Facebook } from 'lucide-react';
 import { JobStatusBadge } from '@/components/ats/job-status-badge';
 import { JobPostingFilters } from '@/components/ats/job-posting-filters';
+import { Badge } from '@/components/ui/badge';
+import { FacebookPreviewModal } from '@/components/ats/FacebookPreviewModal';
+import { FacebookLogsModal } from '@/components/ats/FacebookLogsModal';
 import { JobPostingCreateEditModal } from './CreateEditModal';
 import type { PageProps } from '@inertiajs/core';
 import type { JobPosting, JobPostingFormData, JobPostingFilters as JobPostingFiltersType, JobPostingSummary } from '@/types/ats-pages';
@@ -57,6 +60,10 @@ export default function JobPostingsIndex({
   const [actionJob, setActionJob] = useState<JobPosting | undefined>(undefined);
   const [actionType, setActionType] = useState<'publish' | 'close' | 'delete' | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewJob, setPreviewJob] = useState<JobPosting | undefined>(undefined);
+  const [isLogsOpen, setIsLogsOpen] = useState(false);
+  const [logsJob, setLogsJob] = useState<JobPosting | undefined>(undefined);
 
   const handleCreateClick = () => {
     setEditingJob(undefined);
@@ -164,6 +171,51 @@ const handleConfirmAction = async () => {
   const handleCancelAction = () => {
     setActionJob(undefined);
     setActionType(null);
+  };
+
+  const handlePostToFacebook = (job: JobPosting) => {
+    if (job.facebook_post_id) {
+      alert('This job has already been posted to Facebook.');
+      return;
+    }
+    
+    // Open preview modal instead of immediate confirmation
+    setPreviewJob(job);
+    setIsPreviewOpen(true);
+  };
+
+  const handleConfirmFacebookPost = async () => {
+    if (!previewJob) return;
+
+    try {
+      const response = await axios.post(`/hr/ats/job-postings/${previewJob.id}/post-to-facebook`);
+      
+      if (response.data.success) {
+        alert('Posted to Facebook successfully!');
+        setIsPreviewOpen(false);
+        setPreviewJob(undefined);
+        window.location.reload();
+      }
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Failed to post to Facebook';
+      alert(message);
+      setIsPreviewOpen(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setIsPreviewOpen(false);
+    setPreviewJob(undefined);
+  };
+
+  const handleViewLogs = (job: JobPosting) => {
+    setLogsJob(job);
+    setIsLogsOpen(true);
+  };
+
+  const handleCloseLogs = () => {
+    setIsLogsOpen(false);
+    setLogsJob(undefined);
   };
 
   const getActionDialogContent = () => {
@@ -304,7 +356,15 @@ const handleConfirmAction = async () => {
                         {job.department_name || `Dept #${job.department_id}`}
                       </p>
                     </div>
-                    <JobStatusBadge status={job.status} />
+                    <div className="flex flex-col gap-2">
+                      <JobStatusBadge status={job.status} />
+                      {job.facebook_post_id && (
+                        <Badge variant="secondary" className="gap-1">
+                          <Facebook className="h-3 w-3" />
+                          Posted to Facebook
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
 
@@ -331,6 +391,28 @@ const handleConfirmAction = async () => {
                       </div>
                     )}
                   </div>
+
+                  {/* Facebook Post Link */}
+                  {job.facebook_post_url && (
+                    <div className="space-y-2">
+                      <a 
+                        href={job.facebook_post_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline text-sm flex items-center gap-1"
+                      >
+                        <Facebook className="h-3 w-3" />
+                        View on Facebook →
+                      </a>
+                      <button
+                        onClick={() => handleViewLogs(job)}
+                        className="text-blue-600 hover:underline text-sm flex items-center gap-1"
+                      >
+                        <Facebook className="h-3 w-3" />
+                        View Post History & Metrics
+                      </button>
+                    </div>
+                  )}
 
                   {/* Actions */}
                   <div className="flex gap-2 border-t pt-4">
@@ -372,6 +454,19 @@ const handleConfirmAction = async () => {
                       onClick={() => handleCloseClick(job)}
                     >
                       Close Job
+                    </Button>
+                  )}
+                  
+                  {/* Facebook Post Button */}
+                  {job.status === 'open' && !job.facebook_post_id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2"
+                      onClick={() => handlePostToFacebook(job)}
+                    >
+                      <Facebook className="h-4 w-4" />
+                      Post to Facebook
                     </Button>
                   )}
                 </CardContent>
@@ -442,6 +537,25 @@ const handleConfirmAction = async () => {
         onClose={handleModalClose}
         onSubmit={handleFormSubmit}
       />
+
+      {/* Facebook Preview Modal */}
+      {previewJob && (
+        <FacebookPreviewModal
+          isOpen={isPreviewOpen}
+          onClose={handleClosePreview}
+          jobPosting={previewJob}
+          onConfirm={handleConfirmFacebookPost}
+        />
+      )}
+
+      {/* Facebook Logs Modal */}
+      {logsJob && (
+        <FacebookLogsModal
+          isOpen={isLogsOpen}
+          onClose={handleCloseLogs}
+          jobPosting={logsJob}
+        />
+      )}
     </AppLayout>
   );
 }

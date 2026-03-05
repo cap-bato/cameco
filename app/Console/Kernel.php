@@ -94,6 +94,50 @@ class Kernel extends ConsoleKernel
             ->onOneServer()
             ->name('cleanup-dedup-cache')
             ->describedAs('Cleanup RFID event deduplication cache');
+
+        // ============================================================
+        // OFFBOARDING & SEPARATIONS
+        // ============================================================
+
+        // Send overdue clearance item reminders (Daily at 10 AM)
+        $schedule->command('offboarding:reminders', ['--job=overdue-clearance'])
+            ->dailyAt('10:00')
+            ->withoutOverlapping()
+            ->onOneServer()
+            ->name('offboarding-overdue-clearance')
+            ->describedAs('Send reminders for overdue clearance items');
+
+        // Remind employees of pending exit interviews (Daily at 11 AM)
+        $schedule->command('offboarding:reminders', ['--job=pending-interviews'])
+            ->dailyAt('11:00')
+            ->withoutOverlapping()
+            ->onOneServer()
+            ->name('offboarding-pending-interviews')
+            ->describedAs('Send reminders to employees with pending exit interviews');
+
+        // Alert HR of cases approaching last working day (Daily at 9 AM)
+        $schedule->command('offboarding:reminders', ['--job=approaching-lwd'])
+            ->dailyAt('09:00')
+            ->withoutOverlapping()
+            ->onOneServer()
+            ->name('offboarding-approaching-lwd')
+            ->describedAs('Alert HR of cases approaching last working day');
+
+        // Check for overdue asset returns (Daily at 2 PM)
+        $schedule->command('offboarding:reminders', ['--job=asset-return'])
+            ->dailyAt('14:00')
+            ->withoutOverlapping()
+            ->onOneServer()
+            ->name('offboarding-asset-return')
+            ->describedAs('Send reminders for overdue asset returns');
+
+        // Send weekly offboarding summary report (Mondays at 8 AM)
+        $schedule->command('offboarding:reminders', ['--job=weekly-report'])
+            ->weeklyOn(1, '08:00')
+            ->withoutOverlapping()
+            ->onOneServer()
+            ->name('offboarding-weekly-report')
+            ->describedAs('Send weekly offboarding summary report to HR head');
     }
 
     /**
