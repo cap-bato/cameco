@@ -154,13 +154,25 @@ class GovernmentContributionRate extends Model
      */
     public static function getPagIbigRate(float $salary)
     {
+        $today = now()->toDateString();
+
         return self::active()
             ->pagIbig()
+            ->where('rate_type', 'contribution_rate')
+            ->where(function ($q) use ($today) {
+                $q->whereNull('effective_from')
+                  ->orWhere('effective_from', '<=', $today);
+            })
+            ->where(function ($q) use ($today) {
+                $q->whereNull('effective_to')
+                  ->orWhere('effective_to', '>=', $today);
+            })
             ->where('compensation_min', '<=', $salary)
             ->where(function ($q) use ($salary) {
                 $q->whereNull('compensation_max')
                   ->orWhere('compensation_max', '>=', $salary);
             })
+            ->orderBy('effective_from', 'desc')
             ->first();
     }
 }
