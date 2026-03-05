@@ -8,6 +8,8 @@ use App\Models\EmployeeLoan;
 use App\Models\Department;
 use App\Services\Payroll\LoanManagementService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class LoansController extends Controller
@@ -287,11 +289,11 @@ class LoansController extends Controller
      */
     public function destroy(int $id)
     {
-        $this->authorize('delete', Employee::class);
-
         try {
-            $loan = EmployeeLoan::findOrFail($id);
-            
+            $loan = EmployeeLoan::with('employee')->findOrFail($id);
+
+            $this->authorize('delete', $loan->employee);
+
             // Check if loan is active - only allow deletion of non-active loans
             if ($loan->status === 'active') {
                 return response()->json([
@@ -300,18 +302,23 @@ class LoansController extends Controller
                 ], 422);
             }
 
-            // Delete associated deductions
-            $loan->loanDeductions()->delete();
-            
-            // Soft delete the loan
-            $loan->delete();
+            DB::transaction(function () use ($loan) {
+                // Delete associated deductions
+                $loan->loanDeductions()->delete();
+
+                // Soft delete the loan
+                $loan->delete();
+            });
 
             return response()->json([
                 'success' => true,
                 'message' => 'Loan deleted successfully',
             ]);
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            Log::error('Failed to delete loan', ['loan_id' => $id, 'error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'An error occurred while deleting the loan. Please contact support if the issue persists.'], 500);
         }
     }
 
@@ -363,7 +370,8 @@ class LoansController extends Controller
                 'message' => 'Payment history retrieved successfully',
             ]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            Log::error('Failed to retrieve loan payment history', ['loan_id' => $id, 'error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'An error occurred while retrieving payment history. Please contact support if the issue persists.'], 500);
         }
     }
 

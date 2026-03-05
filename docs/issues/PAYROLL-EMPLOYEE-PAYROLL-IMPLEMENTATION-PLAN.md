@@ -2253,14 +2253,16 @@ class EmployeePayrollInfoService
 - Department
 
 **API Routes (Added/Verified):**
-- `GET /payroll/loans` - List all loans with filters
-- `POST /payroll/loans` - Create new loan
-- `GET /payroll/loans/{id}` - Get loan details
-- `PUT /payroll/loans/{id}` - Update loan
-- `POST /payroll/loans/{id}/cancel` - Cancel loan
-- `POST /payroll/loans/{id}/early-payment` - Process early payment
-- `DELETE /payroll/loans/{id}` - Delete loan (NEW - Added March 5)
-- `GET /payroll/loans/{id}/payments` - Get payment history (NEW - Added March 5)
+- `GET /payroll/loans` - List all loans with filters ✅ Active
+- `POST /payroll/loans` - Create new loan ⚠️ Feature-flagged (`FEATURE_LOAN_CRUD_ROUTES`)
+- `GET /payroll/loans/{id}` - Get loan details ⚠️ Feature-flagged (`FEATURE_LOAN_CRUD_ROUTES`)
+- `PUT /payroll/loans/{id}` - Update loan ⚠️ Feature-flagged (`FEATURE_LOAN_CRUD_ROUTES`)
+- `POST /payroll/loans/{id}/cancel` - Cancel loan ⚠️ Feature-flagged (`FEATURE_LOAN_CRUD_ROUTES`)
+- `POST /payroll/loans/{id}/early-payment` - Process early payment ⚠️ Feature-flagged (`FEATURE_LOAN_CRUD_ROUTES`)
+- `DELETE /payroll/loans/{id}` - Delete loan ⚠️ Feature-flagged (`FEATURE_LOAN_CRUD_ROUTES`)
+- `GET /payroll/loans/{id}/payments` - Get payment history ⚠️ Feature-flagged (`FEATURE_LOAN_CRUD_ROUTES`)
+
+> Routes marked ⚠️ are registered only when the `FEATURE_LOAN_CRUD_ROUTES=true` environment variable is set (see `config/features.php`).
 
 **Filtering Support:**
 - Search: By employee name or employee number
