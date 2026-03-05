@@ -65,6 +65,7 @@ export function AdvanceApprovalModal({
             approval_status: 'rejected',
             deduction_schedule: 'single_period',
             approval_notes: approvalNotes,
+            rejection_reason: approvalNotes,
         };
         onReject(data);
         onClose();

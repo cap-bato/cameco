@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { CashAdvance, CashAdvanceFormData } from '@/types/payroll-pages';
+import { router } from '@inertiajs/react';
+import { CashAdvance, CashAdvanceFormData, CashAdvanceApprovalData } from '@/types/payroll-pages';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, TrendingUp, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
@@ -122,19 +123,45 @@ export default function AdvancesIndex({ advances, initialFilters, employees: pro
         });
     }, [advances, filters]);
 
-    const handleApprove = () => {
-        console.log('Approve advance:', selectedAdvance?.id);
-        setIsApprovalModalOpen(false);
+    const handleApprove = (data: CashAdvanceApprovalData) => {
+        router.post(`/payroll/advances/${data.advance_id}/approve`, {
+            amount_approved: data.amount_approved,
+            deduction_schedule: data.deduction_schedule,
+            number_of_installments: data.number_of_installments,
+            approval_notes: data.approval_notes,
+        }, {
+            onSuccess: () => {
+                setIsApprovalModalOpen(false);
+                // Success notification handled by backend
+            },
+            onError: (errors: any) => {
+                console.error('Approval failed:', errors);
+            },
+        });
     };
 
-    const handleReject = () => {
-        console.log('Reject advance:', selectedAdvance?.id);
-        setIsApprovalModalOpen(false);
+    const handleReject = (data: CashAdvanceApprovalData) => {
+        router.post(`/payroll/advances/${data.advance_id}/reject`, {
+            rejection_reason: data.rejection_reason,
+        }, {
+            onSuccess: () => {
+                setIsApprovalModalOpen(false);
+            },
+            onError: (errors: any) => {
+                console.error('Rejection failed:', errors);
+            },
+        });
     };
 
     const handleSubmitRequest = (data: CashAdvanceFormData) => {
-        console.log('Submit advance request:', data);
-        setIsRequestFormOpen(false);
+        router.post('/payroll/advances', data, {
+            onSuccess: () => {
+                setIsRequestFormOpen(false);
+            },
+            onError: (errors: any) => {
+                console.error('Request failed:', errors);
+            },
+        });
     };
 
     const employees: Employee[] = propEmployees || [];
