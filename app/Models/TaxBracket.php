@@ -74,10 +74,15 @@ class TaxBracket extends Model
 
     /**
      * Find tax bracket for given income and tax status
+     *
+     * @param  float       $annualizedIncome
+     * @param  string      $taxStatus
+     * @param  mixed|null  $date  Date to evaluate effective brackets against (defaults to today)
      */
-    public static function findBracket(float $annualizedIncome, string $taxStatus)
+    public static function findBracket(float $annualizedIncome, string $taxStatus, $date = null)
     {
         return self::active()
+            ->effectiveOn($date)
             ->byStatus($taxStatus)
             ->where('income_from', '<=', $annualizedIncome)
             ->where(function ($q) use ($annualizedIncome) {
