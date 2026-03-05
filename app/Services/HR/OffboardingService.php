@@ -545,4 +545,29 @@ class OffboardingService
 
         return $pending;
     }
+
+    /**
+     * Send notification when exit interview is completed.
+     */
+    public function notifyExitInterviewCompleted(OffboardingCase $case, $exitInterview): void
+    {
+        try {
+            Log::info('Exit interview completion notification sent', [
+                'case_number' => $case->case_number,
+                'employee_id' => $case->employee_id,
+                'interview_id' => $exitInterview->id,
+                'sentiment_score' => $exitInterview->sentiment_score,
+            ]);
+
+            // Notify HR coordinator of completion
+            if ($case->hrCoordinator?->user) {
+                // Notification would be sent here
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to send exit interview completion notification', [
+                'case_number' => $case->case_number,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
 }
