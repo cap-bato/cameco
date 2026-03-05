@@ -103,30 +103,34 @@ class TaxBracketsSeeder extends Seeder
             }
             
             foreach ($brackets as $bracket) {
-                DB::table('tax_brackets')->insert([
-                    'tax_status' => $status,
-                    'status_description' => $description,
-                    'bracket_level' => $bracket['level'],
-                    'income_from' => $bracket['income_from'],
-                    'income_to' => $bracket['income_to'],
-                    'base_tax' => $bracket['base_tax'],
-                    'tax_rate' => $bracket['tax_rate'],
-                    'excess_over' => $bracket['excess_over'],
-                    'personal_exemption' => $personalExemption,
-                    'additional_exemption' => $additionalExemption,
-                    'max_dependents' => 4,
-                    'effective_from' => $effectiveFrom,
-                    'is_active' => true,
-                    'notes' => sprintf(
-                        'TRAIN Law tax bracket for %s. Exemptions: ₱%s personal + ₱%s × %d dependents',
-                        $description,
-                        number_format($personalExemption),
-                        number_format($additionalExemption),
-                        $dependents
-                    ),
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
+                DB::table('tax_brackets')->updateOrInsert(
+                    [
+                        'tax_status' => $status,
+                        'bracket_level' => $bracket['level'],
+                        'effective_from' => $effectiveFrom,
+                    ],
+                    [
+                        'status_description' => $description,
+                        'income_from' => $bracket['income_from'],
+                        'income_to' => $bracket['income_to'],
+                        'base_tax' => $bracket['base_tax'],
+                        'tax_rate' => $bracket['tax_rate'],
+                        'excess_over' => $bracket['excess_over'],
+                        'personal_exemption' => $personalExemption,
+                        'additional_exemption' => $additionalExemption,
+                        'max_dependents' => 4,
+                        'is_active' => true,
+                        'notes' => sprintf(
+                            'TRAIN Law tax bracket for %s. Exemptions: ₱%s personal + ₱%s × %d dependents',
+                            $description,
+                            number_format($personalExemption),
+                            number_format($additionalExemption),
+                            $dependents
+                        ),
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]
+                );
             }
         }
         
