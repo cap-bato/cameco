@@ -167,6 +167,9 @@ class PayrollCalculationService
                 ->where('payroll_period_id', $period->id)
                 ->forceDelete();
 
+            $expectedDays = Carbon::parse($period->period_start)
+                ->diffInWeekdays(Carbon::parse($period->period_end)) + 1;
+
             // Step 17: Create calculation record
             $calculation = EmployeePayrollCalculation::create([
                 'payroll_period_id'          => $period->id,
@@ -175,16 +178,16 @@ class PayrollCalculationService
                 'employee_name'              => $employee->profile?->full_name ?? $employee->user?->name ?? 'Unknown',
                 'department'                 => $employee->department?->name ?? null,
                 'position'                   => $employee->position?->title ?? null,
-                'employment_status'          => $employee->employment_type,
-                'hire_date'                  => $employee->date_hired?->toDateString(),
+                'employment_status'          => $this->normalizeEmploymentStatus($employee->employment_type),
+                'hire_date'                  => $employee->date_hired ? Carbon::parse($employee->date_hired)->toDateString() : null,
                 'basic_monthly_salary'       => (float) $payrollInfo->basic_salary,
                 'daily_rate'                 => (float) $payrollInfo->daily_rate,
                 'hourly_rate'                => (float) $payrollInfo->hourly_rate,
                 'working_days_per_month'     => 26,
                 'working_hours_per_day'      => 8,
-                'expected_days'              => $period->period_end->diffInWeekdays($period->period_start) + 1,
+                'expected_days'              => $expectedDays,
                 'present_days'               => $daysWorked,
-                'absent_days'                => max(0, ($period->period_end->diffInWeekdays($period->period_start) + 1) - $daysWorked),
+                'absent_days'                => max(0, $expectedDays - $daysWorked),
                 'late_hours'                 => round($lateMinutes / 60, 2),
                 'undertime_hours'            => round($undertimeMinutes / 60, 2),
                 'regular_overtime_hours'     => (float) $overtimeHours,
@@ -335,6 +338,20 @@ class PayrollCalculationService
             'daily' => $daysWorked * ($payrollInfo->daily_rate ?? 0),
             'hourly' => $daysWorked * 8 * ($payrollInfo->hourly_rate ?? 0),
             default => 0,
+        };
+    }
+
+    /**
+     * Map employee employment_type values into DB enum-safe calculation status values.
+     */
+    private function normalizeEmploymentStatus(?string $employmentType): string
+    {
+        $normalized = strtolower(trim((string) $employmentType));
+        $normalized = str_replace('-', '_', $normalized);
+
+        return match ($normalized) {
+            'regular', 'probationary', 'contractual', 'project_based' => $normalized,
+            default => 'regular',
         };
     }
 

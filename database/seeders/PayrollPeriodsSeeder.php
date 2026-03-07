@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\PayrollPeriod;
 use App\Models\User;
+use App\Models\Employee;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 
@@ -20,6 +21,18 @@ class PayrollPeriodsSeeder extends Seeder
             $this->command->warn('payroll_periods already seeded — skipping.');
             return;
         }
+
+        // Get actual employee counts from database
+        $totalEmployees = Employee::count();
+        $activeEmployees = Employee::where('status', 'active')->count();
+        $excludedEmployees = max(0, $totalEmployees - $activeEmployees);
+
+        if ($totalEmployees === 0) {
+            $this->command->warn('No employees found in database — skipping payroll periods seeding.');
+            return;
+        }
+
+        $this->command->info("Found {$totalEmployees} total employees, {$activeEmployees} active");
 
         $payrollOfficer = User::where('email', 'payroll@cameco.com')->first();
         $hrManager = User::where('email', 'hrmanager@cameco.com')->first();
@@ -72,9 +85,9 @@ class PayrollPeriodsSeeder extends Seeder
                 'timekeeping_cutoff_date' => $periodEnd->copy()->subDays(1)->toDateString(),
                 'leave_cutoff_date' => $periodEnd->copy()->subDays(1)->toDateString(),
                 'adjustment_deadline' => $periodEnd->copy()->subDays(3)->toDateString(),
-                'total_employees' => rand(80, 120),
-                'active_employees' => rand(75, 115),
-                'excluded_employees' => rand(0, 5),
+                'total_employees' => $totalEmployees,
+                'active_employees' => $activeEmployees,
+                'excluded_employees' => $excludedEmployees,
                 'total_gross_pay' => rand(2500000, 3500000),
                 'total_deductions' => rand(400000, 600000),
                 'total_net_pay' => rand(2000000, 3000000),
@@ -143,9 +156,9 @@ class PayrollPeriodsSeeder extends Seeder
                 'timekeeping_cutoff_date' => $periodEnd2->copy()->subDays(1)->toDateString(),
                 'leave_cutoff_date' => $periodEnd2->copy()->subDays(1)->toDateString(),
                 'adjustment_deadline' => $periodEnd2->copy()->subDays(3)->toDateString(),
-                'total_employees' => rand(80, 120),
-                'active_employees' => rand(75, 115),
-                'excluded_employees' => rand(0, 5),
+                'total_employees' => $totalEmployees,
+                'active_employees' => $activeEmployees,
+                'excluded_employees' => $excludedEmployees,
                 'total_gross_pay' => rand(2500000, 3500000),
                 'total_deductions' => rand(400000, 600000),
                 'total_net_pay' => rand(2000000, 3000000),

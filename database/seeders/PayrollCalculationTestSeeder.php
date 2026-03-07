@@ -19,22 +19,22 @@ use Illuminate\Support\Facades\DB;
  *  1. EmployeePayrollInfo — salary config for every active employee (skips employees that
  *     already have active payroll info).
  *
- *  2. PayrollPeriod — one period in 'open' status (March 2026 1st Half, Mar 1–15).
+ *  2. PayrollPeriod — one period in 'active' status (February 2026 2nd Half, Feb 16–28).
  *     Skipped if a period with the same period_number already exists.
  *
- *  3. DailyAttendanceSummary — one finalized row per working day (Mon–Fri) within the
- *     period for each active employee. Skipped if rows already exist for that employee /
- *     period combination to allow re-running safely.
+ *  3. DailyAttendanceSummary — one UNFINALIZED row per working day (Mon–Fri) within the
+ *     period for each active employee (is_finalized = false). Skipped if rows already
+ *     exist for that employee / period combination to allow re-running safely.
  *
  * After running this seeder, go to /payroll/calculations → click "Start Calculation"
- * for the "March 2026 - 1st Half" period.  The queue worker will process the jobs and
+ * for the "February 2026 - 2nd Half" period.  The queue worker will process the jobs and
  * populate employee_payroll_calculations.
  */
 class PayrollCalculationTestSeeder extends Seeder
 {
     // Period date range (adjust as needed)
-    private const PERIOD_START = '2026-03-01';
-    private const PERIOD_END   = '2026-03-15';
+    private const PERIOD_START = '2026-02-16';
+    private const PERIOD_END   = '2026-02-28';
 
     public function run(): void
     {
@@ -52,11 +52,11 @@ class PayrollCalculationTestSeeder extends Seeder
         // ─────────────────────────────────────────────────────────────────────
         // 1. EmployeePayrollInfo
         // ─────────────────────────────────────────────────────────────────────
-        $this->command->info('Step 1: Seeding EmployeePayrollInfo...');
-        $employees = Employee::where('status', 'active')->get();
+        $this->command->info('Step 1: Seeding EmployeePayrollInfo for ALL employees...');
+        $employees = Employee::all();  // Get ALL employees, not just active
 
         if ($employees->isEmpty()) {
-            $this->command->error('No active employees found — run EmployeeSeeder first.');
+            $this->command->error('No employees found — run EmployeeSeeder first.');
             return;
         }
 
@@ -73,6 +73,7 @@ class PayrollCalculationTestSeeder extends Seeder
         $skipped = 0;
 
         foreach ($employees as $index => $employee) {
+            // Skip if already has active payroll info with no end date
             $alreadyHasInfo = EmployeePayrollInfo::where('employee_id', $employee->id)
                 ->where('is_active', true)
                 ->whereNull('end_date')
@@ -82,6 +83,11 @@ class PayrollCalculationTestSeeder extends Seeder
                 $skipped++;
                 continue;
             }
+
+            // Deactivate any old payroll info before creating new one
+            EmployeePayrollInfo::where('employee_id', $employee->id)
+                ->where('is_active', true)
+                ->update(['is_active' => false, 'end_date' => now()]);
 
             $preset = $salaryPresets[$index % count($salaryPresets)];
 
@@ -122,27 +128,42 @@ class PayrollCalculationTestSeeder extends Seeder
             $created++;
         }
 
-        $this->command->info("  → Created: {$created}, Skipped (already has info): {$skipped}");
+        $this->command->info("  → Total employees: {$employees->count()}, Created: {$created}, Already have info: {$skipped}");
 
         // ─────────────────────────────────────────────────────────────────────
-        // 2. PayrollPeriod
+        // 2. PayrollPeriod — Use actual attendance date range if it exists
         // ─────────────────────────────────────────────────────────────────────
-        $this->command->info('Step 2: Seeding test PayrollPeriod...');
-        $periodNumber = '2026-03-1H';
+        $this->command->info('Step 2: Seeding test PayrollPeriod (matching attendance dates)...');
 
-        $period = PayrollPeriod::firstOrCreate(
+        // Check if attendance data exists; use its date range if available
+        $attendanceDateRange = DailyAttendanceSummary::selectRaw('MIN(attendance_date) as min_date, MAX(attendance_date) as max_date')
+            ->first();
+
+        $periodStart = $attendanceDateRange?->min_date ? $attendanceDateRange->min_date : self::PERIOD_START;
+        $periodEnd = $attendanceDateRange?->max_date ? $attendanceDateRange->max_date : self::PERIOD_END;
+
+        $this->command->info("  → Using period dates: {$periodStart} to {$periodEnd}");
+
+        // Determine period number from start date
+        $startCarbon = Carbon::parse($periodStart);
+        $half = $startCarbon->day <= 15 ? '1H' : '2H';
+        $periodNumber = $startCarbon->format('Y-m') . '-' . $half;
+
+        $periodName = $startCarbon->format('F Y') . ' - ' . ($half === '1H' ? '1st Half' : '2nd Half') . ' (Test)';
+
+        $period = PayrollPeriod::updateOrCreate(
             ['period_number' => $periodNumber],
             [
-                'period_name'             => 'March 2026 - 1st Half (Test)',
-                'period_start'            => self::PERIOD_START,
-                'period_end'              => self::PERIOD_END,
-                'payment_date'            => '2026-03-17',
-                'period_month'            => 3,
-                'period_year'             => 2026,
+                'period_name'             => $periodName,
+                'period_start'            => $periodStart,
+                'period_end'              => $periodEnd,
+                'payment_date'            => Carbon::parse($periodEnd)->addDays(2)->toDateString(),
+                'period_month'            => $startCarbon->month,
+                'period_year'             => $startCarbon->year,
                 'period_type'             => 'regular',
-                'timekeeping_cutoff_date' => '2026-03-14',
-                'leave_cutoff_date'       => '2026-03-14',
-                'adjustment_deadline'     => '2026-03-12',
+                'timekeeping_cutoff_date' => Carbon::parse($periodEnd)->toDateString(),
+                'leave_cutoff_date'       => Carbon::parse($periodEnd)->toDateString(),
+                'adjustment_deadline'     => Carbon::parse($periodEnd)->subDays(3)->toDateString(),
                 'total_employees'         => $employees->count(),
                 'active_employees'        => $employees->count(),
                 'excluded_employees'      => 0,
@@ -155,16 +176,16 @@ class PayrollCalculationTestSeeder extends Seeder
         if ($period->wasRecentlyCreated) {
             $this->command->info("  → Created period: [{$period->id}] {$period->period_name}");
         } else {
-            $this->command->warn("  → Period already exists: [{$period->id}] {$period->period_name} (status={$period->status})");
+            $this->command->info("  → Updated existing period: [{$period->id}] {$period->period_name}");
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // 3. DailyAttendanceSummary
+        // 3. DailyAttendanceSummary — Create for all employees in period range
         // ─────────────────────────────────────────────────────────────────────
         $this->command->info('Step 3: Seeding DailyAttendanceSummary (Mon–Fri)...');
 
-        $workDays = $this->getWorkingDays(self::PERIOD_START, self::PERIOD_END);
-        $this->command->info("  → Work days in period: " . count($workDays));
+        $workDays = $this->getWorkingDays($periodStart, $periodEnd);
+        $this->command->info("  → Work days in [{$periodStart} to {$periodEnd}]: " . count($workDays));
 
         $totalCreated = 0;
         $totalSkipped = 0;
@@ -172,7 +193,7 @@ class PayrollCalculationTestSeeder extends Seeder
         foreach ($employees as $employee) {
             // Check if this employee already has attendance in this period
             $existingCount = DailyAttendanceSummary::where('employee_id', $employee->id)
-                ->whereBetween('attendance_date', [self::PERIOD_START, self::PERIOD_END])
+                ->whereBetween('attendance_date', [$periodStart, $periodEnd])
                 ->count();
 
             if ($existingCount >= count($workDays)) {
@@ -226,7 +247,7 @@ class PayrollCalculationTestSeeder extends Seeder
                     'undertime_minutes'      => $undertimeMinutes,
                     'is_on_leave'            => false,
                     'ledger_verified'        => true,
-                    'is_finalized'           => true,  // Must be true for payroll to pick this up
+                    'is_finalized'           => false,  // Unfinalized: can test calculations before finalization
                     'calculated_at'          => now(),
                 ]);
 
@@ -246,7 +267,7 @@ class PayrollCalculationTestSeeder extends Seeder
         $this->command->info("  1. Ensure the queue worker is running:");
         $this->command->info("       php artisan queue:work --queue=payroll,default --tries=3");
         $this->command->info("  2. Visit /payroll/calculations in the browser");
-        $this->command->info("  3. Click 'Start Calculation' for 'March 2026 - 1st Half (Test)'");
+        $this->command->info("  3. Click 'Start Calculation' for 'February 2026 - 2nd Half (Test)'");
         $this->command->info("  4. Watch the queue worker terminal for progress logs");
         $this->command->info("  5. Refresh the page — employee_payroll_calculations will populate");
     }

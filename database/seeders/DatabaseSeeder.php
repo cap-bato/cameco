@@ -212,6 +212,14 @@ class DatabaseSeeder extends Seeder
             $this->call(\Database\Seeders\PayrollPeriodsSeeder::class);
         }
 
+        // Payroll Calculation Test Data (dev/local only)
+        // Enable with: SEED_PAYROLL_TEST_DATA=true in .env
+        if (app()->environment('local', 'testing') && env('SEED_PAYROLL_TEST_DATA', false)) {
+            if (class_exists(\Database\Seeders\PayrollCalculationTestSeeder::class)) {
+                $this->call(\Database\Seeders\PayrollCalculationTestSeeder::class);
+            }
+        }
+
         // Seed Payroll Payments (must run after periods, employees, and payment methods)
         if (class_exists(\Database\Seeders\PayrollPaymentsSeeder::class)) {
             $this->call(\Database\Seeders\PayrollPaymentsSeeder::class);

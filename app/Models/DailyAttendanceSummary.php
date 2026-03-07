@@ -75,6 +75,7 @@ class DailyAttendanceSummary extends Model
         'ledger_verified',
         'calculated_at',
         'is_finalized',
+        'correction_applied',
     ];
 
     // Cast attributes to appropriate types
@@ -97,6 +98,7 @@ class DailyAttendanceSummary extends Model
         'is_on_leave' => 'boolean',
         'ledger_verified' => 'boolean',
         'is_finalized' => 'boolean',
+        'correction_applied' => 'boolean',
         'calculated_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',

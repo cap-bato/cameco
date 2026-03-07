@@ -262,6 +262,7 @@ class PayrollPeriodController extends Controller
             'pay_date'           => $p->payment_date?->toDateString(),
             'status'             => $this->dbStatusToFrontend($p->status),
             'total_employees'    => $p->total_employees ?? 0,
+            'progress_percentage'=> (float) ($p->progress_percentage ?? 0),
             'total_gross_pay'    => (float) ($p->total_gross_pay ?? 0),
             'total_deductions'   => (float) ($p->total_deductions ?? 0),
             'total_net_pay'      => (float) ($p->total_net_pay ?? 0),

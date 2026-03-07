@@ -33,14 +33,19 @@ class LogPayrollCalculation implements ShouldQueue
      */
     public function handleEmployeeCalculated(EmployeePayrollCalculated $event): void
     {
+        $employeeName = $event->employee->profile?->full_name
+            ?? $event->employee->user?->full_name
+            ?? $event->employee->user?->name
+            ?? 'Unknown';
+
         Log::info('Employee payroll calculated', [
             'period_id' => $event->payrollPeriod->id,
             'employee_id' => $event->employee->id,
-            'employee_name' => $event->employee->user->full_name,
+            'employee_name' => $employeeName,
             'gross_pay' => $event->calculation->gross_pay,
             'deductions' => $event->calculation->total_deductions,
             'net_pay' => $event->calculation->net_pay,
-            'status' => $event->calculation->status,
+            'status' => $event->calculation->calculation_status,
             'timestamp' => now(),
         ]);
     }

@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Jobs\Payroll\CalculatePayrollJob;
 use App\Models\EmployeePayrollCalculation;
 use App\Models\PayrollPeriod;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -243,16 +245,88 @@ class PayrollCalculationController extends Controller
         }
     }
 
+    /**
+     * Get real-time batch progress for a payroll period.
+     * Returns batch-level progress metrics if batch_id exists, otherwise returns period-level progress.
+     *
+     * @param PayrollPeriod $period
+     * @return JsonResponse
+     */
+    public function batchStatus(PayrollPeriod $period): JsonResponse
+    {
+        try {
+            // If no batch ID, return period-level progress
+            if (!$period->calculation_batch_id) {
+                return response()->json([
+                    'progress'           => (float) ($period->progress_percentage ?? 0),
+                    'total_jobs'         => null,
+                    'pending_jobs'       => null,
+                    'failed_jobs'        => null,
+                    'finished'           => null,
+                    'cancelled'          => null,
+                    'batch_found'        => false,
+                ]);
+            }
+
+            // Find the batch by ID
+            $batch = Bus::findBatch($period->calculation_batch_id);
+            if (!$batch) {
+                // Batch not found or expired; return period-level progress
+                return response()->json([
+                    'progress'           => (float) ($period->progress_percentage ?? 0),
+                    'total_jobs'         => null,
+                    'pending_jobs'       => null,
+                    'failed_jobs'        => null,
+                    'finished'           => null,
+                    'cancelled'          => null,
+                    'batch_found'        => false,
+                ]);
+            }
+
+            // Return batch-level progress metrics
+            return response()->json([
+                'progress'           => $batch->progress(),       // 0–100
+                'total_jobs'         => $batch->totalJobs,
+                'pending_jobs'       => $batch->pendingJobs,
+                'failed_jobs'        => $batch->failedJobs,
+                'finished'           => $batch->finished(),
+                'cancelled'          => $batch->cancelled(),
+                'batch_found'        => true,
+                'batch_id'           => $period->calculation_batch_id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to retrieve batch status', [
+                'period_id' => $period->id,
+                'batch_id' => $period->calculation_batch_id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'progress'           => (float) ($period->progress_percentage ?? 0),
+                'total_jobs'         => null,
+                'pending_jobs'       => null,
+                'failed_jobs'        => null,
+                'finished'           => null,
+                'cancelled'          => null,
+                'batch_found'        => false,
+                'error'              => 'Failed to retrieve batch status',
+            ], 500);
+        }
+    }
+
     // =========================================================================
     // Private helpers
     // =========================================================================
+
 
     private function transformToCalculation(PayrollPeriod $p, mixed $counts = null): array
     {
         $total     = $p->total_employees ?? (int) ($counts?->total ?? 0);
         $processed = (int) ($counts?->processed ?? 0);
         $failed    = (int) ($counts?->failed ?? 0);
-        $progress  = $total > 0 ? (int) round(($processed + $failed) / $total * 100) : 0;
+        
+        // Use database progress_percentage value from UpdatePayrollProgress listener
+        $progress  = (float) ($p->progress_percentage ?? 0);
 
         $calcStatus = $this->dbStatusToCalcStatus($p->status);
 

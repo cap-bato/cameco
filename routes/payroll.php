@@ -49,6 +49,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::get('/calculations', [PayrollCalculationController::class, 'index'])->name('calculations.index');
         Route::post('/calculations', [PayrollCalculationController::class, 'store'])->name('calculations.store');
         Route::get('/calculations/{id}', [PayrollCalculationController::class, 'show'])->name('calculations.show');
+        Route::get('/calculations/{id}/batch-status', [PayrollCalculationController::class, 'batchStatus'])->name('calculations.batch-status');
         Route::post('/calculations/{id}/recalculate', [PayrollCalculationController::class, 'recalculate'])->name('calculations.recalculate');
         Route::post('/calculations/{id}/approve', [PayrollCalculationController::class, 'approve'])->name('calculations.approve');
         Route::delete('/calculations/{id}', [PayrollCalculationController::class, 'destroy'])->name('calculations.destroy');
