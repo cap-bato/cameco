@@ -577,10 +577,15 @@ class LedgerPollingService
      */
     private function resolveEmployeeId(string $employeeRfid): ?int
     {
-        // TODO: Implement RFID to employee mapping lookup
-        // For now, return first employee or null
-        $employee = \App\Models\Employee::first();
-        return $employee?->id;
+        $mapping = \App\Models\RfidCardMapping::where('card_uid', $employeeRfid)
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                  ->orWhere('expires_at', '>', now());
+            })
+            ->first();
+
+        return $mapping?->employee_id;
     }
 
     /**

@@ -64,66 +64,68 @@ class AttendanceSummaryService
      */
     public function computeDailySummary(int $employeeId, Carbon $date): array
     {
-        // Fetch employee and their applicable work schedule for the date
+        // Fetch employee
         $employee = Employee::findOrFail($employeeId);
-        
-        // Get the work schedule for this employee on this date
-        $workSchedule = $this->getWorkScheduleForDate($employeeId, $date);
-        
-        if (!$workSchedule) {
-            // No schedule found - return absent status
-            return $this->buildEmptySummary($employeeId, $date);
-        }
 
-        // Get all attendance events for this employee and date
+        // Check events FIRST — so we never discard real scan data due to missing schedule
         $events = AttendanceEvent::where('employee_id', $employeeId)
             ->whereDate('event_date', $date)
             ->orderBy('event_time', 'asc')
             ->get();
 
         if ($events->isEmpty()) {
-            // No events - employee is absent
+            // No events and we'll check schedule below; absent either way
+            $workSchedule = $this->getWorkScheduleForDate($employeeId, $date);
             return $this->buildEmptySummary($employeeId, $date, $workSchedule);
         }
+
+        // Events exist — now get work schedule (may be null)
+        $workSchedule = $this->getWorkScheduleForDate($employeeId, $date);
+        $needsScheduleReview = ($workSchedule === null);
 
         // Extract time_in and time_out from events
         $timeIn = $this->extractTimeIn($events);
         $timeOut = $this->extractTimeOut($events);
         $breakDuration = $this->calculateBreakDuration($events);
 
-        // Get scheduled start/end for this day
-        $scheduledStart = $this->getScheduledStart($workSchedule, $date);
-        $scheduledEnd = $this->getScheduledEnd($workSchedule, $date);
+        // Get scheduled start/end for this day (null when no schedule)
+        $scheduledStart = $workSchedule ? $this->getScheduledStart($workSchedule, $date) : null;
+        $scheduledEnd   = $workSchedule ? $this->getScheduledEnd($workSchedule, $date)   : null;
 
         // Build summary with time values
         $summary = [
-            'employee_id' => $employeeId,
-            'attendance_date' => $date->toDateString(),
-            'work_schedule_id' => $workSchedule->id,
-            'time_in' => $timeIn?->toDateTimeString(),
-            'time_out' => $timeOut?->toDateTimeString(),
-            'break_duration' => $breakDuration,
-            'total_hours_worked' => null,
-            'regular_hours' => null,
-            'overtime_hours' => null,
+            'employee_id'          => $employeeId,
+            'attendance_date'      => $date->toDateString(),
+            'work_schedule_id'     => $workSchedule?->id,
+            'needs_schedule_review' => $needsScheduleReview,
+            'time_in'              => $timeIn?->toDateTimeString(),
+            'time_out'             => $timeOut?->toDateTimeString(),
+            'break_duration'       => $breakDuration,
+            'total_hours_worked'   => null,
+            'regular_hours'        => null,
+            'overtime_hours'       => null,
         ];
 
         // Calculate hours worked if both time_in and time_out exist
         if ($timeIn && $timeOut) {
             $totalMinutes = $timeIn->diffInMinutes($timeOut) - $breakDuration;
-            $totalHours = $totalMinutes / 60;
+            $totalHours   = $totalMinutes / 60;
             $summary['total_hours_worked'] = round($totalHours, 2);
 
-            // Calculate regular vs overtime hours
-            $scheduledHours = ($scheduledStart && $scheduledEnd) 
-                ? $scheduledStart->diffInHours($scheduledEnd) - ($breakDuration / 60)
-                : 0;
+            if ($workSchedule && $scheduledStart && $scheduledEnd) {
+                // Split into regular vs overtime using schedule
+                $scheduledHours = $scheduledStart->diffInHours($scheduledEnd) - ($breakDuration / 60);
 
-            if ($totalHours > $scheduledHours) {
-                $summary['regular_hours'] = round($scheduledHours, 2);
-                $summary['overtime_hours'] = round($totalHours - $scheduledHours, 2);
+                if ($totalHours > $scheduledHours) {
+                    $summary['regular_hours']  = round($scheduledHours, 2);
+                    $summary['overtime_hours'] = round($totalHours - $scheduledHours, 2);
+                } else {
+                    $summary['regular_hours']  = round($totalHours, 2);
+                    $summary['overtime_hours'] = 0;
+                }
             } else {
-                $summary['regular_hours'] = round($totalHours, 2);
+                // No schedule — treat all hours as regular; HR will review
+                $summary['regular_hours']  = round($totalHours, 2);
                 $summary['overtime_hours'] = 0;
             }
         }
@@ -181,6 +183,17 @@ class AttendanceSummaryService
             // Parse from strings if provided
             $scheduledStart = is_string($scheduledStart) ? Carbon::parse($scheduledStart) : $scheduledStart;
             $scheduledEnd = is_string($scheduledEnd) ? Carbon::parse($scheduledEnd) : $scheduledEnd;
+        }
+
+        // When no schedule is assigned, only record presence — HR must review
+        if (!empty($summary['needs_schedule_review'])) {
+            $summary['is_present']       = isset($summary['time_in']) && $summary['time_in'] !== null;
+            $summary['is_late']          = false;
+            $summary['is_undertime']     = false;
+            $summary['is_overtime']      = false;
+            $summary['late_minutes']     = null;
+            $summary['undertime_minutes'] = null;
+            return $summary;
         }
 
         // Default status flags
@@ -401,21 +414,22 @@ class AttendanceSummaryService
     private function buildEmptySummary(int $employeeId, Carbon $date, ?WorkSchedule $workSchedule = null): array
     {
         return [
-            'employee_id' => $employeeId,
-            'attendance_date' => $date->toDateString(),
-            'work_schedule_id' => $workSchedule?->id,
-            'time_in' => null,
-            'time_out' => null,
-            'break_duration' => 0,
-            'total_hours_worked' => 0,
-            'regular_hours' => 0,
-            'overtime_hours' => 0,
-            'is_present' => false,
-            'is_late' => false,
-            'is_undertime' => false,
-            'is_overtime' => false,
-            'late_minutes' => null,
-            'undertime_minutes' => null,
+            'employee_id'           => $employeeId,
+            'attendance_date'       => $date->toDateString(),
+            'work_schedule_id'      => $workSchedule?->id,
+            'needs_schedule_review' => false,
+            'time_in'               => null,
+            'time_out'              => null,
+            'break_duration'        => 0,
+            'total_hours_worked'    => 0,
+            'regular_hours'         => 0,
+            'overtime_hours'        => 0,
+            'is_present'            => false,
+            'is_late'               => false,
+            'is_undertime'          => false,
+            'is_overtime'           => false,
+            'late_minutes'          => null,
+            'undertime_minutes'     => null,
         ];
     }
 
@@ -499,10 +513,11 @@ class AttendanceSummaryService
                 'is_overtime' => $summary['is_overtime'] ?? false,
                 'late_minutes' => $summary['late_minutes'] ?? null,
                 'undertime_minutes' => $summary['undertime_minutes'] ?? null,
-                'is_on_leave' => $summary['is_on_leave'] ?? false,
+                'is_on_leave'           => $summary['is_on_leave'] ?? false,
+                'needs_schedule_review' => $summary['needs_schedule_review'] ?? false,
                 'ledger_sequence_start' => $ledgerSequenceStart,
-                'ledger_sequence_end' => $ledgerSequenceEnd,
-                'calculated_at' => Carbon::now(),
+                'ledger_sequence_end'   => $ledgerSequenceEnd,
+                'calculated_at'         => Carbon::now(),
             ];
 
             // Check if summary already exists for this date

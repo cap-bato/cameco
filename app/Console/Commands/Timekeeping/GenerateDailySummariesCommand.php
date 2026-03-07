@@ -69,6 +69,8 @@ class GenerateDailySummariesCommand extends Command
                         $targetDate
                     );
 
+                    $summary = $summaryService->applyBusinessRules($summary, $targetDate);
+
                     $summaryService->storeDailySummary($summary);
                     $successCount++;
 
