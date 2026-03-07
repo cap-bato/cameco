@@ -533,7 +533,7 @@ class LedgerPollingService
                 // Create attendance event from ledger entry
                 $attendanceEvent = AttendanceEvent::create([
                     'employee_id' => $employeeId,
-                    'event_date' => $ledgerEvent->scan_timestamp->date(),
+                    'event_date' => $ledgerEvent->scan_timestamp->toDateString(),
                     'event_time' => $ledgerEvent->scan_timestamp,
                     'event_type' => $ledgerEvent->event_type,
                     'ledger_sequence_id' => $ledgerEvent->sequence_id,

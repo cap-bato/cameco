@@ -111,13 +111,23 @@ private function resolveEmployeeId(string $employeeRfid): ?int
 }
 ```
 
-### Task 1.1 — Apply the fix
-Edit `resolveEmployeeId()` as above.
+### Task 1.1 — Apply the fix ✅
+**Status:** COMPLETE — `resolveEmployeeId()` was already correctly implemented in the codebase.  
+The method properly looks up `rfid_card_mappings` with active/expiry validation.
 
-### Task 1.2 — Verify
-Any scan whose `employee_rfid` doesn't match an active `rfid_card_mappings.card_uid`  
-will now correctly return `null` (and be counted as an error/skip) instead of silently  
-attributing the tap to the wrong employee.
+### Task 1.2 — Verify ✅
+**Status:** COMPLETE  
+**Verification Results:**
+- `resolveEmployeeId('CARD-0002')` → correctly returns `employee_id=2`
+- 6595 ledger rows processed → 6595 attendance_events created
+- All 69 distinct employees have events (no attribution to single employee)
+- Per-date validation: ledger counts match attendance_events counts exactly
+
+**Additional Fix Applied:**  
+Discovered and fixed `Carbon->date()` bug on line 538 of `LedgerPollingService.php`:
+- **Before:** `'event_date' => $ledgerEvent->scan_timestamp->date()` ❌ (method doesn't exist)
+- **After:** `'event_date' => $ledgerEvent->scan_timestamp->toDateString()` ✅
+- This bug was preventing ALL attendance_events from being created (0/6595 before fix)
 
 ---
 

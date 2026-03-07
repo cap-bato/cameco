@@ -245,7 +245,7 @@ class RfidLedgerSeeder extends Seeder
                 $mapping = RfidCardMapping::create([
                     'card_uid'    => $cardUid,
                     'employee_id' => $employee->id,
-                    'card_type'   => 'standard',
+                    'card_type'   => 'mifare',
                     'issued_at'   => Carbon::parse('2025-01-01'),
                     'issued_by'   => $issuer?->id,
                     'is_active'   => true,
