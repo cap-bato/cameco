@@ -223,7 +223,7 @@ class OffboardingCaseController extends Controller
         $case = OffboardingCase::with([
             'employee.profile:id,first_name,last_name',
             'employee.department:id,name',
-            'employee.position:id,name',
+            'employee.position:id,title',
             'initiatedBy:id,name',
             'hrCoordinator:id,name',
             'clearanceItems.assignedTo:id,name',

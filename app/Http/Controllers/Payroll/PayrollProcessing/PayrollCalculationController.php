@@ -95,10 +95,8 @@ class PayrollCalculationController extends Controller
         try {
             $period = PayrollPeriod::findOrFail($validated['payroll_period_id']);
 
-            $period->update([
-                'status'                 => 'calculating',
-                'calculation_started_at' => now(),
-            ]);
+            // Use model method for status transition
+            $period->markAsCalculating();
 
             CalculatePayrollJob::dispatch($period, auth()->id());
 
@@ -108,7 +106,7 @@ class PayrollCalculationController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to start payroll calculation', ['error' => $e->getMessage()]);
             return redirect()->back()
-                ->with('error', 'Failed to start calculation. Please try again.');
+                ->with('error', 'Failed to start calculation: ' . $e->getMessage());
         }
     }
 
@@ -178,11 +176,11 @@ class PayrollCalculationController extends Controller
         try {
             $period = PayrollPeriod::findOrFail($id);
 
-            $period->update([
-                'status'                  => 'calculating',
-                'calculation_started_at'  => now(),
-                'calculation_completed_at'=> null,
-            ]);
+            // Use model method for status transition
+            $period->markAsCalculating();
+            
+            // Clear completion timestamp for recalculation
+            $period->update(['calculation_completed_at' => null]);
 
             CalculatePayrollJob::dispatch($period, auth()->id());
 
@@ -192,7 +190,7 @@ class PayrollCalculationController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to recalculate payroll', ['id' => $id, 'error' => $e->getMessage()]);
             return redirect()->back()
-                ->with('error', 'Failed to start recalculation. Please try again.');
+                ->with('error', 'Failed to start recalculation: ' . $e->getMessage());
         }
     }
 
@@ -204,11 +202,8 @@ class PayrollCalculationController extends Controller
         try {
             $period = PayrollPeriod::findOrFail($id);
 
-            $period->update([
-                'status'      => 'approved',
-                'approved_by' => auth()->id(),
-                'approved_at' => now(),
-            ]);
+            // Use model method for approval
+            $period->approve(auth()->id());
 
             return redirect()
                 ->route('payroll.calculations.index')
@@ -216,7 +211,7 @@ class PayrollCalculationController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to approve payroll calculation', ['id' => $id, 'error' => $e->getMessage()]);
             return redirect()->back()
-                ->with('error', 'Failed to approve. Please try again.');
+                ->with('error', 'Failed to approve: ' . $e->getMessage());
         }
     }
 

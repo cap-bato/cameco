@@ -77,18 +77,25 @@ class PayrollReviewController extends Controller
             $period     = PayrollPeriod::findOrFail($periodId);
             $prevStatus = $period->status;
 
-            $nextStatus = match ($prevStatus) {
-                'calculated'       => 'under_review',
-                'under_review'     => 'pending_approval',
-                'pending_approval' => 'approved',
-                default            => 'approved',
-            };
-
-            $period->update([
-                'status'      => $nextStatus,
-                'approved_by' => auth()->id(),
-                'approved_at' => now(),
-            ]);
+            // Use appropriate model method based on current status
+            if ($prevStatus === 'calculated') {
+                $period->submitForReview();
+                $nextStatus = 'under_review';
+            } elseif ($prevStatus === 'under_review') {
+                // Transition to pending_approval manually (no specific model method)
+                $period->update([
+                    'status'      => 'pending_approval',
+                    'approved_by' => auth()->id(),
+                    'approved_at' => now(),
+                ]);
+                $nextStatus = 'pending_approval';
+            } elseif ($prevStatus === 'pending_approval') {
+                $period->approve(auth()->id());
+                $nextStatus = 'approved';
+            } else {
+                $period->approve(auth()->id());
+                $nextStatus = 'approved';
+            }
 
             PayrollApprovalHistory::create([
                 'payroll_period_id' => $periodId,
@@ -176,11 +183,8 @@ class PayrollReviewController extends Controller
             $period     = PayrollPeriod::findOrFail($periodId);
             $prevStatus = $period->status;
 
-            $period->update([
-                'status'    => 'finalized',
-                'locked_at' => now(),
-                'locked_by' => auth()->id(),
-            ]);
+            // Use model method to finalize the period
+            $period->finalize(auth()->id());
 
             PayrollApprovalHistory::create([
                 'payroll_period_id' => $periodId,

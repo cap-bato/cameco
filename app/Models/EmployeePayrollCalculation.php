@@ -228,6 +228,16 @@ class EmployeePayrollCalculation extends Model
     // Scopes
     // ============================================================
 
+    public function scopeByPayrollPeriod($query, $payrollPeriodId)
+    {
+        return $query->where('payroll_period_id', $payrollPeriodId);
+    }
+
+    public function scopeByEmployee($query, $employeeId)
+    {
+        return $query->where('employee_id', $employeeId);
+    }
+
     public function scopePending($query)
     {
         return $query->where('calculation_status', 'pending');
@@ -256,6 +266,18 @@ class EmployeePayrollCalculation extends Model
     public function scopeByStatus($query, string $status)
     {
         return $query->where('calculation_status', $status);
+    }
+
+    public function scopeWithErrors($query)
+    {
+        return $query->where('calculation_status', 'failed')
+                     ->orWhere('has_exceptions', true);
+    }
+
+    public function scopeSearch($query, $search)
+    {
+        return $query->where('employee_name', 'like', "%{$search}%")
+                     ->orWhere('employee_number', 'like', "%{$search}%");
     }
 
     public function scopeLatestVersion($query)
@@ -352,6 +374,15 @@ class EmployeePayrollCalculation extends Model
             'calculation_status' => 'calculated',
             'calculated_at' => now(),
             'calculated_by' => $user->id,
+        ]);
+    }
+
+    public function markAsError($errorMessage): bool
+    {
+        return $this->update([
+            'calculation_status' => 'failed',
+            'has_exceptions' => true,
+            'exception_flags' => ['error' => $errorMessage],
         ]);
     }
 

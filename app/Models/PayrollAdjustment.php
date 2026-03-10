@@ -33,6 +33,7 @@ class PayrollAdjustment extends Model
         'approved_by',
         'rejected_by',
         'rejection_reason',
+        'review_notes',
         'impact_on_net_pay',
         'created_by',
     ];
@@ -47,6 +48,17 @@ class PayrollAdjustment extends Model
         'approved_at' => 'datetime',
         'rejected_at' => 'datetime',
         'applied_at' => 'datetime',
+    ];
+
+    protected $appends = [
+        'employee_name',
+        'employee_number',
+        'department',
+        'position',
+        'requested_by',
+        'requested_at',
+        'reviewed_by',
+        'reviewed_at',
     ];
 
     // ============================================================
@@ -83,6 +95,70 @@ class PayrollAdjustment extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    // Aliases for controller compatibility
+    public function approvedByUser(): BelongsTo
+    {
+        return $this->approvedBy();
+    }
+
+    public function rejectedByUser(): BelongsTo
+    {
+        return $this->rejectedBy();
+    }
+
+    public function createdByUser(): BelongsTo
+    {
+        return $this->createdBy();
+    }
+
+    // ============================================================
+    // Accessors
+    // ============================================================
+
+    public function getEmployeeNameAttribute(): string
+    {
+        return $this->employee?->profile?->full_name
+            ?? $this->employee?->user?->name
+            ?? 'Unknown';
+    }
+
+    public function getEmployeeNumberAttribute(): string
+    {
+        return $this->employee?->employee_number ?? '';
+    }
+
+    public function getDepartmentAttribute(): string
+    {
+        return $this->employee?->department?->name ?? '';
+    }
+
+    public function getPositionAttribute(): string
+    {
+        return $this->employee?->currentPosition?->title
+            ?? $this->employee?->position?->title
+            ?? '';
+    }
+
+    public function getRequestedByAttribute(): string
+    {
+        return $this->createdBy?->name ?? 'System';
+    }
+
+    public function getRequestedAtAttribute(): ?string
+    {
+        return ($this->submitted_at ?? $this->created_at)?->toIso8601String();
+    }
+
+    public function getReviewedByAttribute(): ?string
+    {
+        return $this->approvedBy?->name ?? $this->rejectedBy?->name;
+    }
+
+    public function getReviewedAtAttribute(): ?string
+    {
+        return ($this->approved_at ?? $this->rejected_at)?->toIso8601String();
+    }
+
     // ============================================================
     // Scopes
     // ============================================================
@@ -105,6 +181,11 @@ class PayrollAdjustment extends Model
     public function scopeRejected($query)
     {
         return $query->where('status', 'rejected');
+    }
+
+    public function scopeByStatus($query, string $status)
+    {
+        return $query->where('status', $status);
     }
 
     public function scopeByCategory($query, string $category)
@@ -197,19 +278,23 @@ class PayrollAdjustment extends Model
     {
         $amount = (float) $this->amount;
         
-        // Addition adjustments are positive
-        if ($this->adjustment_type === 'addition') {
+        // Earning, backpay, and refund adjustments are positive (add to pay)
+        if (in_array($this->adjustment_type, ['earning', 'backpay', 'refund', 'addition'])) {
             return $amount;
         }
         
-        // Deduction adjustments are negative
+        // Deduction adjustments are negative (subtract from pay)
         if ($this->adjustment_type === 'deduction') {
             return -$amount;
         }
         
-        // Override adjustments use the difference
-        if ($this->adjustment_type === 'override' && $this->original_amount && $this->adjusted_amount) {
-            return (float) $this->adjusted_amount - (float) $this->original_amount;
+        // Correction adjustments use the difference if original and adjusted amounts are set
+        if (in_array($this->adjustment_type, ['correction', 'override'])) {
+            if ($this->original_amount && $this->adjusted_amount) {
+                return (float) $this->adjusted_amount - (float) $this->original_amount;
+            }
+            // If no original/adjusted amounts, treat as positive
+            return $amount;
         }
         
         return $amount;

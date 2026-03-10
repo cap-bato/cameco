@@ -21,17 +21,24 @@ class PayrollPeriodController extends Controller
         $query = PayrollPeriod::with(['approvedBy:id,name', 'lockedBy:id,name'])
             ->orderByDesc('period_start');
 
+        // Search filter
         if ($request->filled('search')) {
-            $query->where('period_name', 'like', '%' . $request->input('search') . '%');
+            $query->search($request->input('search'));
         }
 
+        // Status filter
         if ($request->filled('status') && $request->input('status') !== 'all') {
             $dbStatuses = $this->frontendStatusToDb($request->input('status'));
-            $query->whereIn('status', (array) $dbStatuses);
+            if (is_array($dbStatuses)) {
+                $query->whereIn('status', $dbStatuses);
+            } else {
+                $query->byStatus($dbStatuses);
+            }
         }
 
+        // Year filter
         if ($request->filled('year') && $request->input('year') !== 'all') {
-            $query->where('period_year', (int) $request->input('year'));
+            $query->byYear((int) $request->input('year'));
         }
 
         $periods = $query->get()->map(fn($p) => $this->transformPeriod($p));
@@ -193,13 +200,18 @@ class PayrollPeriodController extends Controller
         try {
             $period = PayrollPeriod::findOrFail($id);
 
-            $period->update([
-                'status'                  => 'calculating',
-                'calculation_started_at'  => now(),
-            ]);
+            if (!in_array($period->status, ['draft', 'active', 'calculated'])) {
+                return redirect()->back()
+                    ->with('error', 'Period must be draft, active, or calculated to calculate.');
+            }
 
+            // Use model method to mark as calculating
+            $period->markAsCalculating();
+
+            // Dispatch calculation job
             CalculatePayrollJob::dispatch($period, auth()->id());
 
+            // Log the calculation start
             PayrollCalculationLog::create([
                 'payroll_period_id' => $period->id,
                 'log_type'          => 'calculation_started',
@@ -216,7 +228,32 @@ class PayrollPeriodController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to start payroll calculation', ['id' => $id, 'error' => $e->getMessage()]);
             return redirect()->back()
-                ->with('error', 'Failed to start calculation. Please try again.');
+                ->with('error', 'Failed to start calculation: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Submit period for review
+     */
+    public function submitForReview(Request $request, $id)
+    {
+        try {
+            $period = PayrollPeriod::findOrFail($id);
+
+            if ($period->status !== 'calculated') {
+                return redirect()->back()
+                    ->with('error', 'Only calculated periods can be submitted for review.');
+            }
+
+            // Use model method to submit for review
+            $period->submitForReview();
+
+            return redirect()->back()
+                ->with('success', 'Payroll submitted for review successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to submit period for review', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', $e->getMessage());
         }
     }
 
@@ -228,18 +265,45 @@ class PayrollPeriodController extends Controller
         try {
             $period = PayrollPeriod::findOrFail($id);
 
-            $period->update([
-                'status'      => 'approved',
-                'approved_by' => auth()->id(),
-                'approved_at' => now(),
-            ]);
+            if (!in_array($period->status, ['under_review', 'pending_approval'])) {
+                return redirect()->back()
+                    ->with('error', 'Only periods under review can be approved.');
+            }
+
+            // Use model method to approve
+            $period->approve(auth()->id());
 
             return redirect()->back()
                 ->with('success', 'Payroll period approved successfully.');
         } catch (\Exception $e) {
             Log::error('Failed to approve payroll period', ['id' => $id, 'error' => $e->getMessage()]);
             return redirect()->back()
-                ->with('error', 'Failed to approve period. Please try again.');
+                ->with('error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Finalize payroll for the specified period
+     */
+    public function finalize(Request $request, $id)
+    {
+        try {
+            $period = PayrollPeriod::findOrFail($id);
+
+            if ($period->status !== 'approved') {
+                return redirect()->back()
+                    ->with('error', 'Only approved periods can be finalized.');
+            }
+
+            // Use model method to finalize
+            $period->finalize(auth()->id());
+
+            return redirect()->back()
+                ->with('success', 'Payroll period finalized successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to finalize payroll period', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', $e->getMessage());
         }
     }
 

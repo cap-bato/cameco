@@ -43,7 +43,9 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::put('/periods/{id}', [PayrollPeriodController::class, 'update'])->name('periods.update');
         Route::delete('/periods/{id}', [PayrollPeriodController::class, 'destroy'])->name('periods.destroy');
         Route::post('/periods/{id}/calculate', [PayrollPeriodController::class, 'calculate'])->name('periods.calculate');
+        Route::post('/periods/{id}/submit-for-review', [PayrollPeriodController::class, 'submitForReview'])->name('periods.submit-for-review');
         Route::post('/periods/{id}/approve', [PayrollPeriodController::class, 'approve'])->name('periods.approve');
+        Route::post('/periods/{id}/finalize', [PayrollPeriodController::class, 'finalize'])->name('periods.finalize');
 
         // Payroll Calculations - Phase 1.3
         Route::get('/calculations', [PayrollCalculationController::class, 'index'])->name('calculations.index');

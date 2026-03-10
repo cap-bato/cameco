@@ -127,6 +127,14 @@ class PayrollPeriod extends Model
     }
 
     /**
+     * Alias for calculations() - for compatibility with spec.
+     */
+    public function employeeCalculations(): HasMany
+    {
+        return $this->calculations();
+    }
+
+    /**
      * Get all payroll adjustments for this period.
      */
     public function adjustments(): HasMany
@@ -282,6 +290,47 @@ class PayrollPeriod extends Model
         return $query->where('period_type', 'regular');
     }
 
+    /**
+     * Scope a query to filter by status.
+     */
+    public function scopeByStatus($query, $status)
+    {
+        return $query->where('status', $status);
+    }
+
+    /**
+     * Scope a query to filter by period type.
+     */
+    public function scopeByType($query, $type)
+    {
+        return $query->where('period_type', $type);
+    }
+
+    /**
+     * Scope a query to include completed periods.
+     */
+    public function scopeCompleted($query)
+    {
+        return $query->whereIn('status', ['completed', 'processing_payment', 'finalized']);
+    }
+
+    /**
+     * Scope a query to include draft periods.
+     */
+    public function scopeDraft($query)
+    {
+        return $query->where('status', 'draft');
+    }
+
+    /**
+     * Scope a query to search by name or period number.
+     */
+    public function scopeSearch($query, $search)
+    {
+        return $query->where('period_name', 'like', "%{$search}%")
+                     ->orWhere('period_number', 'like', "%{$search}%");
+    }
+
     // ============================================================
     // Helper Methods
     // ============================================================
@@ -358,6 +407,187 @@ class PayrollPeriod extends Model
         // Format: YYYY-MM-A (A = Period 1: 1-15, B = Period 2: 16-end)
         $periodCode = $this->period_start->day <= 15 ? 'A' : 'B';
         return $this->period_start->format('Y-m') . '-' . $periodCode;
+    }
+
+    // ============================================================
+    // Status Transition Methods
+    // ============================================================
+
+    /**
+     * Mark the period as calculating.
+     */
+    public function markAsCalculating(): bool
+    {
+        return $this->update([
+            'status' => 'calculating',
+            'calculation_started_at' => now(),
+        ]);
+    }
+
+    /**
+     * Mark the period as calculated.
+     */
+    public function markAsCalculated(): bool
+    {
+        return $this->update([
+            'status' => 'calculated',
+            'calculation_completed_at' => now(),
+        ]);
+    }
+
+    /**
+     * Submit the period for review.
+     */
+    public function submitForReview(): bool
+    {
+        if ($this->status !== 'calculated') {
+            throw new \Exception('Only calculated periods can be submitted for review');
+        }
+
+        return $this->update([
+            'status' => 'under_review',
+            'submitted_for_review_at' => now(),
+        ]);
+    }
+
+    /**
+     * Approve the payroll period.
+     */
+    public function approve($userId): bool
+    {
+        if (!in_array($this->status, ['under_review', 'pending_approval'])) {
+            throw new \Exception('Only periods under review can be approved');
+        }
+
+        return $this->update([
+            'status' => 'approved',
+            'approved_at' => now(),
+            'approved_by' => $userId,
+        ]);
+    }
+
+    /**
+     * Finalize the payroll period.
+     */
+    public function finalize($userId): bool
+    {
+        if ($this->status !== 'approved') {
+            throw new \Exception('Only approved periods can be finalized');
+        }
+
+        return $this->update([
+            'status' => 'finalized',
+            'finalized_at' => now(),
+            'locked_at' => now(),
+            'locked_by' => $userId,
+        ]);
+    }
+
+    /**
+     * Complete payment processing for this period.
+     */
+    public function completePaymentProcessing(): bool
+    {
+        return $this->update([
+            'status' => 'completed',
+        ]);
+    }
+
+    // ============================================================
+    // Calculation Methods
+    // ============================================================
+
+    /**
+     * Calculate and update period totals from employee calculations.
+     */
+    public function calculateTotals(): void
+    {
+        $totals = $this->employeeCalculations()
+            ->selectRaw('
+                SUM(gross_pay) as total_gross_pay,
+                SUM(total_deductions) as total_deductions,
+                SUM(net_pay) as total_net_pay,
+                SUM(sss_contribution + philhealth_contribution + pagibig_contribution) as total_government_contributions,
+                SUM(sss_loan_deduction + pagibig_loan_deduction + company_loan_deduction) as total_loan_deductions
+            ')
+            ->first();
+
+        $this->update([
+            'total_gross_pay' => $totals->total_gross_pay ?? 0,
+            'total_deductions' => $totals->total_deductions ?? 0,
+            'total_net_pay' => $totals->total_net_pay ?? 0,
+            'total_government_contributions' => $totals->total_government_contributions ?? 0,
+            'total_loan_deductions' => $totals->total_loan_deductions ?? 0,
+            'exceptions_count' => $this->exceptions()->count(),
+        ]);
+    }
+
+    /**
+     * Get the period code (e.g., "2026-03-A").
+     */
+    public function getPeriodCode(): string
+    {
+        $periodCode = $this->period_start->day <= 15 ? 'A' : 'B';
+        return $this->period_start->format('Y-m') . '-' . $periodCode;
+    }
+
+    // ============================================================
+    // Attribute Accessors
+    // ============================================================
+
+    /**
+     * Get formatted status label.
+     */
+    public function getFormattedStatusAttribute(): string
+    {
+        $statuses = [
+            'draft' => 'Draft',
+            'active' => 'Active',
+            'calculating' => 'Calculating',
+            'calculated' => 'Calculated',
+            'under_review' => 'Under Review',
+            'pending_approval' => 'Pending Approval',
+            'approved' => 'Approved',
+            'finalized' => 'Finalized',
+            'processing_payment' => 'Processing Payment',
+            'completed' => 'Completed',
+            'cancelled' => 'Cancelled',
+        ];
+
+        return $statuses[$this->status] ?? $this->status;
+    }
+
+    /**
+     * Get status badge color.
+     */
+    public function getStatusColorAttribute(): string
+    {
+        $colors = [
+            'draft' => 'gray',
+            'active' => 'blue',
+            'calculating' => 'yellow',
+            'calculated' => 'green',
+            'under_review' => 'blue',
+            'pending_approval' => 'orange',
+            'approved' => 'green',
+            'finalized' => 'green',
+            'processing_payment' => 'purple',
+            'completed' => 'green',
+            'cancelled' => 'red',
+        ];
+
+        return $colors[$this->status] ?? 'gray';
+    }
+
+    /**
+     * Get status badge array.
+     */
+    public function getStatusBadgeAttribute(): array
+    {
+        return [
+            'label' => $this->formatted_status,
+            'color' => $this->status_color,
+        ];
     }
 
     /**

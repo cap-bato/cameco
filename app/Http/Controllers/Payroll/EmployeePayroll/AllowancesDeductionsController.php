@@ -105,11 +105,11 @@ class AllowancesDeductionsController extends Controller
                 'id' => $employee->id,
                 'employee_id' => $employee->id,
                 'employee_number' => $employee->employee_number,
-                'first_name' => $employee->user->first_name,
-                'last_name' => $employee->user->last_name,
+                'first_name' => $employee->profile->first_name ?? '',
+                'last_name' => $employee->profile->last_name ?? '',
                 'department' => $employee->department->name ?? 'N/A',
                 'department_id' => $employee->department_id,
-                'position' => $employee->position->name ?? 'N/A',
+                'position' => $employee->position->title ?? 'N/A',
                 'components' => $components->values()->all(),
                 'total_allowances' => $totalAllowances,
                 'total_deductions' => $totalDeductions,
@@ -165,16 +165,16 @@ class AllowancesDeductionsController extends Controller
     {
         $this->authorize('create', Employee::class);
 
-        $employees = Employee::with('user', 'department', 'position')
+        $employees = Employee::with('profile', 'department', 'position')
             ->where('status', 'active')
             ->get()
             ->map(fn($emp) => [
                 'id' => $emp->id,
                 'employee_number' => $emp->employee_number,
-                'first_name' => $emp->user->first_name,
-                'last_name' => $emp->user->last_name,
+                'first_name' => $emp->profile->first_name ?? '',
+                'last_name' => $emp->profile->last_name ?? '',
                 'department' => $emp->department->name ?? 'N/A',
-                'position' => $emp->position->name ?? 'N/A',
+                'position' => $emp->position->title ?? 'N/A',
             ]);
 
         $components = $this->salaryComponentService->getComponentsGroupedByType(true);
