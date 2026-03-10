@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\SystemSetting;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Activitylog\Models\Activity;
 
 class SystemConfigController extends Controller
 {
@@ -81,10 +83,86 @@ class SystemConfigController extends Controller
             ],
         ];
 
+        // Audit logs - query activity log with causer relationship
+        $logsQuery = Activity::with('causer:id,name,email')
+            ->orderBy('created_at', 'desc');
+
+        // Apply filters
+        if ($request->filled('user_id')) {
+            $logsQuery->where('causer_id', $request->input('user_id'));
+        }
+        if ($request->filled('module')) {
+            $logsQuery->where('subject_type', 'like', '%' . $request->input('module') . '%');
+        }
+        if ($request->filled('date_from')) {
+            $logsQuery->whereDate('created_at', '>=', $request->input('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $logsQuery->whereDate('created_at', '<=', $request->input('date_to'));
+        }
+
+        $auditLogs = $logsQuery->paginate(20)->withQueryString();
+
+        // Transform audit logs to match frontend interface
+        $formattedLogs = $auditLogs->map(function ($log) {
+            return [
+                'id' => $log->id,
+                'timestamp' => $log->created_at->toIso8601String(),
+                'relative_time' => $log->created_at->diffForHumans(),
+                'user_name' => $log->causer?->name ?? 'System',
+                'user_email' => $log->causer?->email ?? 'system@cameco.local',
+                'action' => $log->description ?? 'updated',
+                'log_name' => $log->log_name,
+                'module' => class_basename($log->subject_type),
+                'subject_type' => $log->subject_type,
+                'subject_id' => $log->subject_id,
+                'old_values' => $log->changes['old'] ?? [],
+                'new_values' => $log->changes['new'] ?? [],
+                'changes_summary' => $this->summarizeChanges($log->changes['attributes'] ?? []),
+            ];
+        });
+
+        // Get available users for filter dropdown
+        $availableUsers = User::select('id', 'name', 'email')
+            ->orderBy('name')
+            ->get()
+            ->toArray();
+
         return Inertia::render('Admin/SystemConfig/Index', [
             'systemConfig' => $systemConfig,
+            'auditLogs' => [
+                'current_page' => $auditLogs->currentPage(),
+                'last_page' => $auditLogs->lastPage(),
+                'per_page' => $auditLogs->perPage(),
+                'total' => $auditLogs->total(),
+                'from' => $auditLogs->firstItem() ?? 0,
+                'to' => $auditLogs->lastItem() ?? 0,
+                'data' => $formattedLogs,
+            ],
+            'availableUsers' => $availableUsers,
+            'filters' => $request->only(['user_id', 'module', 'date_from', 'date_to']),
         ]);
     }
+
+    /**
+     * Summarize attribute changes for display.
+     */
+    private function summarizeChanges(array $changes): string
+    {
+        if (empty($changes)) {
+            return 'No changes';
+        }
+        
+        $count = count($changes);
+        $fields = implode(', ', array_slice(array_keys($changes), 0, 3));
+        
+        if ($count > 3) {
+            return "Updated $count fields: $fields, and " . ($count - 3) . " more";
+        }
+        
+        return "Updated: $fields";
+    }
+
 
     /**
      * Update notification settings.
