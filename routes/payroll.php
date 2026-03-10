@@ -83,28 +83,60 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::delete('/salary-components/{id}', [SalaryComponentController::class, 'destroy'])->name('salary-components.destroy');
 
         // Allowances & Deductions - Phase 2.3
-        Route::get('/allowances-deductions', [AllowancesDeductionsController::class, 'index'])->name('allowances-deductions.index');
-        Route::post('/allowances-deductions', [AllowancesDeductionsController::class, 'store'])->name('allowances-deductions.store');
-        Route::get('/allowances-deductions/bulk-assign', [AllowancesDeductionsController::class, 'bulkAssignPage'])->name('allowances-deductions.bulk-assign-page');
-        Route::post('/allowances-deductions/bulk-assign', [AllowancesDeductionsController::class, 'bulkAssign'])->name('allowances-deductions.bulk-assign');
-        Route::get('/allowances-deductions/{id}', [AllowancesDeductionsController::class, 'show'])->name('allowances-deductions.show');
-        Route::put('/allowances-deductions/{id}', [AllowancesDeductionsController::class, 'update'])->name('allowances-deductions.update');
-        Route::delete('/allowances-deductions/{id}', [AllowancesDeductionsController::class, 'destroy'])->name('allowances-deductions.destroy');
-        Route::get('/allowances-deductions/{employeeId}/history', [AllowancesDeductionsController::class, 'history'])->name('allowances-deductions.history');
+        Route::get('/allowances-deductions', [AllowancesDeductionsController::class, 'index'])
+            ->middleware('permission:payroll.allowances-deductions.view')
+            ->name('allowances-deductions.index');
+        Route::post('/allowances-deductions', [AllowancesDeductionsController::class, 'store'])
+            ->middleware('permission:payroll.allowances-deductions.manage')
+            ->name('allowances-deductions.store');
+        Route::get('/allowances-deductions/bulk-assign', [AllowancesDeductionsController::class, 'bulkAssignPage'])
+            ->middleware('permission:payroll.allowances-deductions.manage')
+            ->name('allowances-deductions.bulk-assign-page');
+        Route::post('/allowances-deductions/bulk-assign', [AllowancesDeductionsController::class, 'bulkAssign'])
+            ->middleware('permission:payroll.allowances-deductions.manage')
+            ->name('allowances-deductions.bulk-assign');
+        Route::get('/allowances-deductions/{id}', [AllowancesDeductionsController::class, 'show'])
+            ->middleware('permission:payroll.allowances-deductions.view')
+            ->name('allowances-deductions.show');
+        Route::put('/allowances-deductions/{id}', [AllowancesDeductionsController::class, 'update'])
+            ->middleware('permission:payroll.allowances-deductions.manage')
+            ->name('allowances-deductions.update');
+        Route::delete('/allowances-deductions/{id}', [AllowancesDeductionsController::class, 'destroy'])
+            ->middleware('permission:payroll.allowances-deductions.manage')
+            ->name('allowances-deductions.destroy');
+        Route::get('/allowances-deductions/{employeeId}/history', [AllowancesDeductionsController::class, 'history'])
+            ->middleware('permission:payroll.allowances-deductions.view')
+            ->name('allowances-deductions.history');
 
         // Loans & Advances - Phase 1.5 & 1.5b
-        Route::get('/loans', [LoansController::class, 'index'])->name('loans.index');
+        Route::get('/loans', [LoansController::class, 'index'])
+            ->middleware('permission:payroll.loans.view')
+            ->name('loans.index');
 
         // Loan CRUD and payment routes can be enabled via feature flag once
         // LoansController and LoanManagementService are fully aligned.
         if (config('features.enable_loan_crud_routes')) {
-            Route::post('/loans', [LoansController::class, 'store'])->name('loans.store');
-            Route::get('/loans/{id}', [LoansController::class, 'show'])->name('loans.show');
-            Route::put('/loans/{id}', [LoansController::class, 'update'])->name('loans.update');
-            Route::post('/loans/{id}/early-payment', [LoansController::class, 'earlyPayment'])->name('loans.early-payment');
-            Route::post('/loans/{id}/cancel', [LoansController::class, 'cancel'])->name('loans.cancel');
-            Route::delete('/loans/{id}', [LoansController::class, 'destroy'])->name('loans.destroy');
-            Route::get('/loans/{id}/payments', [LoansController::class, 'getPayments'])->name('loans.payments');
+            Route::post('/loans', [LoansController::class, 'store'])
+                ->middleware('permission:payroll.loans.create')
+                ->name('loans.store');
+            Route::get('/loans/{id}', [LoansController::class, 'show'])
+                ->middleware('permission:payroll.loans.view')
+                ->name('loans.show');
+            Route::put('/loans/{id}', [LoansController::class, 'update'])
+                ->middleware('permission:payroll.loans.update')
+                ->name('loans.update');
+            Route::post('/loans/{id}/early-payment', [LoansController::class, 'earlyPayment'])
+                ->middleware('permission:payroll.loans.update')
+                ->name('loans.early-payment');
+            Route::post('/loans/{id}/cancel', [LoansController::class, 'cancel'])
+                ->middleware('permission:payroll.loans.delete')
+                ->name('loans.cancel');
+            Route::delete('/loans/{id}', [LoansController::class, 'destroy'])
+                ->middleware('permission:payroll.loans.delete')
+                ->name('loans.destroy');
+            Route::get('/loans/{id}/payments', [LoansController::class, 'getPayments'])
+                ->middleware('permission:payroll.loans.view')
+                ->name('loans.payments');
         }
         Route::get('/advances', [AdvancesController::class, 'index'])->name('advances.index');
         Route::post('/advances', [AdvancesController::class, 'store'])->name('advances.store');

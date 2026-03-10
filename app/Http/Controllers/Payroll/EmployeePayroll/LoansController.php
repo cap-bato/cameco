@@ -23,8 +23,6 @@ class LoansController extends Controller
      */
     public function index(Request $request)
     {
-        $this->authorize('viewAny', Employee::class);
-
         $search = $request->input('search');
         $employeeId = $request->input('employee_id');
         $departmentId = $request->input('department_id');
@@ -65,10 +63,10 @@ class LoansController extends Controller
             return [
                 'id' => $loan->id,
                 'employee_id' => $loan->employee_id,
-                'employee_name' => $loan->employee->user->full_name,
-                'employee_number' => $loan->employee->employee_number,
-                'department_id' => $loan->employee->department_id,
-                'department_name' => $loan->employee->department->name ?? 'N/A',
+                'employee_name' => $loan->employee?->user?->full_name ?? 'N/A',
+                'employee_number' => $loan->employee?->employee_number ?? 'N/A',
+                'department_id' => $loan->employee?->department_id,
+                'department_name' => $loan->employee?->department?->name ?? 'N/A',
                 'loan_type' => $loan->loan_type,
                 'loan_type_label' => $this->getLoanTypeLabel($loan->loan_type),
                 'loan_type_color' => $this->getLoanTypeColor($loan->loan_type),
@@ -87,9 +85,9 @@ class LoansController extends Controller
                 'status_label' => ucfirst(str_replace('_', ' ', $loan->status)),
                 'status_color' => $this->getStatusColor($loan->status),
                 'is_active' => $loan->status === 'active',
-                'approved_by' => $loan->approvedBy->name ?? 'N/A',
+                'approved_by' => $loan->approvedBy?->name ?? 'N/A',
                 'approved_at' => $loan->approved_at,
-                'created_by' => $loan->createdBy->name ?? 'System',
+                'created_by' => $loan->createdBy?->name ?? 'System',
                 'created_at' => $loan->created_at,
                 'updated_by' => $loan->updated_by,
                 'updated_at' => $loan->updated_at,
@@ -99,19 +97,20 @@ class LoansController extends Controller
         $employees = Employee::with('user', 'department')
             ->where('status', 'active')
             ->get(['id', 'employee_number', 'department_id', 'user_id'])
+            ->filter(fn($emp) => $emp->user !== null)
             ->map(fn($emp) => [
                 'id' => $emp->id,
-                'name' => $emp->user->full_name,
+                'name' => $emp->user?->full_name ?? $emp->employee_number,
                 'employee_number' => $emp->employee_number,
-                'department' => $emp->department->name ?? 'N/A',
+                'department' => $emp->department?->name ?? 'N/A',
             ]);
 
         $departments = Department::where('status', 'active')->get(['id', 'name'])->values();
 
         return Inertia::render('Payroll/EmployeePayroll/Loans/Index', [
-            'loans' => $loans,
-            'employees' => $employees,
-            'departments' => $departments,
+            'loans' => $loans->values()->toArray(),
+            'employees' => $employees->values()->toArray(),
+            'departments' => $departments->toArray(),
             'filters' => [
                 'search' => $search ?? '',
                 'employee_id' => $employeeId ?? null,
@@ -138,8 +137,6 @@ class LoansController extends Controller
      */
     public function show(int $id)
     {
-        $this->authorize('view', Employee::class);
-
         try {
             $loan = EmployeeLoan::with(['employee.user', 'employee.department', 'createdBy', 'approvedBy'])
                 ->findOrFail($id);
@@ -183,8 +180,6 @@ class LoansController extends Controller
      */
     public function store(Request $request)
     {
-        $this->authorize('create', Employee::class);
-
         $validated = $request->validate([
             'employee_id' => 'required|integer|exists:employees,id',
             'loan_type' => 'required|in:sss,pagibig,company',
@@ -229,8 +224,6 @@ class LoansController extends Controller
      */
     public function update(Request $request, int $id)
     {
-        $this->authorize('update', Employee::class);
-
         $validated = $request->validate([
             'interest_rate' => 'nullable|numeric|min:0|max:100',
             'monthly_amortization' => 'nullable|numeric|min:0',
@@ -251,8 +244,6 @@ class LoansController extends Controller
      */
     public function earlyPayment(Request $request, int $id)
     {
-        $this->authorize('update', Employee::class);
-
         $validated = $request->validate([
             'payment_amount' => 'required|numeric|min:0',
         ]);
@@ -272,8 +263,6 @@ class LoansController extends Controller
      */
     public function cancel(int $id)
     {
-        $this->authorize('delete', Employee::class);
-
         try {
             $loan = EmployeeLoan::findOrFail($id);
             $loan->update(['status' => 'cancelled']);
@@ -291,8 +280,6 @@ class LoansController extends Controller
     {
         try {
             $loan = EmployeeLoan::with('employee')->findOrFail($id);
-
-            $this->authorize('delete', $loan->employee);
 
             // Check if loan is active - only allow deletion of non-active loans
             if ($loan->status === 'active') {
@@ -327,8 +314,6 @@ class LoansController extends Controller
      */
     public function getPayments(int $id)
     {
-        $this->authorize('viewAny', Employee::class);
-
         try {
             $loan = EmployeeLoan::with(['loanDeductions' => fn($q) => $q->orderBy('installment_number', 'asc')])
                 ->findOrFail($id);

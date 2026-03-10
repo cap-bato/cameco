@@ -25,8 +25,6 @@ class AllowancesDeductionsController extends Controller
      */
     public function index(Request $request)
     {
-        $this->authorize('viewAny', Employee::class);
-
         $search = $request->input('search');
         $departmentId = $request->input('department_id');
         $status = $request->input('status', 'active');
@@ -38,6 +36,7 @@ class AllowancesDeductionsController extends Controller
             'deductions' => fn($q) => $q->where('is_active', true),
             'user',
             'department',
+            'position',
         ])->where('status', 'active');
 
         if ($search) {
@@ -56,7 +55,9 @@ class AllowancesDeductionsController extends Controller
 
         $employees = $employeeQuery->get();
 
-        $employeeData = $employees->map(function ($employee) use ($componentType) {
+        $employeeData = $employees
+            ->filter(fn($emp) => $emp->user !== null)  // Filter out employees without users
+            ->map(function ($employee) use ($componentType) {
             $allowances = $employee->allowances->map(fn($a) => [
                 'id' => $a->id,
                 'employee_id' => $a->employee_id,
@@ -93,7 +94,7 @@ class AllowancesDeductionsController extends Controller
                 'requires_attendance' => $d->requires_attendance,
             ]);
 
-            $components = collect($allowances)->concat($deductions);
+            $components = $allowances->concat($deductions);
             if ($componentType) {
                 $components = $components->filter(fn($c) => $c['component_type'] === $componentType);
             }
@@ -105,12 +106,12 @@ class AllowancesDeductionsController extends Controller
                 'id' => $employee->id,
                 'employee_id' => $employee->id,
                 'employee_number' => $employee->employee_number,
-                'first_name' => $employee->user->first_name,
-                'last_name' => $employee->user->last_name,
-                'department' => $employee->department->name ?? 'N/A',
+                'first_name' => $employee->user?->first_name ?? 'N/A',
+                'last_name' => $employee->user?->last_name ?? 'N/A',
+                'department' => $employee->department?->name ?? 'N/A',
                 'department_id' => $employee->department_id,
-                'position' => $employee->position->name ?? 'N/A',
-                'components' => $components->values()->all(),
+                'position' => $employee->position?->name ?? 'N/A',
+                'components' => array_values($components->toArray()),
                 'total_allowances' => $totalAllowances,
                 'total_deductions' => $totalDeductions,
             ];
@@ -125,17 +126,17 @@ class AllowancesDeductionsController extends Controller
         foreach ($components as $type => $typeComponents) {
             foreach ($typeComponents as $component) {
                 $componentsList->push([
-                    'id' => $component->id,
-                    'code' => $component->code,
-                    'name' => $component->name,
-                    'component_type' => $component->component_type,
-                    'category' => $component->category,
-                    'default_amount' => $component->default_amount,
+                    'id' => $component['id'],
+                    'code' => $component['code'],
+                    'name' => $component['name'],
+                    'component_type' => $type,
+                    'category' => $component['category'],
+                    'default_amount' => null,
                 ]);
             }
         }
 
-        $departments = Department::where('status', 'active')->get(['id', 'code', 'name'])->values();
+        $departments = Department::get(['id', 'code', 'name'])->values();
 
         $componentTypes = [
             ['id' => 'allowance', 'name' => 'Allowance'],
@@ -145,9 +146,9 @@ class AllowancesDeductionsController extends Controller
         ];
 
         return Inertia::render('Payroll/EmployeePayroll/AllowancesDeductions/Index', [
-            'employeeComponents' => $employeeData->values(),
-            'components' => $componentsList->values(),
-            'departments' => $departments,
+            'employeeComponents' => $employeeData->values()->toArray(),
+            'components' => $componentsList->values()->toArray(),
+            'departments' => $departments->toArray(),
             'componentTypes' => $componentTypes,
             'filters' => [
                 'search' => $search ?? '',
@@ -163,18 +164,17 @@ class AllowancesDeductionsController extends Controller
      */
     public function bulkAssignPage()
     {
-        $this->authorize('create', Employee::class);
-
         $employees = Employee::with('user', 'department', 'position')
             ->where('status', 'active')
             ->get()
+            ->filter(fn($emp) => $emp->user !== null)
             ->map(fn($emp) => [
                 'id' => $emp->id,
                 'employee_number' => $emp->employee_number,
-                'first_name' => $emp->user->first_name,
-                'last_name' => $emp->user->last_name,
-                'department' => $emp->department->name ?? 'N/A',
-                'position' => $emp->position->name ?? 'N/A',
+                'first_name' => $emp->user?->first_name ?? 'N/A',
+                'last_name' => $emp->user?->last_name ?? 'N/A',
+                'department' => $emp->department?->name ?? 'N/A',
+                'position' => $emp->position?->name ?? 'N/A',
             ]);
 
         $components = $this->salaryComponentService->getComponentsGroupedByType(true);
@@ -182,19 +182,19 @@ class AllowancesDeductionsController extends Controller
         foreach ($components as $type => $typeComponents) {
             foreach ($typeComponents as $component) {
                 $componentsList->push([
-                    'id' => $component->id,
-                    'code' => $component->code,
-                    'name' => $component->name,
-                    'component_type' => $component->component_type,
-                    'category' => $component->category,
-                    'default_amount' => $component->default_amount,
+                    'id' => $component['id'],
+                    'code' => $component['code'],
+                    'name' => $component['name'],
+                    'component_type' => $type,
+                    'category' => $component['category'],
+                    'default_amount' => null,
                 ]);
             }
         }
 
         return Inertia::render('Payroll/EmployeePayroll/AllowancesDeductions/BulkAssign', [
-            'employees' => $employees,
-            'components' => $componentsList->values(),
+            'employees' => $employees->values()->toArray(),
+            'components' => $componentsList->values()->toArray(),
         ]);
     }
 
@@ -203,8 +203,6 @@ class AllowancesDeductionsController extends Controller
      */
     public function store(Request $request)
     {
-        $this->authorize('create', Employee::class);
-
         $validated = $request->validate([
             'employee_id' => 'required|integer|exists:employees,id',
             'salary_component_id' => 'required|integer|exists:salary_components,id',
@@ -267,8 +265,6 @@ class AllowancesDeductionsController extends Controller
      */
     public function update(Request $request, int $id)
     {
-        $this->authorize('update', Employee::class);
-
         $validated = $request->validate([
             'amount' => 'nullable|numeric|min:0',
             'percentage' => 'nullable|numeric|min:0|max:100',
@@ -304,8 +300,6 @@ class AllowancesDeductionsController extends Controller
      */
     public function destroy(int $id)
     {
-        $this->authorize('delete', Employee::class);
-
         try {
             $allowance = EmployeeAllowance::find($id);
             if ($allowance) {
@@ -330,8 +324,6 @@ class AllowancesDeductionsController extends Controller
      */
     public function history(Request $request, int $employeeId)
     {
-        $this->authorize('viewAny', Employee::class);
-
         $componentId = $request->input('component_id');
 
         try {
@@ -372,10 +364,10 @@ class AllowancesDeductionsController extends Controller
                 ]);
 
             $history = $allowanceHistory->concat($deductionHistory)
-                ->sortByDesc('changed_at')
+                ->sortByDesc(fn($item) => strtotime($item['changed_at']))
                 ->values();
 
-            return response()->json(['success' => true, 'data' => $history]);
+            return response()->json(['success' => true, 'history' => $history->toArray()]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
@@ -386,8 +378,6 @@ class AllowancesDeductionsController extends Controller
      */
     public function bulkAssign(Request $request)
     {
-        $this->authorize('create', Employee::class);
-
         $validated = $request->validate([
             'employee_ids' => 'required|array|min:1',
             'employee_ids.*' => 'integer|exists:employees,id',
@@ -443,7 +433,7 @@ class AllowancesDeductionsController extends Controller
                 'success' => true,
                 'message' => sprintf('%d components assigned successfully', $assignedCount),
                 'assigned_count' => $assignedCount,
-                'errors' => $errors,
+                'errors' => array_values($errors),
             ], 201);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
