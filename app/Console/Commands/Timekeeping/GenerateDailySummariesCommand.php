@@ -27,8 +27,7 @@ class GenerateDailySummariesCommand extends Command
      */
     protected $signature = 'timekeeping:generate-daily-summaries
                             {--date= : Specific date to generate summaries for (YYYY-MM-DD)}
-                          {--force : Force regeneration even if summaries exist}
-                          {--auto-finalize : Automatically finalize attendance after successful generation}';
+                            {--auto-finalize : Automatically finalize attendance after successful generation}';
 
     /**
      * The console command description.
