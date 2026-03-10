@@ -12,6 +12,10 @@ class BulkEmployeeSeeder extends Seeder
 {
     /**
      * Run the database seeds.
+     * 
+     * Creates bulk employees to populate the system with test data.
+     * Change $totalEmployees constant to adjust the number of employees created.
+     * Default is 31 to match manual EmployeeSeeder + variations.
      */
     public function run(): void
     {
@@ -29,8 +33,10 @@ class BulkEmployeeSeeder extends Seeder
 
         // Create employees in batches for better performance
         $batchSize = 50;
-        $totalEmployees = 200;
+        $totalEmployees = 31;  // Changed from 200 to 31 to align with EmployeeSeeder
         $createdCount = 0;
+
+        $this->command->info("Creating {$totalEmployees} employees in batches of {$batchSize}...");
 
         DB::beginTransaction();
         
@@ -138,7 +144,7 @@ class BulkEmployeeSeeder extends Seeder
         $this->command->info('👥 Employees by Department:');
         
         $departmentStats = Department::withCount('employees')
-            ->having('employees_count', '>', 0)
+            ->has('employees', '>', 0)
             ->get()
             ->map(fn($dept) => [$dept->name, $dept->employees_count])
             ->toArray();

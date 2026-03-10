@@ -348,7 +348,7 @@ export function GenerateDocumentModal({ open, onClose, template, employees = [] 
             console.error('Generation error:', error);
             
             let errorMessage = 'Failed to generate document';
-            let errorDetails: string[] = [];
+            const errorDetails: string[] = [];
 
             if (error && typeof error === 'object') {
                 const err = error as any;

@@ -25,11 +25,14 @@ export default function EnvelopePreview({
     envelopes,
     formatted_total,
     count,
+    period_id,
 }: EnvelopePreviewProps) {
     const [selectedEnvelope, setSelectedEnvelope] = useState<number | null>(null);
     const [printMode, setPrintMode] = useState(false);
+    const [printSelectedOnly, setPrintSelectedOnly] = useState(false);
 
-    const handlePrint = () => {
+    const handlePrintAll = () => {
+        setPrintSelectedOnly(false);
         setPrintMode(true);
         setTimeout(() => {
             window.print();
@@ -37,17 +40,45 @@ export default function EnvelopePreview({
         }, 100);
     };
 
-    const handleDownloadPDF = () => {
-        // In a real implementation, this would generate and download a PDF
-        alert('PDF download would be implemented here');
+    const handlePrintSelected = () => {
+        setPrintSelectedOnly(true);
+        setPrintMode(true);
+        setTimeout(() => {
+            window.print();
+            setPrintMode(false);
+            setPrintSelectedOnly(false);
+        }, 100);
     };
+
 
     const selectedData = selectedEnvelope !== null ? envelopes.find((e) => e.id === selectedEnvelope) : envelopes[0];
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Envelope Preview" />
-            <style>{`@media print { nav { display: none !important; } }`}</style>
+            <style>{`
+                @media print {
+                    aside,
+                    header,
+                    nav,
+                    [data-sidebar],
+                    .sidebar,
+                    .print\\:hidden {
+                        display: none !important;
+                    }
+                    main,
+                    .main-content,
+                    [data-main] {
+                        width: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                    @page {
+                        size: landscape;
+                        margin: 1cm;
+                    }
+                }
+            `}</style>
             <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-6 print:p-0 print:gap-0">
                 {/* Header */}
                 <div className="flex items-center justify-between print:hidden">
@@ -72,13 +103,31 @@ export default function EnvelopePreview({
                     <CardHeader className="flex flex-row items-center justify-between space-y-0">
                         <CardTitle className="text-base">Summary</CardTitle>
                         <div className="flex gap-2">
-                            <Button size="sm" onClick={handleDownloadPDF}>
-                                <Download className="h-4 w-4 mr-2" />
-                                Download PDF
+                            {/* Download all envelopes */}
+                            <Button size="sm" variant="outline" asChild>
+                                <a href={`/payroll/payments/cash/generate-envelopes/pdf?period_id=${period_id}`}>
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Download All (PDF)
+                                </a>
                             </Button>
-                            <Button size="sm" onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700">
+                            {/* Download selected envelope */}
+                            {selectedData && (
+                                <Button size="sm" variant="outline" asChild>
+                                    <a href={`/payroll/payments/cash/generate-envelopes/pdf?period_id=${period_id}&employee_ids[]=${selectedData.employee_id}`}>
+                                        <Download className="h-4 w-4 mr-2" />
+                                        Download This Envelope
+                                    </a>
+                                </Button>
+                            )}
+                            {/* Print selected envelope */}
+                            <Button size="sm" onClick={handlePrintSelected} disabled={!selectedData}>
                                 <Printer className="h-4 w-4 mr-2" />
-                                Print Now
+                                Print Selected
+                            </Button>
+                            {/* Print all envelopes */}
+                            <Button size="sm" onClick={handlePrintAll} className="bg-blue-600 hover:bg-blue-700">
+                                <Printer className="h-4 w-4 mr-2" />
+                                Print All
                             </Button>
                         </div>
                     </CardHeader>
@@ -133,9 +182,9 @@ export default function EnvelopePreview({
                     {/* Envelope Preview */}
                     <div className={printMode ? 'w-full space-y-0' : 'md:col-span-3 space-y-4'}>
                         {printMode ? (
-                            // Print view: Show all envelopes
+                            // Print view: Show all envelopes or only selected based on printSelectedOnly
                             <div className="space-y-6 print:space-y-4">
-                                {envelopes.map((envelope, index) => (
+                                {(printSelectedOnly && selectedData ? [selectedData] : envelopes).map((envelope, index) => (
                                     <div
                                         key={envelope.id}
                                         className="bg-white border-4 border-dashed border-gray-300 p-8 rounded space-y-4 print:border-2 print:p-4 print:break-inside-avoid"

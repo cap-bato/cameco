@@ -20,6 +20,13 @@ Route::middleware(['auth', 'verified', EnsureEmployee::class])
             ->middleware('permission:employee.dashboard.view')
             ->name('dashboard');
 
+        // Notifications
+        Route::get('/notifications', [\App\Http\Controllers\Employee\NotificationController::class, 'index'])
+            ->name('notifications.index');
+
+        Route::post('/notifications/{notification}/read', [\App\Http\Controllers\Employee\NotificationController::class, 'markAsRead'])
+            ->name('notifications.read');
+
         // ============================================================
         // PERSONAL INFORMATION (Self-Service)
         // ============================================================
@@ -153,5 +160,25 @@ Route::middleware(['auth', 'verified', EnsureEmployee::class])
             Route::get('/{document}/download', [\App\Http\Controllers\Employee\DocumentController::class, 'download'])
                 ->middleware('permission:employee.documents.download')
                 ->name('download');
+
+            // Preview own document inline (PDF/images only)
+            Route::get('/{documentId}/preview', [\App\Http\Controllers\Employee\DocumentController::class, 'preview'])
+                ->middleware('permission:employee.documents.view')
+                ->name('preview');
+
+             // Document request history
+            Route::get('/requests/history', [\App\Http\Controllers\Employee\DocumentController::class, 'requestHistory'])
+                ->middleware('permission:employee.documents.view')
+                ->name('requests.history');
+
+            // Cancel pending request
+            Route::post('/requests/{requestId}/cancel', [\App\Http\Controllers\Employee\DocumentController::class, 'cancelRequest'])
+                ->middleware('permission:employee.documents.request')
+                ->name('requests.cancel');
+
+            // Download document from approved request
+            Route::get('/requests/{requestId}/download', [\App\Http\Controllers\Employee\DocumentController::class, 'downloadFromRequest'])
+                ->middleware('permission:employee.documents.download')
+                ->name('requests.download');
         });
     });

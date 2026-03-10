@@ -465,4 +465,63 @@ class WorkforceCoverageService
 
         return $recommendations;
     }
+
+    /**
+     * Calculate coverage percentage if a specific employee takes leave
+     * Used by leave approval system to check if coverage threshold is met
+     * 
+     * @param int $departmentId
+     * @param Carbon|string $startDate
+     * @param Carbon|string $endDate
+     * @param int $employeeId
+     * @return float Coverage percentage (0-100)
+     */
+    public function calculateCoverageWithLeave(
+        int $departmentId,
+        $startDate,
+        $endDate,
+        int $employeeId
+    ): float {
+        $start = $startDate instanceof Carbon ? $startDate : Carbon::parse($startDate);
+        $end = $endDate instanceof Carbon ? $endDate : Carbon::parse($endDate);
+        
+        $department = Department::find($departmentId);
+        
+        if (!$department) {
+            return 0;
+        }
+
+        // Get total active employees in department
+        $totalEmployees = Employee::where('department_id', $departmentId)
+            ->where('status', 'active')
+            ->count();
+
+        if ($totalEmployees === 0) {
+            return 0;
+        }
+
+        // Count employees already on leave during this period
+        $employeesOnLeave = DB::table('leave_requests')
+            ->where('department_id', $departmentId)
+            ->where('status', 'approved')
+            ->where(function ($query) use ($start, $end) {
+                $query->whereBetween('start_date', [$start, $end])
+                    ->orWhereBetween('end_date', [$start, $end])
+                    ->orWhere(function ($q) use ($start, $end) {
+                        $q->where('start_date', '<=', $start)
+                          ->where('end_date', '>=', $end);
+                    });
+            })
+            ->distinct('employee_id')
+            ->count('employee_id');
+
+        // Add 1 for the employee requesting leave
+        $employeesOnLeave += 1;
+
+        // Calculate coverage
+        $availableEmployees = $totalEmployees - $employeesOnLeave;
+        $coveragePercentage = ($availableEmployees / $totalEmployees) * 100;
+
+        return round($coveragePercentage, 2);
+    }
 }

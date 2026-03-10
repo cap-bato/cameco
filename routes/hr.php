@@ -22,12 +22,28 @@ use App\Http\Controllers\HR\Workforce\AssignmentController;
 use App\Http\Controllers\HR\Timekeeping\AttendanceController;
 use App\Http\Controllers\HR\Timekeeping\OvertimeController;
 use App\Http\Controllers\HR\Timekeeping\ImportController;
+use App\Http\Controllers\HR\Timekeeping\LedgerController;
+use App\Http\Controllers\HR\Timekeeping\LedgerHealthController;
+use App\Http\Controllers\HR\Timekeeping\LedgerSyncController;
+use App\Http\Controllers\HR\Timekeeping\LedgerDeviceController;
+use App\Http\Controllers\HR\Timekeeping\DeviceController;
+use App\Http\Controllers\HR\Timekeeping\EmployeeTimelineController;
 use App\Http\Controllers\HR\Timekeeping\AnalyticsController as TimekeepingAnalyticsController;
+use App\Http\Controllers\HR\Timekeeping\AttendanceCorrectionController;
+use App\Http\Controllers\HR\Timekeeping\AttendanceFinalizeController;
 use App\Http\Controllers\HR\Appraisal\AppraisalCycleController;
 use App\Http\Controllers\HR\Appraisal\AppraisalController;
 use App\Http\Controllers\HR\Appraisal\PerformanceMetricsController;
 use App\Http\Controllers\HR\Appraisal\RehireRecommendationController;
 use App\Http\Controllers\HR\Employee\EmployeeDocumentController;
+use App\Http\Controllers\HR\Offboarding\OffboardingCaseController;
+use App\Http\Controllers\HR\Offboarding\ClearanceController;
+use App\Http\Controllers\HR\Offboarding\ExitInterviewController;
+use App\Http\Controllers\HR\Offboarding\CompanyAssetController;
+use App\Http\Controllers\HR\Offboarding\OffboardingDocumentController;
+use App\Http\Controllers\HR\Offboarding\OffboardingDashboardController;
+use App\Http\Controllers\HR\Offboarding\AnalyticsController as OffboardingAnalyticsController;
+use App\Http\Controllers\HR\Offboarding\ReportController as OffboardingReportController;
 use App\Http\Middleware\EnsureHRAccess;
 // use App\Http\Middleware\EnsureProfileComplete; for future useronboarding workflow
 
@@ -53,7 +69,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
 
         // Employee-Specific Document API Routes (for Employee Profile → Documents Tab)
         // These routes are scoped to a single employee context
-        Route::prefix('api/hr/employees/{employeeId}/documents')->name('api.employees.documents.')->group(function () {
+        Route::prefix('employees/{employeeId}/api/documents')->name('api.employees.documents.')->group(function () {
             Route::get('/', [EmployeeDocumentController::class, 'index'])
                 ->middleware('permission:hr.documents.view')
                 ->name('index');
@@ -81,6 +97,14 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/{documentId}/download', [EmployeeDocumentController::class, 'download'])
                 ->middleware('permission:hr.documents.download')
                 ->name('download');
+            
+            Route::get('/{documentId}/download-file', [EmployeeDocumentController::class, 'downloadFile'])
+                ->middleware('permission:hr.documents.download')
+                ->name('download-file');
+            
+            Route::get('/{documentId}/preview', [EmployeeDocumentController::class, 'preview'])
+                ->middleware('permission:hr.documents.view')
+                ->name('preview');
         });
 
         // Department Management
@@ -211,6 +235,10 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/{document}/download', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'download'])
                 ->middleware('permission:hr.documents.download')
                 ->name('download');
+
+            Route::get('/{document}/preview', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'preview'])
+                ->middleware('permission:hr.documents.view')
+                ->name('preview');
             
             Route::post('/{document}/approve', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'approve'])
                 ->middleware('permission:hr.documents.approve')
@@ -332,6 +360,31 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::post('/job-postings/{id}/close', [JobPostingController::class, 'close'])
                 ->middleware('permission:hr.ats.candidates.update')
                 ->name('job-postings.close');
+
+            // Facebook Integration Routes
+            Route::post('/job-postings/{jobPosting}/post-to-facebook', [JobPostingController::class, 'postToFacebook'])
+                ->middleware('permission:hr.ats.candidates.update')
+                ->name('job-postings.post-to-facebook');
+            
+            Route::get('/job-postings/{jobPosting}/facebook-preview', [JobPostingController::class, 'previewFacebookPost'])
+                ->middleware('permission:hr.ats.candidates.view')
+                ->name('job-postings.facebook-preview');
+            
+            Route::get('/job-postings/{jobPosting}/facebook-logs', [JobPostingController::class, 'getFacebookLogs'])
+                ->middleware('permission:hr.ats.candidates.view')
+                ->name('job-postings.facebook-logs');
+            
+            Route::post('/job-postings/{jobPosting}/refresh-facebook-metrics', [JobPostingController::class, 'refreshEngagementMetrics'])
+                ->middleware('permission:hr.ats.candidates.update')
+                ->name('job-postings.refresh-facebook-metrics');
+            
+            Route::delete('/job-postings/{jobPosting}/delete-facebook-post', [JobPostingController::class, 'deleteFacebookPost'])
+                ->middleware('permission:hr.ats.candidates.update')
+                ->name('job-postings.delete-facebook-post');
+            
+            Route::get('/job-postings/{jobPosting}/facebook-status', [JobPostingController::class, 'getFacebookStatus'])
+                ->middleware('permission:hr.ats.candidates.view')
+                ->name('job-postings.facebook-status');
 
             // Candidates
             Route::get('/candidates', [CandidateController::class, 'index'])
@@ -570,6 +623,150 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 ->name('assignments.coverage-analysis');
         });
 
+        // Offboarding Module
+        Route::prefix('offboarding')->name('offboarding.')->group(function () {
+            // Offboarding Dashboard
+            Route::get('/dashboard', [OffboardingDashboardController::class, 'index'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('dashboard');
+
+            // Exit Analytics
+            Route::get('/analytics', [OffboardingAnalyticsController::class, 'index'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('analytics');
+
+            // Offboarding Cases
+            Route::get('/cases', [OffboardingCaseController::class, 'index'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('cases.index');
+            Route::get('/cases/create', [OffboardingCaseController::class, 'create'])
+                ->middleware('permission:hr.offboarding.create')
+                ->name('cases.create');
+            Route::post('/cases', [OffboardingCaseController::class, 'store'])
+                ->middleware('permission:hr.offboarding.create')
+                ->name('cases.store');
+            Route::get('/cases/{id}', [OffboardingCaseController::class, 'show'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('cases.show');
+            Route::get('/cases/{id}/edit', [OffboardingCaseController::class, 'edit'])
+                ->middleware('permission:hr.offboarding.update')
+                ->name('cases.edit');
+            Route::put('/cases/{id}', [OffboardingCaseController::class, 'update'])
+                ->middleware('permission:hr.offboarding.update')
+                ->name('cases.update');
+            Route::post('/cases/{id}/cancel', [OffboardingCaseController::class, 'cancel'])
+                ->middleware('permission:hr.offboarding.cancel')
+                ->name('cases.cancel');
+            Route::post('/cases/{id}/complete', [OffboardingCaseController::class, 'complete'])
+                ->middleware('permission:hr.offboarding.complete')
+                ->name('cases.complete');
+            Route::get('/cases/{id}/export', [OffboardingCaseController::class, 'exportReport'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('cases.export');
+
+            // Clearance Items
+            Route::get('/clearance', [ClearanceController::class, 'indexAll'])
+                ->middleware('permission:hr.offboarding.clearance.view')
+                ->name('clearance.all');
+            Route::get('/clearance/{caseId}', [ClearanceController::class, 'index'])
+                ->middleware('permission:hr.offboarding.clearance.view')
+                ->name('clearance.index');
+            Route::post('/clearance/{id}/approve', [ClearanceController::class, 'approve'])
+                ->middleware('permission:hr.offboarding.clearance.approve')
+                ->name('clearance.approve');
+            Route::post('/clearance/{id}/waive', [ClearanceController::class, 'waive'])
+                ->middleware('permission:hr.offboarding.clearance.waive')
+                ->name('clearance.waive');
+            Route::post('/clearance/{id}/issue', [ClearanceController::class, 'reportIssue'])
+                ->middleware('permission:hr.offboarding.clearance.edit')
+                ->name('clearance.issue');
+            Route::post('/clearance/bulk-approve', [ClearanceController::class, 'bulkApprove'])
+                ->middleware('permission:hr.offboarding.clearance.approve')
+                ->name('clearance.bulk-approve');
+            Route::get('/clearance/{id}/proof', [ClearanceController::class, 'downloadProof'])
+                ->middleware('permission:hr.offboarding.clearance.view')
+                ->name('clearance.proof');
+
+            // Exit Interview
+            Route::get('/exit-interview/{caseId}', [ExitInterviewController::class, 'show'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('exit-interview.show');
+            Route::post('/exit-interview/{caseId}/submit', [ExitInterviewController::class, 'submit'])
+                ->middleware('permission:hr.offboarding.exit-interview.complete')
+                ->name('exit-interview.submit');
+            Route::get('/exit-interview/{caseId}/results', [ExitInterviewController::class, 'viewResults'])
+                ->middleware('permission:hr.offboarding.exit-interview.view')
+                ->name('exit-interview.results');
+            Route::get('/exit-interview/analytics', [ExitInterviewController::class, 'analytics'])
+                ->middleware('permission:hr.offboarding.exit-interview.view')
+                ->name('exit-interview.analytics');
+
+            // Company Assets
+            Route::get('/assets/employee/{employeeId}', [CompanyAssetController::class, 'index'])
+                ->middleware('permission:hr.offboarding.assets.view')
+                ->name('assets.index');
+            Route::post('/assets', [CompanyAssetController::class, 'store'])
+                ->middleware('permission:hr.offboarding.assets.create')
+                ->name('assets.store');
+            Route::put('/assets/{assetId}/return', [CompanyAssetController::class, 'markReturned'])
+                ->middleware('permission:hr.offboarding.assets.update')
+                ->name('assets.return');
+            Route::post('/assets/{assetId}/issue', [CompanyAssetController::class, 'reportIssue'])
+                ->middleware('permission:hr.offboarding.assets.update')
+                ->name('assets.issue');
+            Route::get('/assets/inventory', [CompanyAssetController::class, 'inventory'])
+                ->middleware('permission:hr.offboarding.assets.view')
+                ->name('assets.inventory');
+
+            // Offboarding Documents
+            Route::post('/documents/{caseId}/generate-clearance-certificate', [OffboardingDocumentController::class, 'generateClearanceCertificate'])
+                ->middleware('permission:hr.offboarding.documents.generate')
+                ->name('documents.generate-clearance');
+            Route::post('/documents/{caseId}/generate-coe', [OffboardingDocumentController::class, 'generateCOE'])
+                ->middleware('permission:hr.offboarding.documents.generate')
+                ->name('documents.generate-coe');
+            Route::post('/documents/{caseId}/generate-final-pay', [OffboardingDocumentController::class, 'generateFinalPay'])
+                ->middleware('permission:hr.offboarding.documents.generate')
+                ->name('documents.generate-final-pay');
+            Route::post('/documents/{caseId}/upload', [OffboardingDocumentController::class, 'upload'])
+                ->middleware('permission:hr.offboarding.documents.upload')
+                ->name('documents.upload');
+            Route::get('/documents/{documentId}/download', [OffboardingDocumentController::class, 'download'])
+                ->middleware('permission:hr.offboarding.documents.view')
+                ->name('documents.download');
+            Route::post('/documents/{documentId}/approve', [OffboardingDocumentController::class, 'approve'])
+                ->middleware('permission:hr.offboarding.documents.approve')
+                ->name('documents.approve');
+
+            // Offboarding Reports
+            Route::prefix('reports')->name('reports.')->group(function () {
+                Route::get('/monthly-separation/{format?}', [OffboardingReportController::class, 'monthlySeparationReport'])
+                    ->middleware('permission:hr.offboarding.reports.view')
+                    ->where('format', 'pdf|csv')
+                    ->name('monthly-separation');
+
+                Route::get('/clearance-compliance/{format?}', [OffboardingReportController::class, 'clearanceComplianceReport'])
+                    ->middleware('permission:hr.offboarding.reports.view')
+                    ->where('format', 'pdf|csv')
+                    ->name('clearance-compliance');
+
+                Route::get('/exit-interview-insights/{format?}', [OffboardingReportController::class, 'exitInterviewInsights'])
+                    ->middleware('permission:hr.offboarding.reports.view')
+                    ->where('format', 'pdf')
+                    ->name('exit-interview-insights');
+
+                Route::get('/asset-liability/{format?}', [OffboardingReportController::class, 'assetLiabilityReport'])
+                    ->middleware('permission:hr.offboarding.reports.view')
+                    ->where('format', 'pdf|csv')
+                    ->name('asset-liability');
+
+                Route::get('/rehire-eligibility/{format?}', [OffboardingReportController::class, 'rehireEligibilityReport'])
+                    ->middleware('permission:hr.offboarding.reports.view')
+                    ->where('format', 'pdf|csv')
+                    ->name('rehire-eligibility');
+            });
+        });
+
         // Timekeeping Module
         Route::prefix('timekeeping')->name('timekeeping.')->group(function () {
             // Attendance Management
@@ -606,6 +803,128 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/attendance/{id}/history', [AttendanceController::class, 'correctionHistory'])
                 ->middleware('permission:hr.timekeeping.attendance.view')
                 ->name('attendance.history');
+
+            // RFID Ledger Page
+            Route::get('/ledger', [LedgerController::class, 'index'])
+                ->middleware('permission:hr.timekeeping.attendance.view')
+                ->name('ledger.index');
+            Route::get('/ledger/{sequenceId}', [LedgerController::class, 'show'])
+                ->middleware('permission:hr.timekeeping.attendance.view')
+                ->name('ledger.show');
+
+            // Device Status Dashboard
+            Route::get('/devices', [DeviceController::class, 'index'])
+                ->middleware('permission:hr.timekeeping.attendance.view')
+                ->name('devices');
+
+            // Employee Timeline
+            Route::get('/employee/{employeeId}/timeline', [EmployeeTimelineController::class, 'show'])
+                ->middleware('permission:hr.timekeeping.attendance.view')
+                ->name('employee.timeline');
+
+            // Performance Test Page (Task 7.2.4)
+            Route::get('/performance-test', function () {
+                return inertia('HR/Timekeeping/PerformanceTest');
+            })
+                ->middleware('permission:hr.timekeeping.attendance.view')
+                ->name('performance-test');
+
+            // Integration Test Page (Tasks 7.3.1 & 7.3.2)
+            Route::get('/integration-test', function () {
+                return inertia('HR/Timekeeping/IntegrationTest');
+            })
+                ->middleware('permission:hr.timekeeping.attendance.view')
+                ->name('integration-test');
+
+            // ========================================
+            // RFID Ledger API Routes (JSON Responses)
+            // ========================================
+            Route::prefix('api/ledger')->name('api.ledger.')->group(function () {
+                // Get ledger health status
+                Route::get('/health', [LedgerHealthController::class, 'index'])
+                    ->middleware('permission:hr.timekeeping.attendance.view')
+                    ->name('health');
+
+                // Get 24-hour health history
+                Route::get('/health-history', [LedgerHealthController::class, 'history'])
+                    ->middleware('permission:hr.timekeeping.attendance.view')
+                    ->name('health.history');
+
+                // Clear health cache (administrative endpoint)
+                Route::delete('/health-cache', [LedgerHealthController::class, 'clearCache'])
+                    ->middleware('permission:hr.timekeeping.attendance.update')
+                    ->name('health.cache.clear');
+
+                // Get ledger events (paginated JSON)
+                Route::get('/events', [LedgerController::class, 'events'])
+                    ->middleware('permission:hr.timekeeping.attendance.view')
+                    ->name('events');
+
+                // Get single event by sequence ID
+                Route::get('/events/{sequenceId}', [LedgerController::class, 'eventDetail'])
+                    ->middleware('permission:hr.timekeeping.attendance.view')
+                    ->name('event');
+
+                // Manual ledger sync
+                Route::post('/sync', [LedgerSyncController::class, 'trigger'])
+                    ->middleware('permission:hr.timekeeping.attendance.update')
+                    ->name('sync');
+
+                // Get sync job status
+                Route::get('/sync/{syncJobId}', [LedgerSyncController::class, 'status'])
+                    ->middleware('permission:hr.timekeeping.attendance.view')
+                    ->name('sync.status');
+
+                // Get sync history
+                Route::get('/sync-history', [LedgerSyncController::class, 'history'])
+                    ->middleware('permission:hr.timekeeping.attendance.view')
+                    ->name('sync.history');
+
+                // Get device list with status and metrics
+                Route::get('/devices', [LedgerDeviceController::class, 'index'])
+                    ->middleware('permission:hr.timekeeping.attendance.view')
+                    ->name('devices');
+
+                // Get single device details
+                Route::get('/devices/{deviceId}', [LedgerDeviceController::class, 'show'])
+                    ->middleware('permission:hr.timekeeping.attendance.view')
+                    ->name('device');
+            });
+
+            // Attendance Correction API Routes (JSON Responses)
+            // Task 4.4: Manual correction workflow with audit trail
+            // =======================================================
+            Route::prefix('api/attendance/corrections')->name('api.attendance.corrections.')->group(function () {
+                // Submit new correction request
+                Route::post('/', [\App\Http\Controllers\HR\Timekeeping\AttendanceCorrectionController::class, 'store'])
+                    ->middleware('permission:hr.timekeeping.corrections.create')
+                    ->name('store');
+                
+                // Approve correction request
+                Route::put('/{id}/approve', [\App\Http\Controllers\HR\Timekeeping\AttendanceCorrectionController::class, 'approve'])
+                    ->middleware('permission:hr.timekeeping.corrections.approve')
+                    ->name('approve');
+                
+                // Reject correction request
+                Route::put('/{id}/reject', [\App\Http\Controllers\HR\Timekeeping\AttendanceCorrectionController::class, 'reject'])
+                    ->middleware('permission:hr.timekeeping.corrections.approve')
+                    ->name('reject');
+            });
+
+            // Attendance Finalization API Routes (JSON Responses)
+            // Lock/unlock attendance for a period
+            // ====================================================
+            Route::prefix('api/attendance/finalize')->name('api.attendance.finalize.')->group(function () {
+                // Finalize (lock) attendance for period
+                Route::post('/', [AttendanceFinalizeController::class, 'store'])
+                    ->middleware('permission:hr.timekeeping.attendance.finalize')
+                    ->name('store');
+                
+                // Unfinalize (unlock) attendance for period
+                Route::delete('/', [AttendanceFinalizeController::class, 'destroy'])
+                    ->middleware('permission:hr.timekeeping.attendance.finalize')
+                    ->name('destroy');
+            });
 
             // Overtime Management
             Route::get('/overtime', [OvertimeController::class, 'index'])
@@ -652,6 +971,66 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/import/{id}/errors', [ImportController::class, 'errors'])
                 ->middleware('permission:hr.timekeeping.import.view')
                 ->name('import.errors');
+
+            // RFID Badge Management (Phase 1.5)
+            // Task 1.1.1 & 1.1.2: Badge Management Layout with Stats Dashboard
+            Route::get('/badges', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'index'])
+                ->middleware('permission:hr.timekeeping.badges.view')
+                ->name('badges.index');
+            Route::post('/badges', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'store'])
+                ->middleware('permission:hr.timekeeping.badges.manage')
+                ->name('badges.store');
+            Route::get('/badges/create', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'create'])
+                ->middleware('permission:hr.timekeeping.badges.manage')
+                ->name('badges.create');
+
+            // Task 1.7: Badge Bulk Import Routes (must come before {badge} routes)
+            Route::post('/badges/validate-import', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'validateImport'])
+                ->middleware('permission:hr.timekeeping.badges.manage')
+                ->name('badges.validate-import');
+            Route::post('/badges/bulk-import', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'bulkImport'])
+                ->middleware('permission:hr.timekeeping.badges.manage')
+                ->name('badges.bulk-import');
+
+            // Task 1.6: Badge Report & Export (must come before {badge} routes)
+            Route::post('/badges/export', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'export'])
+                ->middleware('permission:hr.timekeeping.badges.view')
+                ->name('badges.export');
+
+            // Task 1.8: Employees Without Badges Report (must come before {badge} routes)
+            Route::get('/badges/reports/employees-without-badges', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'employeesWithoutBadges'])
+                ->middleware('permission:hr.timekeeping.badges.view')
+                ->name('badges.reports.employees-without-badges');
+
+            // Task 2.9: Inactive Badges Report (must come before {badge} routes)
+            Route::get('/badges/reports/inactive', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'inactiveBadges'])
+                ->middleware('permission:hr.timekeeping.badges.view')
+                ->name('badges.reports.inactive');
+
+            // Badge Detail Routes (with {badge} parameter)
+            Route::get('/badges/{badge}', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'show'])
+                ->middleware('permission:hr.timekeeping.badges.view')
+                ->name('badges.show');
+
+            // Task 2.3.3: Badge Usage History
+            Route::get('/badges/{badge}/history', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'history'])
+                ->middleware('permission:hr.timekeeping.badges.view')
+                ->name('badges.history');
+
+            // Task 2.9: Badge Analytics Endpoint
+            Route::get('/badges/{badge}/analytics', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'analytics'])
+                ->middleware('permission:hr.timekeeping.badges.view')
+                ->name('badges.analytics');
+
+            // Task 2.3.4: Badge Deactivation
+            Route::post('/badges/{badge}/deactivate', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'deactivate'])
+                ->middleware('permission:hr.timekeeping.badges.manage')
+                ->name('badges.deactivate');
+
+            // Task 2.3.5: Badge Replacement
+            Route::post('/badges/{badge}/replace', [\App\Http\Controllers\HR\Timekeeping\RfidBadgeController::class, 'replace'])
+                ->middleware('permission:hr.timekeeping.badges.manage')
+                ->name('badges.replace');
 
             // Analytics & Reports
             Route::get('/overview', [TimekeepingAnalyticsController::class, 'overview'])

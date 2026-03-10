@@ -74,6 +74,14 @@ class PayrollRulesController extends Controller
                 'payment_schedule' => $settings->get('payment_methods')['payment.schedule'] ?? 'bi-monthly',
                 'cutoff_dates' => $this->getCutoffDates($settings),
             ],
+            'standard_deductions' => [
+                'late_deduction_type' => $settings->get('payroll')['payroll.deductions.late_type'] ?? 'per_minute',
+                'late_deduction_amount' => (float)($settings->get('payroll')['payroll.deductions.late_amount'] ?? 5.0),
+                'undertime_deduction_type' => $settings->get('payroll')['payroll.deductions.undertime_type'] ?? 'proportional',
+                'undertime_deduction_amount' => (float)($settings->get('payroll')['payroll.deductions.undertime_amount'] ?? 0),
+                'absence_deduction_per_day' => (float)($settings->get('payroll')['payroll.deductions.absence_per_day'] ?? 1.0),
+                'lwop_deduction_rate' => (float)($settings->get('payroll')['payroll.deductions.lwop_rate'] ?? 1.0),
+            ],
         ];
 
         return Inertia::render('Admin/PayrollRules/Index', [
@@ -190,6 +198,33 @@ class PayrollRulesController extends Controller
 
         return redirect()->route('admin.payroll-rules.index')
             ->with('success', strtoupper($agency) . ' rates updated successfully.');
+    }
+
+    /**
+     * Update standard deductions configuration (late, undertime, absence, LWOP).
+     */
+    public function updateDeductions(Request $request)
+    {
+        $validated = $request->validate([
+            'late_deduction_type' => 'required|in:per_minute,per_bracket,fixed',
+            'late_deduction_amount' => 'required|numeric|min:0',
+            'undertime_deduction_type' => 'required|in:proportional,fixed,none',
+            'undertime_deduction_amount' => 'required|numeric|min:0',
+            'absence_deduction_per_day' => 'required|numeric|min:0|max:2',
+            'lwop_deduction_rate' => 'required|numeric|min:0|max:2',
+        ]);
+
+        $this->updateSettings('payroll', [
+            'payroll.deductions.late_type' => $validated['late_deduction_type'],
+            'payroll.deductions.late_amount' => $validated['late_deduction_amount'],
+            'payroll.deductions.undertime_type' => $validated['undertime_deduction_type'],
+            'payroll.deductions.undertime_amount' => $validated['undertime_deduction_amount'],
+            'payroll.deductions.absence_per_day' => $validated['absence_deduction_per_day'],
+            'payroll.deductions.lwop_rate' => $validated['lwop_deduction_rate'],
+        ], $request->user());
+
+        return redirect()->route('admin.payroll-rules.index')
+            ->with('success', 'Standard deductions updated successfully.');
     }
 
     /**

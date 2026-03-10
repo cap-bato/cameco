@@ -30,6 +30,9 @@ import {
     Loader2
 } from 'lucide-react';
 import { PayrollCalculation } from '@/types/payroll-pages';
+import { router } from '@inertiajs/react';
+import { usePayrollProgress } from '@/hooks/use-payroll-progress';
+import { toast } from '@/hooks/use-toast';
 
 // ============================================================================
 // Type Definitions
@@ -153,6 +156,182 @@ function getAvailableActions(status: PayrollCalculation['status']): string[] {
 }
 
 // ============================================================================
+// CalculationRow Component (with real-time polling)
+// ============================================================================
+
+interface CalculationRowProps {
+    calculation: PayrollCalculation;
+    onViewDetails?: (calculation: PayrollCalculation) => void;
+    onRecalculate?: (calculation: PayrollCalculation) => void;
+    onApprove?: (calculation: PayrollCalculation) => void;
+    onCancel?: (calculation: PayrollCalculation) => void;
+    isLoading?: boolean;
+}
+
+function CalculationRow({
+    calculation,
+    onViewDetails,
+    onRecalculate,
+    onApprove,
+    onCancel,
+    isLoading = false,
+}: CalculationRowProps) {
+    // Real-time progress polling for processing calculations
+    const progressState = usePayrollProgress({
+        calculationId: calculation.id,
+        initialStatus: calculation.status,
+        enabled: calculation.status === 'processing',
+        pollingInterval: 2000,
+        onComplete: () => {
+            router.reload({ only: ['calculations'] });
+            toast({
+                title: 'Calculation Complete',
+                description: `Payroll calculation completed for ${calculation.payroll_period.name}`,
+                variant: 'default',
+            });
+        },
+    });
+
+    // Use live polling state when available, otherwise fall back to calculation props
+    const progressPercentage = progressState.isPolling ? progressState.progress : calculation.progress_percentage;
+    const processedEmployees = progressState.isPolling && progressState.totalJobs !== null && progressState.pendingJobs !== null
+        ? progressState.totalJobs - progressState.pendingJobs
+        : calculation.processed_employees;
+    const totalEmployees = progressState.isPolling && progressState.totalJobs !== null
+        ? progressState.totalJobs
+        : calculation.total_employees;
+    const failedEmployees = progressState.isPolling && progressState.failedJobs !== null
+        ? progressState.failedJobs
+        : calculation.failed_employees;
+
+    const statusConfig = statusConfigMap[calculation.status];
+    const availableActions = getAvailableActions(calculation.status);
+    const calculationDate = formatDate(calculation.calculation_date);
+
+    return (
+        <TableRow key={calculation.id} className="hover:bg-gray-50 dark:hover:bg-gray-900">
+            <TableCell className="font-medium">
+                {calculation.payroll_period.name}
+            </TableCell>
+            <TableCell>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {getCalculationTypeLabel(calculation.calculation_type)}
+                </span>
+            </TableCell>
+            <TableCell>
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <Progress value={progressPercentage} className="w-24" />
+                        <span className="text-xs text-gray-500">
+                            {progressPercentage}%
+                        </span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                        {processedEmployees}/{totalEmployees} processed
+                    </span>
+                </div>
+            </TableCell>
+            <TableCell>
+                <div className="flex items-center gap-1">
+                    <Users className="h-4 w-4 text-gray-400" />
+                    <span className="text-sm">{totalEmployees}</span>
+                    {failedEmployees > 0 && (
+                        <span className="text-xs text-red-600">
+                            ({failedEmployees} failed)
+                        </span>
+                    )}
+                </div>
+            </TableCell>
+            <TableCell>
+                <div className="flex items-center gap-1">
+                    <DollarSign className="h-4 w-4 text-gray-400" />
+                    <span className="text-sm font-medium">
+                        {formatCurrency(calculation.total_net_pay)}
+                    </span>
+                </div>
+            </TableCell>
+            <TableCell>
+                <Badge variant={statusConfig.variant} className="flex items-center gap-1 w-fit">
+                    {statusConfig.icon}
+                    {statusConfig.label}
+                </Badge>
+            </TableCell>
+            <TableCell>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {calculationDate}
+                </span>
+            </TableCell>
+            <TableCell className="text-right">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={isLoading}
+                        >
+                            <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                        {availableActions.includes('view') && (
+                            <DropdownMenuItem
+                                onClick={() => onViewDetails?.(calculation)}
+                                disabled={isLoading}
+                            >
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                            </DropdownMenuItem>
+                        )}
+
+                        {availableActions.includes('recalculate') && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    onClick={() => onRecalculate?.(calculation)}
+                                    disabled={isLoading}
+                                    className="text-blue-600 dark:text-blue-400"
+                                >
+                                    <RefreshCw className="h-4 w-4 mr-2" />
+                                    Recalculate
+                                </DropdownMenuItem>
+                            </>
+                        )}
+
+                        {availableActions.includes('approve') && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    onClick={() => onApprove?.(calculation)}
+                                    disabled={isLoading}
+                                    className="text-green-600 dark:text-green-400"
+                                >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Approve
+                                </DropdownMenuItem>
+                            </>
+                        )}
+
+                        {availableActions.includes('cancel') && (
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    onClick={() => onCancel?.(calculation)}
+                                    disabled={isLoading}
+                                    className="text-red-600 dark:text-red-400"
+                                >
+                                    <XCircle className="h-4 w-4 mr-2" />
+                                    Cancel
+                                </DropdownMenuItem>
+                            </>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </TableCell>
+        </TableRow>
+    );
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -204,133 +383,17 @@ export function CalculationsTable({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {calculations.map((calculation) => {
-                                const statusConfig = statusConfigMap[calculation.status];
-                                const availableActions = getAvailableActions(calculation.status);
-                                const calculationDate = formatDate(calculation.calculation_date);
-
-                                return (
-                                    <TableRow key={calculation.id} className="hover:bg-gray-50 dark:hover:bg-gray-900">
-                                        <TableCell className="font-medium">
-                                            {calculation.payroll_period.name}
-                                        </TableCell>
-                                        <TableCell>
-                                            <span className="text-sm text-gray-600 dark:text-gray-400">
-                                                {getCalculationTypeLabel(calculation.calculation_type)}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <Progress value={calculation.progress_percentage} className="w-24" />
-                                                    <span className="text-xs text-gray-500">
-                                                        {calculation.progress_percentage}%
-                                                    </span>
-                                                </div>
-                                                <span className="text-xs text-gray-500">
-                                                    {calculation.processed_employees}/{calculation.total_employees} processed
-                                                </span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-1">
-                                                <Users className="h-4 w-4 text-gray-400" />
-                                                <span className="text-sm">{calculation.total_employees}</span>
-                                                {calculation.failed_employees > 0 && (
-                                                    <span className="text-xs text-red-600">
-                                                        ({calculation.failed_employees} failed)
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-1">
-                                                <DollarSign className="h-4 w-4 text-gray-400" />
-                                                <span className="text-sm font-medium">
-                                                    {formatCurrency(calculation.total_net_pay)}
-                                                </span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant={statusConfig.variant} className="flex items-center gap-1 w-fit">
-                                                {statusConfig.icon}
-                                                {statusConfig.label}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <span className="text-sm text-gray-600 dark:text-gray-400">
-                                                {calculationDate}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        disabled={isLoading}
-                                                    >
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" className="w-48">
-                                                    {availableActions.includes('view') && (
-                                                        <DropdownMenuItem
-                                                            onClick={() => onViewDetails?.(calculation)}
-                                                            disabled={isLoading}
-                                                        >
-                                                            <Eye className="h-4 w-4 mr-2" />
-                                                            View Details
-                                                        </DropdownMenuItem>
-                                                    )}
-
-                                                    {availableActions.includes('recalculate') && (
-                                                        <>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem
-                                                                onClick={() => onRecalculate?.(calculation)}
-                                                                disabled={isLoading}
-                                                                className="text-blue-600 dark:text-blue-400"
-                                                            >
-                                                                <RefreshCw className="h-4 w-4 mr-2" />
-                                                                Recalculate
-                                                            </DropdownMenuItem>
-                                                        </>
-                                                    )}
-
-                                                    {availableActions.includes('approve') && (
-                                                        <>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem
-                                                                onClick={() => onApprove?.(calculation)}
-                                                                disabled={isLoading}
-                                                                className="text-green-600 dark:text-green-400"
-                                                            >
-                                                                <CheckCircle className="h-4 w-4 mr-2" />
-                                                                Approve
-                                                            </DropdownMenuItem>
-                                                        </>
-                                                    )}
-
-                                                    {availableActions.includes('cancel') && (
-                                                        <>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem
-                                                                onClick={() => onCancel?.(calculation)}
-                                                                disabled={isLoading}
-                                                                className="text-red-600 dark:text-red-400"
-                                                            >
-                                                                <XCircle className="h-4 w-4 mr-2" />
-                                                                Cancel
-                                                            </DropdownMenuItem>
-                                                        </>
-                                                    )}
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
+                            {calculations.map((calculation) => (
+                                <CalculationRow
+                                    key={calculation.id}
+                                    calculation={calculation}
+                                    onViewDetails={onViewDetails}
+                                    onRecalculate={onRecalculate}
+                                    onApprove={onApprove}
+                                    onCancel={onCancel}
+                                    isLoading={isLoading}
+                                />
+                            ))}
                         </TableBody>
                     </Table>
                 </div>

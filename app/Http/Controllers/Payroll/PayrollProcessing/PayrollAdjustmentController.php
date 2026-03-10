@@ -3,7 +3,12 @@
 namespace App\Http\Controllers\Payroll\PayrollProcessing;
 
 use App\Http\Controllers\Controller;
+use App\Models\Employee;
+use App\Models\PayrollAdjustment;
+use App\Models\PayrollPeriod;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use Illuminate\Http\RedirectResponse;
@@ -15,217 +20,67 @@ class PayrollAdjustmentController extends Controller
      */
     public function index(Request $request): Response
     {
-        // Mock data for available periods
-        $availablePeriods = [
-            [
-                'id' => 1,
-                'name' => 'November 1-15, 2025 (Semi-Monthly)',
-                'period_type' => 'semi-monthly',
-                'start_date' => '2025-11-01',
-                'end_date' => '2025-11-15',
-                'payment_date' => '2025-11-20',
-                'status' => 'open',
-            ],
-            [
-                'id' => 2,
-                'name' => 'November 16-30, 2025 (Semi-Monthly)',
-                'period_type' => 'semi-monthly',
-                'start_date' => '2025-11-16',
-                'end_date' => '2025-11-30',
-                'payment_date' => '2025-12-05',
-                'status' => 'draft',
-            ],
-        ];
+        // Get available periods from database
+        $availablePeriods = PayrollPeriod::orderByDesc('period_start')
+            ->get(['id', 'period_number', 'period_type', 'period_start', 'period_end', 'payment_date', 'status'])
+            ->map(fn($p) => [
+                'id'           => $p->id,
+                'name'         => $p->period_number . ' (' . $p->period_start?->format('M d') . '–' . $p->period_end?->format('M d, Y') . ')',
+                'period_type'  => $p->period_type,
+                'start_date'   => $p->period_start?->toDateString(),
+                'end_date'     => $p->period_end?->toDateString(),
+                'payment_date' => $p->payment_date?->toDateString(),
+                'status'       => $p->status,
+            ])
+            ->values()
+            ->all();
 
-        // Mock data for available employees
-        $availableEmployees = [
-            [
-                'id' => 1,
-                'name' => 'Juan Dela Cruz',
-                'employee_number' => 'EMP-2024-001',
-                'department' => 'Mining Operations',
-            ],
-            [
-                'id' => 2,
-                'name' => 'Maria Santos',
-                'employee_number' => 'EMP-2024-002',
-                'department' => 'Engineering',
-            ],
-            [
-                'id' => 3,
-                'name' => 'Pedro Rodriguez',
-                'employee_number' => 'EMP-2024-003',
-                'department' => 'Maintenance',
-            ],
-            [
-                'id' => 4,
-                'name' => 'Ana Reyes',
-                'employee_number' => 'EMP-2024-004',
-                'department' => 'Human Resources',
-            ],
-            [
-                'id' => 5,
-                'name' => 'Carlos Garcia',
-                'employee_number' => 'EMP-2024-005',
-                'department' => 'Finance',
-            ],
-        ];
+        // Get available employees from database
+        $availableEmployees = Employee::with(['profile:id,first_name,last_name', 'department:id,name'])
+            ->orderBy('employee_number')
+            ->get()
+            ->map(fn($e) => [
+                'id'              => $e->id,
+                'name'            => ($e->profile->first_name ?? '') . ' ' . ($e->profile->last_name ?? ''),
+                'employee_number' => $e->employee_number,
+                'department'      => $e->department->name ?? 'N/A',
+            ])
+            ->values()
+            ->all();
 
-        // Mock data for payroll adjustments
-        $adjustments = [
-            [
-                'id' => 1,
-                'payroll_period_id' => 1,
-                'payroll_period' => $availablePeriods[0],
-                'employee_id' => 1,
-                'employee_name' => 'Juan Dela Cruz',
-                'employee_number' => 'EMP-2024-001',
-                'department' => 'Mining Operations',
-                'position' => 'Senior Miner',
-                'adjustment_type' => 'correction',
-                'adjustment_category' => 'Overtime Correction',
-                'amount' => 5000.00,
-                'reason' => 'Additional 10 hours of overtime not captured in original timesheet for November 5-7, 2025. Approved by Operations Manager.',
-                'reference_number' => 'ADJ-2025-001',
-                'status' => 'pending',
-                'requested_by' => 'HR Admin',
-                'requested_at' => '2025-11-10 09:30:00',
-                'reviewed_by' => null,
-                'reviewed_at' => null,
-                'review_notes' => null,
-                'applied_at' => null,
-            ],
-            [
-                'id' => 2,
-                'payroll_period_id' => 1,
-                'payroll_period' => $availablePeriods[0],
-                'employee_id' => 2,
-                'employee_name' => 'Maria Santos',
-                'employee_number' => 'EMP-2024-002',
-                'department' => 'Engineering',
-                'position' => 'Lead Engineer',
-                'adjustment_type' => 'refund',
-                'adjustment_category' => 'Tax Refund',
-                'amount' => 2500.00,
-                'reason' => 'Excess withholding tax refund for Q3 2025 as per BIR computation. Tax certificate attached.',
-                'reference_number' => 'TAX-REF-2025-045',
-                'status' => 'approved',
-                'requested_by' => 'Finance Team',
-                'requested_at' => '2025-11-08 14:20:00',
-                'reviewed_by' => 'Finance Manager',
-                'reviewed_at' => '2025-11-09 10:15:00',
-                'review_notes' => 'Verified against BIR Form 1604C. Approved for processing.',
-                'applied_at' => null,
-            ],
-            [
-                'id' => 3,
-                'payroll_period_id' => 1,
-                'payroll_period' => $availablePeriods[0],
-                'employee_id' => 3,
-                'employee_name' => 'Pedro Rodriguez',
-                'employee_number' => 'EMP-2024-003',
-                'department' => 'Maintenance',
-                'position' => 'Maintenance Technician',
-                'adjustment_type' => 'earning',
-                'adjustment_category' => 'Performance Bonus',
-                'amount' => 10000.00,
-                'reason' => 'Q4 2025 performance bonus for exceeding safety and efficiency targets. Approved by Department Head.',
-                'reference_number' => 'BONUS-2025-Q4-003',
-                'status' => 'rejected',
-                'requested_by' => 'Department Head',
-                'requested_at' => '2025-11-07 11:45:00',
-                'reviewed_by' => 'Payroll Manager',
-                'reviewed_at' => '2025-11-08 08:30:00',
-                'review_notes' => 'Bonus payout scheduled for December period per company policy. Please resubmit for Dec 1-15 period.',
-                'applied_at' => null,
-            ],
-            [
-                'id' => 4,
-                'payroll_period_id' => 1,
-                'payroll_period' => $availablePeriods[0],
-                'employee_id' => 4,
-                'employee_name' => 'Ana Reyes',
-                'employee_number' => 'EMP-2024-004',
-                'department' => 'Human Resources',
-                'position' => 'HR Specialist',
-                'adjustment_type' => 'deduction',
-                'adjustment_category' => 'Loan Deduction Correction',
-                'amount' => 3000.00,
-                'reason' => 'Missed loan installment deduction from October payroll. Catching up on scheduled payment.',
-                'reference_number' => 'LOAN-COR-2025-018',
-                'status' => 'applied',
-                'requested_by' => 'Payroll Team',
-                'requested_at' => '2025-11-05 13:00:00',
-                'reviewed_by' => 'Payroll Manager',
-                'reviewed_at' => '2025-11-06 09:00:00',
-                'review_notes' => 'Verified loan schedule. Approved for immediate deduction.',
-                'applied_at' => '2025-11-10 16:30:00',
-            ],
-            [
-                'id' => 5,
-                'payroll_period_id' => 1,
-                'payroll_period' => $availablePeriods[0],
-                'employee_id' => 5,
-                'employee_name' => 'Carlos Garcia',
-                'employee_number' => 'EMP-2024-005',
-                'department' => 'Finance',
-                'position' => 'Financial Analyst',
-                'adjustment_type' => 'backpay',
-                'adjustment_category' => 'Salary Increase Retroactive',
-                'amount' => 15000.00,
-                'reason' => 'Retroactive salary increase effective October 1, 2025. Covering October 1-31 differential (₱7,500/mo × 2 months).',
-                'reference_number' => 'SAL-ADJ-2025-012',
-                'status' => 'pending',
-                'requested_by' => 'HR Manager',
-                'requested_at' => '2025-11-09 10:00:00',
-                'reviewed_by' => null,
-                'reviewed_at' => null,
-                'review_notes' => null,
-                'applied_at' => null,
-            ],
-        ];
+        // Build query for adjustments
+        $query = PayrollAdjustment::with(['payrollPeriod:id,period_name,period_start,period_end,payment_date,status', 'employee.profile:id,first_name,last_name', 'employee.department:id,name', 'employee.position:id,title'])
+            ->orderByDesc('created_at');
 
         // Apply filters
-        $periodId = $request->input('period_id');
-        $employeeId = $request->input('employee_id');
-        $status = $request->input('status');
-        $adjustmentType = $request->input('adjustment_type');
-
-        $filteredAdjustments = collect($adjustments);
-
-        if ($periodId) {
-            $filteredAdjustments = $filteredAdjustments->filter(function ($adjustment) use ($periodId) {
-                return $adjustment['payroll_period_id'] == $periodId;
-            });
+        if ($request->filled('period_id')) {
+            $query->byPeriod($request->input('period_id'));
         }
 
-        if ($employeeId) {
-            $filteredAdjustments = $filteredAdjustments->filter(function ($adjustment) use ($employeeId) {
-                return $adjustment['employee_id'] == $employeeId;
-            });
+        if ($request->filled('employee_id')) {
+            $query->byEmployee($request->input('employee_id'));
         }
 
-        if ($status) {
-            $filteredAdjustments = $filteredAdjustments->filter(function ($adjustment) use ($status) {
-                return $adjustment['status'] === $status;
-            });
+        if ($request->filled('status')) {
+            $query->byStatus($request->input('status'));
         }
 
-        if ($adjustmentType) {
-            $filteredAdjustments = $filteredAdjustments->filter(function ($adjustment) use ($adjustmentType) {
-                return $adjustment['adjustment_type'] === $adjustmentType;
-            });
+        if ($request->filled('adjustment_type')) {
+            $query->byType($request->input('adjustment_type'));
         }
+
+        // Get adjustments
+        $adjustments = $query->get()->map(fn($adj) => $this->transformAdjustment($adj))->values()->all();
 
         return Inertia::render('Payroll/PayrollProcessing/Adjustments/Index', [
-            'adjustments' => $filteredAdjustments->values()->all(),
-            'available_periods' => $availablePeriods,
+            'adjustments'         => $adjustments,
+            'available_periods'   => $availablePeriods,
             'available_employees' => $availableEmployees,
-            'filters' => [
-                'period_id' => $periodId ? (int)$periodId : null,
-                'employee_id' => $employeeId ? (int)$employeeId : null,
-                'status' => $status,
-                'adjustment_type' => $adjustmentType,
+            'filters'             => [
+                'period_id'       => $request->input('period_id') ? (int) $request->input('period_id') : null,
+                'employee_id'     => $request->input('employee_id') ? (int) $request->input('employee_id') : null,
+                'status'          => $request->input('status'),
+                'adjustment_type' => $request->input('adjustment_type'),
             ],
         ]);
     }
@@ -236,19 +91,38 @@ class PayrollAdjustmentController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'payroll_period_id' => 'required|integer',
-            'employee_id' => 'required|integer',
-            'adjustment_type' => 'required|in:earning,deduction,correction,backpay,refund',
-            'adjustment_category' => 'required|string|max:255',
-            'amount' => 'required|numeric|min:0.01',
-            'reason' => 'required|string',
-            'reference_number' => 'nullable|string|max:255',
+            'payroll_period_id'   => 'required|integer|exists:payroll_periods,id',
+            'employee_id'         => 'required|integer|exists:employees,id',
+            'adjustment_type'     => 'required|in:earning,deduction,correction,backpay,refund',
+            'adjustment_category' => 'required|string|max:100',
+            'component'           => 'nullable|string|max:255',
+            'amount'              => 'required|numeric|min:0.01|max:999999.99',
+            'reason'              => 'required|string|max:200',
+            'reference_number'    => 'nullable|string|max:100',
         ]);
 
-        // In a real app, save to database
-        // For now, just simulate success
+        try {
+            PayrollAdjustment::create([
+                'payroll_period_id' => $validated['payroll_period_id'],
+                'employee_id'       => $validated['employee_id'],
+                'adjustment_type'   => $validated['adjustment_type'],
+                'category'          => $validated['adjustment_category'], // map field name
+                'component'         => $validated['component'] ?? null,
+                'amount'            => $validated['amount'],
+                'reason'            => $validated['reason'],
+                'reference_number'  => $validated['reference_number'] ?? null,
+                'status'            => 'pending',
+                'submitted_at'      => now(),
+                'created_by'        => auth()->id(),
+            ]);
 
-        return redirect()->back()->with('success', 'Payroll adjustment created successfully');
+            return redirect()->back()->with('success', 'Payroll adjustment created successfully');
+        } catch (\Exception $e) {
+            Log::error('Failed to create payroll adjustment', ['error' => $e->getMessage()]);
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Failed to create adjustment: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -256,21 +130,21 @@ class PayrollAdjustmentController extends Controller
      */
     public function show(int $id): Response
     {
-        // Mock data - in real app, fetch from database
-        $adjustment = [
-            'id' => $id,
-            'payroll_period_id' => 1,
-            'employee_id' => 1,
-            'employee_name' => 'Juan Dela Cruz',
-            'adjustment_type' => 'correction',
-            'adjustment_category' => 'Overtime Correction',
-            'amount' => 5000.00,
-            'reason' => 'Additional overtime not captured in original timesheet',
-            'status' => 'pending',
-        ];
+        $adjustment = PayrollAdjustment::with(['payrollPeriod', 'employee.profile', 'approvedByUser', 'rejectedByUser'])
+            ->findOrFail($id);
 
         return Inertia::render('Payroll/PayrollProcessing/Adjustments/Show', [
-            'adjustment' => $adjustment,
+            'adjustment' => [
+                'id'                  => $adjustment->id,
+                'payroll_period_id'   => $adjustment->payroll_period_id,
+                'employee_id'         => $adjustment->employee_id,
+                'employee_name'       => $adjustment->employee && $adjustment->employee->profile ? (($adjustment->employee->profile->first_name ?? '') . ' ' . ($adjustment->employee->profile->last_name ?? '')) : 'N/A',
+                'adjustment_type'     => $adjustment->adjustment_type,
+                'adjustment_category' => $adjustment->category,
+                'amount'              => (float) $adjustment->amount,
+                'reason'              => $adjustment->reason,
+                'status'              => $adjustment->status,
+            ],
         ]);
     }
 
@@ -280,19 +154,42 @@ class PayrollAdjustmentController extends Controller
     public function update(Request $request, int $id): RedirectResponse
     {
         $validated = $request->validate([
-            'payroll_period_id' => 'required|integer',
-            'employee_id' => 'required|integer',
-            'adjustment_type' => 'required|in:earning,deduction,correction,backpay,refund',
-            'adjustment_category' => 'required|string|max:255',
-            'amount' => 'required|numeric|min:0.01',
-            'reason' => 'required|string',
-            'reference_number' => 'nullable|string|max:255',
+            'payroll_period_id'   => 'required|integer|exists:payroll_periods,id',
+            'employee_id'         => 'required|integer|exists:employees,id',
+            'adjustment_type'     => 'required|in:earning,deduction,correction,backpay,refund',
+            'adjustment_category' => 'required|string|max:100',
+            'component'           => 'nullable|string|max:255',
+            'amount'              => 'required|numeric|min:0.01|max:999999.99',
+            'reason'              => 'required|string|max:200',
+            'reference_number'    => 'nullable|string|max:100',
         ]);
 
-        // In a real app, update database
-        // For now, just simulate success
+        try {
+            $adjustment = PayrollAdjustment::findOrFail($id);
 
-        return redirect()->back()->with('success', 'Payroll adjustment updated successfully');
+            if ($adjustment->status !== 'pending') {
+                return redirect()->back()
+                    ->with('error', 'Only pending adjustments can be edited.');
+            }
+
+            $adjustment->update([
+                'payroll_period_id' => $validated['payroll_period_id'],
+                'employee_id'       => $validated['employee_id'],
+                'adjustment_type'   => $validated['adjustment_type'],
+                'category'          => $validated['adjustment_category'], // map field name
+                'component'         => $validated['component'] ?? null,
+                'amount'            => $validated['amount'],
+                'reason'            => $validated['reason'],
+                'reference_number'  => $validated['reference_number'] ?? null,
+            ]);
+
+            return redirect()->back()->with('success', 'Payroll adjustment updated successfully');
+        } catch (\Exception $e) {
+            Log::error('Failed to update payroll adjustment', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Failed to update adjustment: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -300,10 +197,22 @@ class PayrollAdjustmentController extends Controller
      */
     public function destroy(int $id): RedirectResponse
     {
-        // In a real app, delete from database
-        // For now, just simulate success
+        try {
+            $adjustment = PayrollAdjustment::findOrFail($id);
 
-        return redirect()->back()->with('success', 'Payroll adjustment deleted successfully');
+            if (!in_array($adjustment->status, ['pending', 'rejected'])) {
+                return redirect()->back()
+                    ->with('error', 'Only pending or rejected adjustments can be deleted.');
+            }
+
+            $adjustment->delete();
+
+            return redirect()->back()->with('success', 'Payroll adjustment deleted successfully');
+        } catch (\Exception $e) {
+            Log::error('Failed to delete payroll adjustment', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', 'Failed to delete adjustment: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -311,10 +220,26 @@ class PayrollAdjustmentController extends Controller
      */
     public function approve(int $id): RedirectResponse
     {
-        // In a real app, update status to 'approved' in database
-        // For now, just simulate success
+        try {
+            $adjustment = PayrollAdjustment::findOrFail($id);
 
-        return redirect()->back()->with('success', 'Payroll adjustment approved successfully');
+            if ($adjustment->status !== 'pending') {
+                return redirect()->back()
+                    ->with('error', 'Adjustment is not in pending status.');
+            }
+
+            $adjustment->update([
+                'status'      => 'approved',
+                'approved_by' => auth()->id(),
+                'approved_at' => now(),
+            ]);
+
+            return redirect()->back()->with('success', 'Payroll adjustment approved successfully');
+        } catch (\Exception $e) {
+            Log::error('Failed to approve payroll adjustment', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', $e->getMessage());
+        }
     }
 
     /**
@@ -323,13 +248,31 @@ class PayrollAdjustmentController extends Controller
     public function reject(Request $request, int $id): RedirectResponse
     {
         $validated = $request->validate([
-            'rejection_notes' => 'required|string',
+            'rejection_notes' => 'required|string|max:500',
         ]);
 
-        // In a real app, update status to 'rejected' and save notes in database
-        // For now, just simulate success
+        try {
+            $adjustment = PayrollAdjustment::findOrFail($id);
 
-        return redirect()->back()->with('success', 'Payroll adjustment rejected');
+            if ($adjustment->status !== 'pending') {
+                return redirect()->back()
+                    ->with('error', 'Adjustment is not in pending status.');
+            }
+
+            $adjustment->update([
+                'status'           => 'rejected',
+                'rejected_by'      => auth()->id(),
+                'rejected_at'      => now(),
+                'rejection_reason' => $validated['rejection_notes'],
+                'review_notes'     => $validated['rejection_notes'],
+            ]);
+
+            return redirect()->back()->with('success', 'Payroll adjustment rejected');
+        } catch (\Exception $e) {
+            Log::error('Failed to reject payroll adjustment', ['id' => $id, 'error' => $e->getMessage()]);
+            return redirect()->back()
+                ->with('error', $e->getMessage());
+        }
     }
 
     /**
@@ -337,232 +280,61 @@ class PayrollAdjustmentController extends Controller
      */
     public function history(Request $request, int $employeeId): Response
     {
-        // Mock data for available periods
-        $availablePeriods = [
-            [
-                'id' => 1,
-                'name' => 'November 1-15, 2025 (Semi-Monthly)',
-            ],
-            [
-                'id' => 2,
-                'name' => 'November 16-30, 2025 (Semi-Monthly)',
-            ],
-        ];
+        // Get employee
+        $employee = Employee::with(['profile', 'department', 'position'])->findOrFail($employeeId);
 
-        // Mock employee data
-        $employees = [
-            [
-                'id' => 1,
-                'name' => 'Juan Dela Cruz',
-                'employee_number' => 'EMP-2024-001',
-                'department' => 'Mining Operations',
-                'position' => 'Senior Miner',
-            ],
-            [
-                'id' => 2,
-                'name' => 'Maria Santos',
-                'employee_number' => 'EMP-2024-002',
-                'department' => 'Engineering',
-                'position' => 'Lead Engineer',
-            ],
-            [
-                'id' => 3,
-                'name' => 'Pedro Rodriguez',
-                'employee_number' => 'EMP-2024-003',
-                'department' => 'Maintenance',
-                'position' => 'Maintenance Technician',
-            ],
-            [
-                'id' => 4,
-                'name' => 'Ana Reyes',
-                'employee_number' => 'EMP-2024-004',
-                'department' => 'Human Resources',
-                'position' => 'HR Specialist',
-            ],
-            [
-                'id' => 5,
-                'name' => 'Carlos Garcia',
-                'employee_number' => 'EMP-2024-005',
-                'department' => 'Finance',
-                'position' => 'Financial Analyst',
-            ],
-        ];
+        // Get available periods
+        $availablePeriods = PayrollPeriod::orderByDesc('period_start')
+            ->get(['id', 'period_number', 'period_start', 'period_end'])
+            ->map(fn($p) => [
+                'id'   => $p->id,
+                'name' => $p->period_number . ' (' . $p->period_start?->format('M d') . '–' . $p->period_end?->format('M d, Y') . ')',
+            ])
+            ->values()
+            ->all();
 
-        // Get selected employee
-        $employee = collect($employees)->firstWhere('id', $employeeId);
-        if (!$employee) {
-            abort(404, 'Employee not found');
+        // Build query for adjustments
+        $query = PayrollAdjustment::with(['payrollPeriod', 'approvedByUser', 'rejectedByUser'])
+            ->where('employee_id', $employeeId)
+            ->orderByDesc('created_at');
+
+        // Apply filters
+        if ($request->filled('period_id')) {
+            $query->byPeriod($request->input('period_id'));
         }
 
-        // Mock adjustment history for this employee
-        $allAdjustments = [
-            [
-                'id' => 101,
-                'payroll_period_id' => 1,
-                'payroll_period' => $availablePeriods[0],
-                'employee_id' => 1,
-                'employee_name' => 'Juan Dela Cruz',
-                'employee_number' => 'EMP-2024-001',
-                'department' => 'Mining Operations',
-                'position' => 'Senior Miner',
-                'adjustment_type' => 'correction',
-                'adjustment_category' => 'Overtime Correction',
-                'amount' => 5000.00,
-                'reason' => 'Additional 10 hours of overtime not captured in original timesheet.',
-                'reference_number' => 'ADJ-2025-001',
-                'status' => 'pending',
-                'requested_by' => 'HR Admin',
-                'requested_at' => '2025-11-10 09:30:00',
-                'reviewed_by' => null,
-                'reviewed_at' => null,
-                'review_notes' => null,
-                'applied_at' => null,
-            ],
-            [
-                'id' => 102,
-                'payroll_period_id' => 2,
-                'payroll_period' => $availablePeriods[1],
-                'employee_id' => 1,
-                'employee_name' => 'Juan Dela Cruz',
-                'employee_number' => 'EMP-2024-001',
-                'department' => 'Mining Operations',
-                'position' => 'Senior Miner',
-                'adjustment_type' => 'earning',
-                'adjustment_category' => 'Safety Bonus',
-                'amount' => 2000.00,
-                'reason' => 'Monthly safety excellence award - zero incidents in October 2025.',
-                'reference_number' => 'ADJ-2025-015',
-                'status' => 'approved',
-                'requested_by' => 'Operations Manager',
-                'requested_at' => '2025-11-02 14:00:00',
-                'reviewed_by' => 'Payroll Manager',
-                'reviewed_at' => '2025-11-03 10:30:00',
-                'review_notes' => 'Approved - verified with operations team.',
-                'applied_at' => null,
-            ],
-            [
-                'id' => 103,
-                'payroll_period_id' => 1,
-                'payroll_period' => $availablePeriods[0],
-                'employee_id' => 2,
-                'employee_name' => 'Maria Santos',
-                'employee_number' => 'EMP-2024-002',
-                'department' => 'Engineering',
-                'position' => 'Lead Engineer',
-                'adjustment_type' => 'refund',
-                'adjustment_category' => 'Tax Refund',
-                'amount' => 2500.00,
-                'reason' => 'Excess withholding tax refund for Q3 2025.',
-                'reference_number' => 'TAX-REF-2025-045',
-                'status' => 'applied',
-                'requested_by' => 'Finance Team',
-                'requested_at' => '2025-11-08 14:20:00',
-                'reviewed_by' => 'Finance Manager',
-                'reviewed_at' => '2025-11-09 10:15:00',
-                'review_notes' => 'Verified against BIR Form 1604C. Approved for processing.',
-                'applied_at' => '2025-11-10 16:30:00',
-            ],
-            [
-                'id' => 104,
-                'payroll_period_id' => 2,
-                'payroll_period' => $availablePeriods[1],
-                'employee_id' => 2,
-                'employee_name' => 'Maria Santos',
-                'employee_number' => 'EMP-2024-002',
-                'department' => 'Engineering',
-                'position' => 'Lead Engineer',
-                'adjustment_type' => 'deduction',
-                'adjustment_category' => 'Loan Deduction',
-                'amount' => 1500.00,
-                'reason' => 'Housing loan installment deduction - Account HO-2024-0045.',
-                'reference_number' => 'LOAN-0045',
-                'status' => 'approved',
-                'requested_by' => 'Finance Team',
-                'requested_at' => '2025-11-05 09:00:00',
-                'reviewed_by' => 'Payroll Manager',
-                'reviewed_at' => '2025-11-05 14:30:00',
-                'review_notes' => 'Verified loan schedule and employee consent on file.',
-                'applied_at' => null,
-            ],
-            [
-                'id' => 105,
-                'payroll_period_id' => 1,
-                'payroll_period' => $availablePeriods[0],
-                'employee_id' => 3,
-                'employee_name' => 'Pedro Rodriguez',
-                'employee_number' => 'EMP-2024-003',
-                'department' => 'Maintenance',
-                'position' => 'Maintenance Technician',
-                'adjustment_type' => 'backpay',
-                'adjustment_category' => 'Salary Increase Retroactive',
-                'amount' => 15000.00,
-                'reason' => 'Retroactive salary increase effective October 1, 2025. Covering October differential.',
-                'reference_number' => 'SAL-ADJ-2025-012',
-                'status' => 'rejected',
-                'requested_by' => 'HR Manager',
-                'requested_at' => '2025-11-09 10:00:00',
-                'reviewed_by' => 'Finance Manager',
-                'reviewed_at' => '2025-11-10 09:00:00',
-                'review_notes' => 'Requires CFO approval for retroactive adjustments over ₱10,000. Please resubmit with approval.',
-                'applied_at' => null,
-            ],
-        ];
-
-        // Filter adjustments for the selected employee
-        $adjustments = collect($allAdjustments)
-            ->filter(function ($adj) use ($employeeId) {
-                return $adj['employee_id'] == $employeeId;
-            });
-
-        // Apply additional filters
-        $periodId = $request->input('period_id');
-        $status = $request->input('status');
-        $type = $request->input('type');
-
-        if ($periodId) {
-            $adjustments = $adjustments->filter(function ($adj) use ($periodId) {
-                return $adj['payroll_period_id'] == $periodId;
-            });
+        if ($request->filled('status')) {
+            $query->byStatus($request->input('status'));
         }
 
-        if ($status) {
-            $adjustments = $adjustments->filter(function ($adj) use ($status) {
-                return $adj['status'] === $status;
-            });
+        if ($request->filled('type')) {
+            $query->byType($request->input('type'));
         }
 
-        if ($type) {
-            $adjustments = $adjustments->filter(function ($adj) use ($type) {
-                return $adj['adjustment_type'] === $type;
-            });
-        }
+        // Get adjustments
+        $adjustments = $query->get()->map(fn($adj) => $this->transformAdjustment($adj))->values()->all();
 
         // Calculate summary
-        $allEmployeeAdjustments = collect($allAdjustments)
-            ->filter(function ($adj) use ($employeeId) {
-                return $adj['employee_id'] == $employeeId;
-            });
+        $allAdjustments = PayrollAdjustment::where('employee_id', $employeeId)->get();
 
         $summary = [
-            'total_adjustments' => $allEmployeeAdjustments->count(),
-            'pending_adjustments' => $allEmployeeAdjustments->where('status', 'pending')->count(),
-            'approved_adjustments' => $allEmployeeAdjustments->where('status', 'approved')->count(),
-            'rejected_adjustments' => $allEmployeeAdjustments->where('status', 'rejected')->count(),
-            'total_pending_amount' => $allEmployeeAdjustments
-                ->where('status', 'pending')
-                ->sum('amount'),
+            'total_adjustments'     => $allAdjustments->count(),
+            'pending_adjustments'   => $allAdjustments->where('status', 'pending')->count(),
+            'approved_adjustments'  => $allAdjustments->where('status', 'approved')->count(),
+            'rejected_adjustments'  => $allAdjustments->where('status', 'rejected')->count(),
+            'total_pending_amount'  => $allAdjustments->where('status', 'pending')->sum('amount'),
         ];
 
         return Inertia::render('Payroll/PayrollProcessing/Adjustments/History', [
-            'employee_id' => $employee['id'],
-            'employee_name' => $employee['name'],
-            'employee_number' => $employee['employee_number'],
-            'department' => $employee['department'],
-            'position' => $employee['position'],
-            'adjustments' => $adjustments->values()->all(),
-            'summary' => $summary,
-            'available_periods' => $availablePeriods,
-            'available_statuses' => [
+            'employee_id'          => $employee->id,
+            'employee_name'        => ($employee->profile->first_name ?? '') . ' ' . ($employee->profile->last_name ?? ''),
+            'employee_number'      => $employee->employee_number,
+            'department'           => $employee->department->name ?? 'N/A',
+            'position'             => $employee->position->title ?? 'N/A',
+            'adjustments'          => $adjustments,
+            'summary'              => $summary,
+            'available_periods'    => $availablePeriods,
+            'available_statuses'   => [
                 ['value' => 'pending', 'label' => 'Pending'],
                 ['value' => 'approved', 'label' => 'Approved'],
                 ['value' => 'rejected', 'label' => 'Rejected'],
@@ -570,5 +342,47 @@ class PayrollAdjustmentController extends Controller
                 ['value' => 'cancelled', 'label' => 'Cancelled'],
             ],
         ]);
+    }
+
+    /**
+     * Transform PayrollAdjustment model to array for frontend
+     */
+    private function transformAdjustment(PayrollAdjustment $adj): array
+    {
+        $reviewedBy = $adj->approvedBy?->name ?? $adj->rejectedBy?->name;
+        $reviewedAt = $adj->approved_at ?? $adj->rejected_at;
+
+        return [
+            'id'                  => $adj->id,
+            'payroll_period_id'   => $adj->payroll_period_id,
+            'payroll_period'      => [
+                'id'           => $adj->payrollPeriod->id,
+                'name'         => $adj->payrollPeriod->period_number . ' (' . $adj->payrollPeriod->period_start?->format('M d') . '–' . $adj->payrollPeriod->period_end?->format('M d, Y') . ')',
+                'start_date'   => $adj->payrollPeriod->period_start?->toDateString(),
+                'end_date'     => $adj->payrollPeriod->period_end?->toDateString(),
+                'payment_date' => $adj->payrollPeriod->payment_date?->toDateString(),
+                'status'       => $adj->payrollPeriod->status,
+            ],
+            'employee_id'         => $adj->employee_id,
+            'employee_name'       => $adj->employee?->profile?->full_name
+                                        ?? $adj->employee?->user?->name ?? 'Unknown',
+            'employee_number'     => $adj->employee?->employee_number ?? '',
+            'department'          => $adj->employee?->department?->name ?? '',
+            'position'            => $adj->employee?->position?->title ?? '',
+            'adjustment_type'     => $adj->adjustment_type,
+            'adjustment_category' => $adj->category, // DB col 'category' → frontend 'adjustment_category'
+            'amount'              => (float) $adj->amount,
+            'reason'              => $adj->reason,
+            'reference_number'    => $adj->reference_number,
+            'status'              => $adj->status,
+            'requested_by'        => $adj->createdBy?->name ?? 'System',
+            'requested_at'        => ($adj->submitted_at ?? $adj->created_at)?->toIso8601String(),
+            'reviewed_by'         => $reviewedBy,
+            'reviewed_at'         => $reviewedAt?->toIso8601String(),
+            'review_notes'        => $adj->review_notes ?? $adj->rejection_reason,
+            'applied_at'          => $adj->applied_at?->toIso8601String(),
+            'created_at'          => $adj->created_at->toIso8601String(),
+            'updated_at'          => $adj->updated_at->toIso8601String(),
+        ];
     }
 }

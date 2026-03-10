@@ -4,10 +4,16 @@ namespace App\Http\Controllers\HR\Leave;
 
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
-// LeaveBalance model will be implemented later as part of balances feature
 use App\Models\LeaveRequest;
 use App\Models\LeaveBalance;
 use App\Models\LeavePolicy;
+use App\Services\HR\Leave\LeaveApprovalService;
+use App\Services\HR\Leave\LeaveBalanceService;
+use App\Services\LeaveAccrualService;
+use App\Events\HR\Leave\LeaveRequestSubmitted;
+use App\Events\HR\Leave\LeaveRequestApproved;
+use App\Events\HR\Leave\LeaveRequestRejected;
+use App\Events\HR\Leave\LeaveRequestCancelled;
 use Illuminate\Http\Request;
 use App\Http\Requests\HR\Leave\StoreLeaveRequestRequest;
 use App\Http\Requests\HR\Leave\UpdateLeaveRequestRequest;
@@ -64,6 +70,15 @@ use Illuminate\Http\RedirectResponse;
  */
 class LeaveRequestController extends Controller
 {
+    /**
+     * Constructor with service dependency injection
+     */
+    public function __construct(
+        protected LeaveApprovalService $approvalService,
+        protected LeaveBalanceService $balanceService,
+        protected LeaveAccrualService $accrualService
+    ) {}
+
     /**
      * Display a listing of leave requests with filters.
      *
@@ -352,13 +367,28 @@ class LeaveRequestController extends Controller
         // Persist to database
         $leaveRequest = LeaveRequest::create($leaveRequestData);
 
-        // STEP 5: Send notification to supervisor
-        // Supervisor receives notification to review and approve/reject request
-        // Example: Mail::send(new LeaveRequestSubmittedNotification($employee, $leaveRequest));
+        // STEP 5: Determine approval route using the new service
+        $route = $this->approvalService->determineApprovalRoute($leaveRequest);
+
+        // STEP 6: Check if can auto-approve
+        if ($route['route'] === 'auto') {
+            $autoApprovalResult = $this->approvalService->processAutoApproval($leaveRequest);
+            
+            if ($autoApprovalResult) {
+                // Dispatch auto-approval event
+                event(new LeaveRequestApproved($leaveRequest->fresh(), 'auto'));
+                
+                return redirect()->route('hr.leave.requests')
+                    ->with('success', "Leave request for {$employee->profile->first_name} {$employee->profile->last_name} has been auto-approved successfully!");
+            }
+        }
+
+        // STEP 7: Not auto-approved - dispatch submitted event
+        event(new LeaveRequestSubmitted($leaveRequest, $route));
 
         // Always redirect to the leave requests list after filing
         return redirect()->route('hr.leave.requests')
-            ->with('success', "Leave request for {$employee->profile->first_name} {$employee->profile->last_name} has been submitted successfully. Awaiting supervisor approval.");
+            ->with('success', "Leave request for {$employee->profile->first_name} {$employee->profile->last_name} has been submitted successfully. {$route['message']}");
     }
 
     /**
@@ -410,112 +440,147 @@ class LeaveRequestController extends Controller
     }
 
     /**
-     * Process supervisor or manager approval/rejection of a leave request.
+     * Process approval/rejection of a leave request.
      *
-     * SUPERVISOR APPROVAL (First Level):
-     * When supervisor approves: Request moves to HR Manager for final approval
-     * When supervisor rejects: Request is marked rejected, employee notified via HR
+     * NEW WORKFLOW (with self-approval prevention and duration-based routing):
+     * - Checks if user can approve (prevents self-approval)
+     * - For 6+ days: HR Manager gives conditional approval, Office Admin gives final
+     * - For 3-5 days: HR Manager gives full approval (or Office Admin if requestor is HR Manager)
+     * - Deducts balance using LeaveBalanceService
+     * - Dispatches approval/rejection events
      *
-     * HR MANAGER APPROVAL (Final Level):
-     * When manager approves: Request is approved, HR staff can now process it
-     * When manager rejects: Request is marked rejected, employee notified via HR
-     *
-     * @param Request $request Contains:
-     *        - leave_request_id: The request being approved
-     *        - action: 'approve' or 'reject'
-     *        - approval_comments: Comments from approver
-     *        - status: Updated status based on approval
-     *
-     * @return RedirectResponse Redirects with success/error message
+     * @param UpdateLeaveRequestRequest $request
+     * @param int $id Leave request ID
+     * @return RedirectResponse
      */
     public function update(UpdateLeaveRequestRequest $request, int $id): RedirectResponse
     {
-        // Validate approval action
-        $validated = $request->validate([
-            'action' => 'required|in:approve,reject',
-            'approval_comments' => 'nullable|string|max:1000',
-        ]);
+        $validated = $request->validated();
+        $action = $validated['action'] ?? 'approve'; // 'approve', 'reject', 'cancel'
+        
+        $leaveRequest = LeaveRequest::with(['employee.user', 'leavePolicy'])->findOrFail($id);
+        $user = auth()->user();
 
-        $leaveRequest = LeaveRequest::findOrFail($id);
+        // Determine user's primary role for approval
+        $role = null;
+        if ($user->hasRole('Office Admin')) {
+            $role = 'Office Admin';
+        } elseif ($user->hasRole('HR Manager')) {
+            $role = 'HR Manager';
+        }
 
-        if ($validated['action'] === 'approve') {
-            // If supervisor approving
-            if ($leaveRequest->supervisor_id && auth()->id() === optional(auth()->user())->id) {
-                // In this simplified implementation we don't have the supervisor user vs employee check.
-            }
-
-            // If supervisor approval: set supervisor_approved_at and comments
-            if (!$leaveRequest->supervisor_approved_at && auth()->id()) {
-                $leaveRequest->supervisor_approved_at = now();
-                $leaveRequest->supervisor_comments = $validated['approval_comments'] ?? null;
-                // keep status pending until manager approves
-            } else {
-                // Manager approval -> mark approved
-                $wasManagerAlreadyApproved = $leaveRequest->manager_approved_at !== null;
-                $leaveRequest->manager_id = auth()->id();
-                $leaveRequest->manager_approved_at = now();
-                $leaveRequest->manager_comments = $validated['approval_comments'] ?? null;
-                $leaveRequest->status = 'approved';
-
-                // Only deduct from balance the first time manager approves
-                if (!$wasManagerAlreadyApproved) {
-                    try {
-                        $policyId = $leaveRequest->leave_policy_id;
-                        $employeeId = $leaveRequest->employee_id;
-                        $year = \Carbon\Carbon::parse($leaveRequest->start_date)->year;
-
-                        $policy = $leaveRequest->leavePolicy;
-
-                        // Find existing balance for the year and policy
-                        $balance = LeaveBalance::firstWhere([
-                            'employee_id' => $employeeId,
-                            'leave_policy_id' => $policyId,
-                            'year' => $year,
-                        ]);
-
-                        if (!$balance) {
-                            $earned = $policy?->annual_entitlement ? (float) $policy->annual_entitlement : 0.0;
-                            $balance = LeaveBalance::create([
-                                'employee_id' => $employeeId,
-                                'leave_policy_id' => $policyId,
-                                'year' => $year,
-                                'earned' => $earned,
-                                'used' => 0.0,
-                                'remaining' => $earned,
-                                'carried_forward' => 0.0,
-                            ]);
-                        }
-
-                        // Deduct requested days
-                        $days = (float) $leaveRequest->days_requested;
-                        $balance->used = (float) $balance->used + $days;
-                        $balance->remaining = (float) $balance->earned - (float) $balance->used;
-                        $balance->save();
-                    } catch (\Exception $e) {
-                        // don't block approval on balance failure — log and continue
-                        logger()->error('Failed to update leave balance on approval: ' . $e->getMessage());
-                    }
-                }
-            }
-        } else {
-            // Reject (supervisor or manager): set rejection details and status
-            $leaveRequest->status = 'rejected';
-            // Record appropriate comments
-            if (!$leaveRequest->supervisor_approved_at) {
-                $leaveRequest->supervisor_comments = $validated['approval_comments'] ?? null;
-                $leaveRequest->supervisor_approved_at = null;
-            } else {
-                $leaveRequest->manager_comments = $validated['approval_comments'] ?? null;
-                $leaveRequest->manager_approved_at = null;
+        // Check if user can approve this request (prevents self-approval)
+        if ($action === 'approve' && $role) {
+            $canApprove = $this->approvalService->canUserApprove($leaveRequest, $user->id, $role);
+            
+            if (!$canApprove) {
+                return back()->with('error', 'You cannot approve this leave request.');
             }
         }
 
-        $leaveRequest->save();
-        // 
-        // // Notify HR staff of approval decision
-        // // HR staff will then notify employee of result
+        if ($action === 'approve') {
+            $days = $leaveRequest->days_requested;
+            
+            // Check if HR Manager approving 6+ day leave (conditional approval)
+            if ($days >= 6 && $user->hasRole('HR Manager')) {
+                $leaveRequest->update([
+                    'approved_by_manager_id' => $user->id,
+                    'manager_approved_at' => now(),
+                    // Status remains 'pending' until Office Admin approves
+                ]);
+                
+                return back()->with('success', 'Leave request conditionally approved. Forwarded to Office Admin for final approval.');
+            }
+            
+            // Office Admin approval (or HR Manager for 3-5 days)
+            $updateData = [
+                'status' => 'approved',
+                'approved_at' => now(),
+            ];
+            
+            if ($user->hasRole('HR Manager')) {
+                $updateData['approved_by_manager_id'] = $user->id;
+                $updateData['manager_approved_at'] = now();
+            } elseif ($user->hasRole('Office Admin')) {
+                $updateData['approved_by_admin_id'] = $user->id;
+                $updateData['admin_approved_at'] = now();
+            }
+            
+            $leaveRequest->update($updateData);
+            
+            // Deduct balance using LeaveAccrualService
+            try {
+                $startDate = \Carbon\Carbon::parse($leaveRequest->start_date);
+                $duration = $startDate->diffInDays(\Carbon\Carbon::parse($leaveRequest->end_date)) + 1;
+                
+                $this->accrualService->deductLeave(
+                    $leaveRequest->employee,
+                    $leaveRequest->leavePolicy,
+                    $duration,
+                    $startDate
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Leave balance deduction failed', [
+                    'leave_request_id' => $leaveRequest->id,
+                    'error' => $e->getMessage(),
+                ]);
+                return back()->with('error', 'Failed to deduct leave balance: ' . $e->getMessage());
+            }
+            
+            // Dispatch event
+            event(new LeaveRequestApproved($leaveRequest->fresh(), $user->hasRole('HR Manager') ? 'manager' : 'admin'));
+            
+            return back()->with('success', 'Leave request approved successfully! Leave balance has been deducted.');
+        }
+        
+        if ($action === 'reject') {
+            $leaveRequest->update([
+                'status' => 'rejected',
+                'rejected_at' => now(),
+                'rejection_reason' => $validated['reason'] ?? null,
+            ]);
+            
+            // Dispatch event
+            event(new LeaveRequestRejected($leaveRequest->fresh(), $user, $validated['reason'] ?? null));
+            
+            return back()->with('success', 'Leave request rejected.');
+        }
+        
+        if ($action === 'cancel') {
+            // Restore balance if leave was already approved and deducted
+            if ($leaveRequest->status === 'approved') {
+                try {
+                    $startDate = \Carbon\Carbon::parse($leaveRequest->start_date);
+                    $duration = $startDate->diffInDays(\Carbon\Carbon::parse($leaveRequest->end_date)) + 1;
+                    
+                    $this->accrualService->restoreLeave(
+                        $leaveRequest->employee,
+                        $leaveRequest->leavePolicy,
+                        $duration,
+                        $startDate
+                    );
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Leave balance restoration failed', [
+                        'leave_request_id' => $leaveRequest->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    return back()->with('error', 'Failed to restore leave balance: ' . $e->getMessage());
+                }
+            }
+            
+            $leaveRequest->update([
+                'status' => 'cancelled',
+                'cancelled_at' => now(),
+                'cancellation_reason' => $validated['reason'] ?? null,
+            ]);
+            
+            // Dispatch event
+            event(new LeaveRequestCancelled($leaveRequest->fresh(), $user, $validated['reason'] ?? null));
+            
+            return back()->with('success', 'Leave request cancelled. Leave balance has been restored.');
+        }
 
-        return back()->with('success', 'Leave request has been processed.');
+        return back()->with('error', 'Invalid action specified.');
     }
 
     /**

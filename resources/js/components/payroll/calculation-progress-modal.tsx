@@ -30,6 +30,8 @@ import {
     Play
 } from 'lucide-react';
 import { PayrollCalculation, PayrollPeriod } from '@/types/payroll-pages';
+import { usePayrollProgress } from '@/hooks/use-payroll-progress';
+import { toast } from '@/hooks/use-toast';
 
 // ============================================================================
 // Type Definitions
@@ -67,6 +69,24 @@ export function CalculationProgressModal({
     const [selectedPeriodId, setSelectedPeriodId] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [calculationType, setCalculationType] = useState<'regular' | 'adjustment' | 'final' | 're-calculation'>('regular');
+
+    // Real-time progress polling
+    const progressState = usePayrollProgress({
+        calculationId: calculation?.id || 0,
+        initialStatus: calculation?.status || 'pending',
+        enabled: isOpen && !!calculation && calculation.status === 'processing',
+        pollingInterval: 2000,
+        onComplete: () => {
+            router.reload({ only: ['calculations'] });
+            if (calculation) {
+                toast({
+                    title: 'Calculation Complete',
+                    description: `Payroll calculation completed for ${calculation.payroll_period.name}`,
+                    variant: 'default',
+                });
+            }
+        },
+    });
 
     const handleStartCalculation = () => {
         if (!selectedPeriodId) {
@@ -214,10 +234,20 @@ export function CalculationProgressModal({
     }
 
     // Render: View Calculation Progress/Details
-    const isProcessing = calculation.status === 'processing';
-    const isCompleted = calculation.status === 'completed';
-    const isFailed = calculation.status === 'failed';
-    const progressPercentage = calculation.progress_percentage;
+    // Use live polling state when available, otherwise fall back to calculation props
+    const isProcessing = progressState.isPolling ? progressState.status === 'processing' : calculation.status === 'processing';
+    const isCompleted = progressState.isPolling ? progressState.status === 'completed' : calculation.status === 'completed';
+    const isFailed = progressState.isPolling ? progressState.status === 'failed' : calculation.status === 'failed';
+    const progressPercentage = progressState.isPolling ? progressState.progress : calculation.progress_percentage;
+    const processedEmployees = progressState.isPolling && progressState.totalJobs !== null && progressState.pendingJobs !== null
+        ? progressState.totalJobs - progressState.pendingJobs
+        : calculation.processed_employees;
+    const totalEmployees = progressState.isPolling && progressState.totalJobs !== null
+        ? progressState.totalJobs
+        : calculation.total_employees;
+    const failedEmployees = progressState.isPolling && progressState.failedJobs !== null
+        ? progressState.failedJobs
+        : calculation.failed_employees;
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -247,7 +277,7 @@ export function CalculationProgressModal({
                             </div>
                             <Progress value={progressPercentage} className="h-2" />
                             <div className="text-xs text-muted-foreground">
-                                {calculation.processed_employees} of {calculation.total_employees} employees processed
+                                {processedEmployees} of {totalEmployees} employees processed
                             </div>
                         </div>
                     </div>
@@ -259,7 +289,7 @@ export function CalculationProgressModal({
                                 <Users className="h-3 w-3" />
                                 Employees
                             </div>
-                            <div className="font-bold">{calculation.total_employees}</div>
+                            <div className="font-bold">{totalEmployees}</div>
                         </div>
                         <div className="rounded-lg border bg-card p-2">
                             <div className="text-xs text-muted-foreground">Gross Pay</div>
@@ -275,12 +305,12 @@ export function CalculationProgressModal({
                     </div>
 
                     {/* Status Alerts - Compact */}
-                    {calculation.failed_employees > 0 && (
+                    {failedEmployees > 0 && (
                         <Alert variant="destructive" className="py-2">
                             <AlertCircle className="h-3 w-3" />
                             <AlertTitle className="text-sm">Processing Errors</AlertTitle>
                             <AlertDescription className="text-xs">
-                                {calculation.failed_employees} employee(s) failed.
+                                {failedEmployees} employee(s) failed.
                                 {calculation.error_message && (
                                     <span className="block mt-1">
                                         <strong>Error:</strong> {calculation.error_message}
@@ -290,7 +320,7 @@ export function CalculationProgressModal({
                         </Alert>
                     )}
 
-                    {isCompleted && calculation.failed_employees === 0 && (
+                    {isCompleted && failedEmployees === 0 && (
                         <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950 py-2">
                             <CheckCircle className="h-3 w-3 text-green-600" />
                             <AlertTitle className="text-sm text-green-900 dark:text-green-100">

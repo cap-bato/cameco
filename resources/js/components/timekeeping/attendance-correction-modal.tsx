@@ -21,6 +21,8 @@ import { AlertTriangle } from 'lucide-react';
 import { Alert } from '@/components/ui/alert';
 import type { AttendanceRecord } from '@/types/timekeeping-pages';
 import { Textarea } from '@/components/ui/textarea';
+import { router } from '@inertiajs/react';
+import { toast } from 'sonner';
 
 export interface CorrectionFormData {
     corrected_time_in: string;
@@ -52,7 +54,7 @@ export function AttendanceCorrectionModal({
     onClose,
     record,
     onSave,
-    isLoading = false,
+    isLoading: externalLoading = false,
 }: AttendanceCorrectionModalProps) {
     const [correctedTimeIn, setCorrectedTimeIn] = useState('');
     const [correctedTimeOut, setCorrectedTimeOut] = useState('');
@@ -61,6 +63,7 @@ export function AttendanceCorrectionModal({
     const [reason, setReason] = useState('');
     const [justification, setJustification] = useState('');
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     React.useEffect(() => {
         if (isOpen && record) {
@@ -68,6 +71,9 @@ export function AttendanceCorrectionModal({
             setCorrectedTimeOut(record.time_out || '');
             setCorrectedBreakStart(record.break_start || '');
             setCorrectedBreakEnd(record.break_end || '');
+            setReason('');
+            setJustification('');
+            setErrors({});
         }
     }, [isOpen, record]);
 
@@ -108,18 +114,80 @@ export function AttendanceCorrectionModal({
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSubmit = () => {
-        if (!validateForm() || !onSave) return;
+    const handleSubmit = async () => {
+        if (!validateForm() || !record) return;
 
-        onSave({
-            corrected_time_in: correctedTimeIn,
-            corrected_time_out: correctedTimeOut,
-            corrected_break_start: correctedBreakStart,
-            corrected_break_end: correctedBreakEnd,
-            correction_reason: reason,
-            justification,
-        });
+        // If custom onSave handler provided, use that instead
+        if (onSave) {
+            onSave({
+                corrected_time_in: correctedTimeIn,
+                corrected_time_out: correctedTimeOut,
+                corrected_break_start: correctedBreakStart,
+                corrected_break_end: correctedBreakEnd,
+                correction_reason: reason,
+                justification,
+            });
+            return;
+        }
+
+        // Otherwise, submit to real backend API
+        setIsSubmitting(true);
+        setErrors({});
+
+        try {
+            const response = await fetch(
+                route('hr.timekeeping.api.attendance.corrections.store'),
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    },
+                    body: JSON.stringify({
+                        attendance_id: record.id,
+                        corrected_time_in: correctedTimeIn,
+                        corrected_time_out: correctedTimeOut,
+                        corrected_break_start: correctedBreakStart || null,
+                        corrected_break_end: correctedBreakEnd || null,
+                        correction_reason: reason,
+                        justification,
+                    }),
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                if (data.errors) {
+                    // Laravel validation errors
+                    const formErrors: Record<string, string> = {};
+                    Object.keys(data.errors).forEach((key) => {
+                        formErrors[key] = data.errors[key][0];
+                    });
+                    setErrors(formErrors);
+                    toast.error('Validation failed. Please check the form.');
+                } else {
+                    toast.error(data.message || 'Failed to submit correction request.');
+                }
+                return;
+            }
+
+            // Success
+            toast.success('Correction request submitted successfully!');
+            
+            // Close modal and refresh page
+            onClose();
+            router.reload({ only: ['attendance'] });
+
+        } catch (error) {
+            console.error('Failed to submit correction:', error);
+            toast.error('Network error. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
+
+    const isLoading = externalLoading || isSubmitting;
 
     if (!record) return null;
 

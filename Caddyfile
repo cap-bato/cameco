@@ -1,0 +1,11 @@
+cameco.local {
+    reverse_proxy localhost:8000
+    
+    @viteAssets {
+        path /@vite/* /resources/* /@react-refresh /@id/*
+    }
+    
+    handle @viteAssets {
+        reverse_proxy localhost:5173
+    }
+}

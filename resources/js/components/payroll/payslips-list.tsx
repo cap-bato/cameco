@@ -216,7 +216,7 @@ export function PayslipsList({
                                                         size="sm"
                                                         onClick={() => onEmail(Number(payslip.id))}
                                                         title="Send Email"
-                                                        disabled={payslip.email_sent}
+                                                        disabled={payslip.distribution_method === 'email' && !!payslip.distributed_at}
                                                     >
                                                         <Mail className="h-4 w-4" />
                                                     </Button>

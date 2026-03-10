@@ -43,12 +43,15 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::put('/periods/{id}', [PayrollPeriodController::class, 'update'])->name('periods.update');
         Route::delete('/periods/{id}', [PayrollPeriodController::class, 'destroy'])->name('periods.destroy');
         Route::post('/periods/{id}/calculate', [PayrollPeriodController::class, 'calculate'])->name('periods.calculate');
+        Route::post('/periods/{id}/submit-for-review', [PayrollPeriodController::class, 'submitForReview'])->name('periods.submit-for-review');
         Route::post('/periods/{id}/approve', [PayrollPeriodController::class, 'approve'])->name('periods.approve');
+        Route::post('/periods/{id}/finalize', [PayrollPeriodController::class, 'finalize'])->name('periods.finalize');
 
         // Payroll Calculations - Phase 1.3
         Route::get('/calculations', [PayrollCalculationController::class, 'index'])->name('calculations.index');
         Route::post('/calculations', [PayrollCalculationController::class, 'store'])->name('calculations.store');
         Route::get('/calculations/{id}', [PayrollCalculationController::class, 'show'])->name('calculations.show');
+        Route::get('/calculations/{id}/batch-status', [PayrollCalculationController::class, 'batchStatus'])->name('calculations.batch-status');
         Route::post('/calculations/{id}/recalculate', [PayrollCalculationController::class, 'recalculate'])->name('calculations.recalculate');
         Route::post('/calculations/{id}/approve', [PayrollCalculationController::class, 'approve'])->name('calculations.approve');
         Route::delete('/calculations/{id}', [PayrollCalculationController::class, 'destroy'])->name('calculations.destroy');
@@ -93,6 +96,18 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
 
         // Loans & Advances - Phase 1.5 & 1.5b
         Route::get('/loans', [LoansController::class, 'index'])->name('loans.index');
+
+        // Loan CRUD and payment routes can be enabled via feature flag once
+        // LoansController and LoanManagementService are fully aligned.
+        if (config('features.enable_loan_crud_routes')) {
+            Route::post('/loans', [LoansController::class, 'store'])->name('loans.store');
+            Route::get('/loans/{id}', [LoansController::class, 'show'])->name('loans.show');
+            Route::put('/loans/{id}', [LoansController::class, 'update'])->name('loans.update');
+            Route::post('/loans/{id}/early-payment', [LoansController::class, 'earlyPayment'])->name('loans.early-payment');
+            Route::post('/loans/{id}/cancel', [LoansController::class, 'cancel'])->name('loans.cancel');
+            Route::delete('/loans/{id}', [LoansController::class, 'destroy'])->name('loans.destroy');
+            Route::get('/loans/{id}/payments', [LoansController::class, 'getPayments'])->name('loans.payments');
+        }
         Route::get('/advances', [AdvancesController::class, 'index'])->name('advances.index');
         Route::post('/advances', [AdvancesController::class, 'store'])->name('advances.store');
         Route::post('/advances/{id}/approve', [AdvancesController::class, 'approve'])->name('advances.approve');
@@ -156,15 +171,15 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::post('/bank-files/{id}/regenerate', [BankFilesController::class, 'regenerateFile'])->name('bank-files.regenerate');
 
         // Payslips - Phase 4.2
-        Route::get('/payslips', [PayslipsController::class, 'index'])->name('payslips.index');
-        Route::post('/payslips/generate', [PayslipsController::class, 'generate'])->name('payslips.generate');
-        Route::post('/payslips/distribute', [PayslipsController::class, 'distribute'])->name('payslips.distribute');
-        Route::get('/payslips/{id}/preview', [PayslipsController::class, 'preview'])->name('payslips.preview');
-        Route::get('/payslips/{id}/download', [PayslipsController::class, 'download'])->name('payslips.download');
-        Route::post('/payslips/{id}/email', [PayslipsController::class, 'email'])->name('payslips.email');
-        Route::get('/payslips/{id}/print', [PayslipsController::class, 'print'])->name('payslips.print');
-        Route::post('/payslips/bulk-download', [PayslipsController::class, 'bulkDownload'])->name('payslips.bulk-download');
-        Route::post('/payslips/bulk-email', [PayslipsController::class, 'bulkEmail'])->name('payslips.bulk-email');
+        Route::get('/payments/payslips', [PayslipsController::class, 'index'])->name('payslips.index');
+        Route::post('/payments/payslips/generate', [PayslipsController::class, 'generate'])->name('payslips.generate');
+        Route::post('/payments/payslips/distribute', [PayslipsController::class, 'distribute'])->name('payslips.distribute');
+        Route::get('/payments/payslips/{id}/preview', [PayslipsController::class, 'preview'])->name('payslips.preview');
+        Route::get('/payments/payslips/{id}/download', [PayslipsController::class, 'download'])->name('payslips.download');
+        Route::post('/payments/payslips/{id}/email', [PayslipsController::class, 'email'])->name('payslips.email');
+        Route::get('/payments/payslips/{id}/print', [PayslipsController::class, 'print'])->name('payslips.print');
+        Route::post('/payments/payslips/bulk-download', [PayslipsController::class, 'bulkDownload'])->name('payslips.bulk-download');
+        Route::post('/payments/payslips/bulk-email', [PayslipsController::class, 'bulkEmail'])->name('payslips.bulk-email');
 
         // Payment Tracking - Phase 4.3
         Route::get('/payments/tracking', [PaymentTrackingController::class, 'index'])->name('payments.tracking.index');
@@ -175,11 +190,13 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
 
         // Cash Payments - Phase 4.4
         Route::get('/payments/cash', [CashPaymentController::class, 'index'])->name('payments.cash.index');
-        Route::post('/payments/cash/generate-envelopes', [CashPaymentController::class, 'generateEnvelopes'])->name('payments.cash.generate-envelopes');
+        Route::match(['get', 'post'], '/payments/cash/generate-envelopes', [CashPaymentController::class, 'generateEnvelopes'])->name('payments.cash.generate-envelopes');
         Route::post('/payments/cash/record-distribution', [CashPaymentController::class, 'recordDistribution'])->name('payments.cash.record-distribution');
         Route::post('/payments/cash/mark-claimed', [CashPaymentController::class, 'markClaimed'])->name('payments.cash.mark-claimed');
         Route::post('/payments/cash/record-contact-attempt', [CashPaymentController::class, 'recordContactAttempt'])->name('payments.cash.record-contact-attempt');
         Route::get('/payments/cash/accountability-report', [CashPaymentController::class, 'generateAccountabilityReport'])->name('payments.cash.accountability-report');
+        Route::get('/payments/cash/accountability-report/pdf', [CashPaymentController::class, 'downloadAccountabilityReportPdf'])->name('payments.cash.accountability-report.pdf');
+        Route::get('/payments/cash/generate-envelopes/pdf', [CashPaymentController::class, 'downloadEnvelopesPdf'])->name('payments.cash.envelopes.pdf');
 
         // Payroll Register Reports - Phase 5.1
         Route::get('/reports/register', [PayrollRegisterController::class, 'index'])->name('reports.register.index');

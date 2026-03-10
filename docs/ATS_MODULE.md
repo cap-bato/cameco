@@ -7,9 +7,9 @@ The ATS module manages the full recruitment lifecycle: job posting, candidate ap
 
 ## Module Goals
 1. **Job Posting Management:** Create and manage job openings with requirements and descriptions. 
-	- **Current Approach:** Since the HRIS is internal-only, job postings are distributed externally via social media (e.g., Facebook) and other third-party channels. HR staff manually post job details and collect applications through these platforms.
-	- **Automated Option:** Integrate the HR dashboard with Facebook using the Meta Graph API to automate posting job openings directly to the company's Facebook Page. Job details entered in the HRIS can be published with a single click.
-	- **Future Option:** Recommend building a separate public-facing website for marketing, sales, and job posting. This site can serve both as a company showcase for potential clients and as a recruitment portal.
+	- **Current Approach:** The HRIS is now accessible externally via Cloudflare Tunnel. Job postings can be accessed from the root index page (`/`) where candidates can browse open positions and apply directly. HR staff manage job postings internally at `/hr/ats/job-postings`.
+	- **Public Access:** Candidates can navigate to `/job-postings` from the main landing page to view all open positions and submit applications online.
+	- **Social Media Integration (Optional):** Can integrate with Facebook using Meta Graph API to cross-post job openings to the company's Facebook Page with links back to the public job postings page.
 2. **Candidate Application Tracking:** Accept, store, and manage candidate applications and resumes.
 	- **Automated Option:** Use a Facebook Messenger bot or a custom web form (linked from the Facebook post) to collect candidate details. The bot or form can send application data directly to the ATS via a webhook or API, creating candidate/application records automatically.
 3. **Interview Scheduling:** Schedule interviews, assign interviewers, and collect feedback.
@@ -85,13 +85,13 @@ The ATS module manages the full recruitment lifecycle: job posting, candidate ap
 
 
 
-### 1. Job Posting & Application (with Facebook Automation)
-- HR Manager/Staff creates job postings in the HRIS.
-- With Facebook integration enabled, job details can be posted directly to the company's Facebook Page via the Meta Graph API.
-- Facebook post includes a link to a Messenger bot or web form for applications.
-- Candidates apply via Messenger or the form; the bot collects details and sends them to the ATS via webhook/API.
+### 1. Job Posting & Application (with Optional Facebook Integration)
+- HR Manager/Staff creates job postings at `/hr/ats/job-postings`.
+- Job postings marked as "open" automatically appear on the public job postings page (`/job-postings`).
+- Candidates can browse available positions from the main landing page and apply directly online.
+- Applications are automatically created in the ATS, reducing manual data entry.
+- **Optional Facebook Integration:** With Facebook integration enabled, job details can be cross-posted to the company's Facebook Page via Meta Graph API with links back to the public job postings page.
 - Applications from referrals or walk-ins can still be entered manually by HR.
-- In the future, a public-facing website could allow direct online applications, automatically syncing with the ATS.
 ---
 
 ## Facebook Integration & Automation Strategy
@@ -116,25 +116,30 @@ The ATS module manages the full recruitment lifecycle: job posting, candidate ap
 ### Benefits
 - Reduces manual HR work and speeds up candidate intake.
 - Ensures all applications are tracked in the ATS, regardless of source.
-- Provides a foundation for future integration with other platforms (e.g., public website, job boards).
+- Provides a foundation for future integration with other platforms (e.g., /job-posting page from / page, job boards).
 
 ---
 ---
 
-## Integration Strategy: Social Media & Future Public Site
+## Integration Strategy: Public Access & Social Media
 
-### Current State: Social Media Sourcing
-- Job postings are created in the internal HRIS for tracking, but are distributed externally via Facebook and other platforms.
-- HR staff copy job details to social media and manually enter candidate data into the ATS as applications are received.
-- All candidate tracking, interview scheduling, and evaluation remain internal.
+### Current State: Public Job Postings via Cloudflare Tunnel
+- The HRIS is now accessible externally through Cloudflare Tunnel.
+- Job postings are created at `/hr/ats/job-postings` and automatically published to the public job postings page.
+- The main landing page (`/`) includes a "Careers" or "Job Openings" button that navigates to `/job-postings`.
+- Candidates can browse all open positions and submit applications directly online.
+- Applications are automatically created in the ATS, eliminating manual data entry.
+- All candidate tracking, interview scheduling, and evaluation remain secured in the internal HR section.
 
-### Future State: Public-Facing Website
-- Develop a separate public website for company marketing, sales, and recruitment.
-- Integrate the public site with the ATS via a secure API or data sync:
-	- Job postings marked as "public" in the HRIS are published to the public site.
-	- Candidates can apply directly online; applications are automatically created in the ATS.
-	- Marketing and sales content can be managed independently from HRIS.
-- This approach allows seamless transition from manual to automated recruitment as the company grows.
+### Optional: Social Media Cross-Posting
+- Can integrate with Facebook using Meta Graph API to automatically cross-post job openings.
+- Facebook posts include links back to the public job postings page (`https://your-domain.com/job-postings`).
+- All applications flow through the same online form, maintaining a single source of truth in the ATS.
+
+### Future Enhancements
+- Develop a full marketing/sales website with company information.
+- Expand to other job boards and platforms (Indeed, LinkedIn, etc.).
+- Implement advanced filtering and search on the public job postings page.
 
 ---
 

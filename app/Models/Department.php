@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -11,7 +12,7 @@ use Spatie\Activitylog\LogOptions;
 
 class Department extends Model
 {
-    use SoftDeletes, LogsActivity;
+    use HasFactory, SoftDeletes, LogsActivity;
 
     protected $fillable = [
         'name',
@@ -21,11 +22,15 @@ class Department extends Model
         'code',
         'budget',
         'is_active',
+        'min_coverage_percentage',
+        'approval_chain_config',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'budget' => 'integer',
+        'min_coverage_percentage' => 'decimal:2',
+        'approval_chain_config' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',

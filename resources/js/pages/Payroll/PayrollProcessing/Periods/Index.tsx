@@ -110,6 +110,7 @@ export default function PayrollPeriods({
                     end_date: data.end_date,
                     cutoff_date: data.cutoff_date,
                     pay_date: data.pay_date,
+                    deduction_timing: data.deduction_timing,
                 }, {
                     onSuccess: () => {
                         setIsModalOpen(false);
@@ -130,6 +131,7 @@ export default function PayrollPeriods({
                     end_date: data.end_date,
                     cutoff_date: data.cutoff_date,
                     pay_date: data.pay_date,
+                    deduction_timing: data.deduction_timing,
                 }, {
                     onSuccess: () => {
                         setIsModalOpen(false);

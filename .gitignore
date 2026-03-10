@@ -30,6 +30,11 @@ yarn-error.log
 
 .github/
 .aiplans/
-
+.junie/
 docs/WORKFORCE_IMPLEMENTATION_ROADMAP.md
 PHASE5_VALIDATION_SUMMARY.md
+
+
+forgot to put this shit in the .gitignore file, but here it is now.
+cameco.local-key.pem
+cameco.local.pem

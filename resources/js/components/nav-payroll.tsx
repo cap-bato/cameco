@@ -129,7 +129,7 @@ export function NavPayroll() {
         {
             title: 'Payslips',
             icon: FileText,
-            href: '/payroll/payslips',
+            href: '/payroll/payments/payslips',
             enabled: false,
         },
         {

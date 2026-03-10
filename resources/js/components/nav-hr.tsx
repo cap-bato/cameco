@@ -26,7 +26,9 @@ import {
     Upload,
     TrendingUp,
     FileSignature,
-    FileQuestion
+    FileQuestion,
+    Activity,
+    DoorOpen
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
@@ -220,10 +222,22 @@ export function NavHR() {
             permission: 'hr.timekeeping.view',
         },
         {
+            title: 'RFID Ledger',
+            icon: Activity,
+            href: '/hr/timekeeping/ledger',
+            permission: 'hr.timekeeping.attendance.view',
+        },
+        {
             title: 'Attendance Records',
             icon: ClipboardList,
             href: '/hr/timekeeping/attendance',
             permission: 'hr.timekeeping.view',
+        },
+        {
+            title: 'RFID Badges',
+            icon: Shield,
+            href: '/hr/timekeeping/badges',
+            permission: 'hr.timekeeping.badges.view',
         },
         {
             title: 'Overtime Requests',
@@ -268,6 +282,34 @@ export function NavHR() {
     ];
     const appraisalItems = appraisalItemsAll.filter(item => hasPermission(item.permission));
 
+    const offboardingItemsAll = [
+        {
+            title: 'Dashboard',
+            icon: DoorOpen,
+            href: '/hr/offboarding/dashboard',
+            permission: 'hr.offboarding.view',
+        },
+        {
+            title: 'Cases',
+            icon: ClipboardList,
+            href: '/hr/offboarding/cases',
+            permission: 'hr.offboarding.view',
+        },
+        {
+            title: 'Clearance',
+            icon: ClipboardCheck,
+            href: '/hr/offboarding/clearance',
+            permission: 'hr.offboarding.clearance.view',
+        },
+        {
+            title: 'Analytics',
+            icon: BarChart3,
+            href: '/hr/offboarding/analytics',
+            permission: 'hr.offboarding.view',
+        },
+    ];
+    const offboardingItems = offboardingItemsAll.filter(item => hasPermission(item.permission));
+
     const isEmployeeManagementActive = page.url.startsWith('/hr/employees') || page.url.startsWith('/hr/departments') || page.url.startsWith('/hr/positions') || page.url === '/hr/dashboard';
     const isLeaveManagementActive = page.url.startsWith('/hr/leave');
     const isDocumentManagementActive = page.url.startsWith('/hr/documents');
@@ -276,6 +318,7 @@ export function NavHR() {
     const isWorkforceManagementActive = page.url.startsWith('/hr/workforce');
     const isTimekeepingActive = page.url.startsWith('/hr/timekeeping');
     const isAppraisalActive = page.url.startsWith('/hr/appraisals') || page.url.startsWith('/hr/performance-metrics') || page.url.startsWith('/hr/rehire-recommendations');
+    const isOffboardingActive = page.url.startsWith('/hr/offboarding');
 
     return (
         <>
@@ -498,6 +541,40 @@ export function NavHR() {
                         <CollapsibleContent className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2">
                             <SidebarMenuSub className="space-y-1">
                                 {appraisalItems.map((item) => (
+                                    <SidebarMenuSubItem key={item.title}>
+                                        <SidebarMenuSubButton
+                                            asChild
+                                            isActive={page.url.startsWith(item.href)}
+                                        >
+                                            <Link href={item.href} prefetch>
+                                                <item.icon className="h-4 w-4" />
+                                                <span>{item.title}</span>
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
+                                ))}
+                            </SidebarMenuSub>
+                        </CollapsibleContent>
+                    </SidebarMenuItem>
+                </Collapsible>
+            </SidebarGroup>
+            )}
+
+            {/* Offboarding Section */}
+            {offboardingItems.length > 0 && (
+            <SidebarGroup className="px-2 py-0">
+                <Collapsible defaultOpen={isOffboardingActive} className="group/collapsible">
+                    <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                            <SidebarMenuButton tooltip="Offboarding">
+                                <DoorOpen />
+                                <span>Offboarding</span>
+                                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                            </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2">
+                            <SidebarMenuSub className="space-y-1">
+                                {offboardingItems.map((item) => (
                                     <SidebarMenuSubItem key={item.title}>
                                         <SidebarMenuSubButton
                                             asChild

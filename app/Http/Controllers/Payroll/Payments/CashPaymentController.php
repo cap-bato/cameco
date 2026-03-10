@@ -2,9 +2,17 @@
 
 namespace App\Http\Controllers\Payroll\Payments;
 
+use Illuminate\Support\Facades\Cache;
+
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Inertia\Inertia;
+use App\Models\PayrollPayment;
+use App\Models\CashDistributionBatch;
+use App\Models\PaymentMethod;
+use App\Models\Department;
+use App\Models\PayrollPeriod;
 
 class CashPaymentController extends Controller
 {
@@ -13,79 +21,99 @@ class CashPaymentController extends Controller
      */
     public function index(Request $request)
     {
-        $periodId = $request->input('period_id', 'all');
-        $departmentId = $request->input('department_id', 'all');
-        $envelopeStatus = $request->input('envelope_status', 'all');
-        $distributionStatus = $request->input('distribution_status', 'all');
-        $searchQuery = $request->input('search', '');
+        $cashMethodId = PaymentMethod::where('method_type', 'cash')->value('id');
 
-        // Get all cash employees
-        $allCashEmployees = $this->getMockCashEmployees();
+        $cashEmployees = PayrollPayment::with(['employee.profile', 'employee.department', 'employee.position', 'payrollPeriod'])
+            ->where('payment_method_id', $cashMethodId)
+            ->when($request->period_id && $request->period_id !== 'all', fn($q) => $q->where('payroll_period_id', $request->period_id))
+            ->when($request->status && $request->status !== 'all', fn($q) => $q->where('status', $request->status))
+            ->when($request->department_id && $request->department_id !== 'all', fn($q) => $q->whereHas('employee', fn($eq) =>
+                $eq->where('department_id', $request->department_id)
+            ))
+            ->when($request->search, fn($q, $s) => $q->whereHas('employee', function($eq) use ($s) {
+                $eq->whereHas('profile', fn($pq) => $pq->where('first_name', 'ilike', "%{$s}%")
+                    ->orWhere('last_name', 'ilike', "%{$s}%"))
+                    ->orWhere('employee_number', 'ilike', "%{$s}%");
+            }))
+            ->get()
+            ->map(function ($payment) {
+                /** @var PayrollPayment $payment */
+                return $this->formatCashEmployee($payment);
+            });
 
-        // Apply filters
-        $cashEmployees = $this->applyFilters($allCashEmployees, [
-            'period_id' => $periodId,
-            'department_id' => $departmentId,
-            'envelope_status' => $envelopeStatus,
-            'distribution_status' => $distributionStatus,
-            'search' => $searchQuery,
-        ]);
+        $batches = CashDistributionBatch::with(['payrollPeriod', 'preparedBy', 'withdrawnBy'])
+            ->when($request->period_id && $request->period_id !== 'all', fn($q) => $q->where('payroll_period_id', $request->period_id))
+            ->latest()
+            ->get();
 
-        // Generate summary
-        $summary = $this->generateCashPaymentSummary($allCashEmployees);
+        $summary = $this->buildCashSummary($cashEmployees, $batches);
 
-        // Get distributions
-        $distributions = $this->getMockDistributions();
+        $unclaimedCash = PayrollPayment::with(['employee.profile', 'payrollPeriod'])
+            ->where('payment_method_id', $cashMethodId)
+            ->where('status', 'unclaimed')
+            ->get()
+            ->map(function ($payment) {
+                /** @var PayrollPayment $payment */
+                return $this->formatUnclaimedCash($payment);
+            });
 
-        // Get unclaimed cash
-        $unclaimedCash = $this->getMockUnclaimedCash();
-
-        // Get filter options
-        $payrollPeriods = $this->getMockPayrollPeriods();
-        $departments = $this->getMockDepartments();
-
-        // Return query params to frontend so it can maintain filter state
         return Inertia::render('Payroll/Payments/Cash/Index', [
             'cash_employees' => $cashEmployees,
             'summary' => $summary,
-            'payroll_periods' => $payrollPeriods,
-            'distributions' => $distributions,
+            'batches' => $batches,
             'unclaimed_cash' => $unclaimedCash,
-            'query_params' => [
-                'period_id' => $periodId,
-                'department_id' => $departmentId,
-                'envelope_status' => $envelopeStatus,
-                'distribution_status' => $distributionStatus,
-                'search' => $searchQuery,
-            ],
+            'payroll_periods' => $this->getPayrollPeriods(),
+            'departments' => Department::select('id', 'name')->orderBy('name')->get(),
+            'query_params' => $request->only(['period_id', 'department_id', 'status', 'search']),
         ]);
     }
 
     /**
      * Generate envelope data for printing
      */
+    /**
+     * Generate envelope data for printing - supports both GET and POST
+     * GET: Display all envelopes for a period
+     * POST: Display filtered envelopes by employee selection
+     */
     public function generateEnvelopes(Request $request)
     {
-        $periodId = $request->input('period_id');
+        $periodId = $request->input('period_id', 'all');
         $employeeIds = $request->input('employee_ids', []);
 
-        // Get cash employees for selected period
-        $cashEmployees = $this->getMockCashEmployees();
-        $filteredEmployees = array_filter($cashEmployees, function ($emp) use ($periodId, $employeeIds) {
-            $periodMatches = $periodId === 'all' || $emp['payroll_period_id'] == $periodId;
-            $employeeMatches = empty($employeeIds) || in_array($emp['employee_id'], $employeeIds);
-            return $periodMatches && $employeeMatches;
-        });
+        // Get cash payment method ID
+        $cashMethodId = PaymentMethod::where('method_type', 'cash')->value('id');
+
+        // Build query for cash payments
+        $query = PayrollPayment::with(['employee.profile', 'employee.department', 'employee.position', 'payrollPeriod'])
+            ->where('payment_method_id', $cashMethodId);
+
+        // Apply period filter
+        if ($periodId !== 'all') {
+            $query->where('payroll_period_id', $periodId);
+        }
+
+        // Apply employee filter if specific employees selected (POST request)
+        if (!empty($employeeIds)) {
+            $query->whereIn('employee_id', $employeeIds);
+        }
+
+        // Get payments and format
+        $payments = $query->get();
+        $cashEmployees = $payments->map(function ($payment) {
+            return $this->formatCashEmployee($payment);
+        })->toArray();
 
         // Generate envelope data
-        $envelopes = $this->generateEnvelopeData(array_values($filteredEmployees));
-        $totalAmount = array_sum(array_map(fn ($e) => $e['net_pay'], $filteredEmployees));
+        $envelopes = $this->generateEnvelopeData($cashEmployees);
+        $totalAmount = $payments->sum('net_pay');
+        $period = $periodId !== 'all' ? PayrollPeriod::find($periodId) : null;
 
         // Return Inertia with envelope preview data
         return Inertia::render('Payroll/Payments/Cash/EnvelopePreview', [
             'envelopes' => $envelopes,
-            'total_amount' => $totalAmount,
-            'formatted_total' => '₱' . number_format($totalAmount, 2),
+            'total_amount' => (float) $totalAmount,
+            'formatted_total' => '₱' . number_format((float) $totalAmount, 2),
             'count' => count($envelopes),
             'period_id' => $periodId,
         ]);
@@ -161,35 +189,285 @@ class CashPaymentController extends Controller
      */
     public function generateAccountabilityReport(Request $request)
     {
-        $periodId = $request->input('period_id');
-
-        $cashEmployees = $this->getMockCashEmployees();
-        $distributions = $this->getMockDistributions();
-        $filteredEmployees = array_filter($cashEmployees, fn ($e) => $periodId === 'all' || $e['payroll_period_id'] == $periodId);
-
-        $totalCash = array_sum(array_map(fn ($e) => $e['net_pay'], $filteredEmployees));
-        $distributed = array_sum(array_map(fn ($e) => $e['distribution_status'] === 'distributed' ? $e['net_pay'] : 0, $filteredEmployees));
-        $unclaimed = array_sum(array_map(fn ($e) => $e['distribution_status'] === 'unclaimed' ? $e['net_pay'] : 0, $filteredEmployees));
-
-        $report = [
-            'period_id' => $periodId,
-            'total_cash_employees' => count($filteredEmployees),
-            'total_cash_amount' => $totalCash,
-            'formatted_total' => '₱' . number_format($totalCash, 2),
-            'distributed_count' => count(array_filter($filteredEmployees, fn ($e) => $e['distribution_status'] === 'distributed')),
-            'distributed_amount' => $distributed,
-            'formatted_distributed' => '₱' . number_format($distributed, 2),
-            'unclaimed_count' => count(array_filter($filteredEmployees, fn ($e) => $e['distribution_status'] === 'unclaimed')),
-            'unclaimed_amount' => $unclaimed,
-            'formatted_unclaimed' => '₱' . number_format($unclaimed, 2),
-            'distribution_rate' => count($filteredEmployees) > 0 ? round(($distributed / $totalCash) * 100, 2) : 0,
-        ];
+        $periodId = $request->input('period_id', 'all');
+        $data = $this->buildReportData($periodId);
 
         return Inertia::render('Payroll/Payments/Cash/AccountabilityReport', [
-            'report' => $report,
-            'employees' => array_values($filteredEmployees),
-            'distributions' => $distributions,
+            'report'        => $data['report'],
+            'employees'     => $data['employees']->values(),
+            'distributions' => $data['distributions'],
         ]);
+    }
+
+    /**
+     * Download accountability report as PDF
+     */
+    public function downloadAccountabilityReportPdf(Request $request): Response
+    {
+        $periodId = $request->input('period_id', 'all');
+        $data = $this->buildReportData($periodId);
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->loadView('payroll.payments.cash.accountability-report-pdf', [
+            'report'    => $data['report'],
+            'employees' => $data['employees']->values()->toArray(),
+        ]);
+        $pdf->setPaper('a4', 'portrait');
+
+        $filename = 'cash-accountability-report-' . now()->format('Y-m-d') . '.pdf';
+        return $pdf->download($filename);
+    }
+
+    /**
+     * Download cash payment envelopes as PDF
+     *
+     * Generates a printable PDF containing cash payment envelopes for all employees
+     * receiving cash payments in the specified payroll period. Each envelope displays
+     * employee details, payment amount, and period information.
+     *
+     * PDF Layout: A4 landscape, 3 envelopes per page
+     *
+     * @param Request $request HTTP request containing optional filters (period_id, employee_ids[])
+     * @return Response PDF download response
+     *
+     * @example GET /payroll/payments/cash/generate-envelopes/pdf?period_id=5
+     */
+    public function downloadEnvelopesPdf(Request $request): Response
+    {
+        // Get period and employee filters
+        $periodId = $request->input('period_id', 'all');
+        $employeeIds = $request->input('employee_ids', []);
+
+        // Validate period_id if provided
+        $period = null;
+        if ($periodId !== 'all') {
+            $period = PayrollPeriod::find($periodId);
+            if (!$period) {
+                abort(404, 'Payroll period not found');
+            }
+        }
+
+        // Get cash payment method ID
+        $cashMethodId = PaymentMethod::where('method_type', 'cash')->value('id');
+        if (!$cashMethodId) {
+            abort(500, 'Cash payment method not configured');
+        }
+
+        // Query base payments with eager loading and column selection
+        $query = PayrollPayment::query()
+            ->select(['id','employee_id','payroll_period_id','net_pay','gross_pay','status','payment_reference','paid_at','created_at','updated_at'])
+            ->with([
+                'employee:id,employee_number,position_id,department_id',
+                'employee.profile:employee_id,first_name,middle_name,last_name',
+                'employee.position:id,title',
+                'employee.department:id,name',
+                'payrollPeriod:id,period_name,period_start,period_end,payment_date',
+            ])
+            ->where('payment_method_id', $cashMethodId);
+
+        // Apply period filter
+        if ($periodId !== 'all') {
+            $query->where('payroll_period_id', $periodId);
+        }
+
+        // Apply employee filter if specific employees selected
+        if (!empty($employeeIds)) {
+            $query->whereIn('employee_id', $employeeIds);
+        }
+
+        // Count and validate
+        $totalPayments = (clone $query)->count();
+        if ($totalPayments === 0) {
+            abort(404, 'No cash payments found for the selected period');
+        }
+
+        // Determine if we should chunk to reduce memory usage
+        $shouldChunk = $totalPayments > 100;
+        $totalPages = (int) ceil($totalPayments / 3);
+
+        $envelopes = [];
+        $totalAmount = 0.0;
+        $index = 0;
+
+        if ($shouldChunk) {
+            $query->orderBy('id')->chunkById(200, function ($chunk) use (&$envelopes, &$totalAmount, &$index, $totalPages) {
+                foreach ($chunk as $payment) {
+                    /** @var PayrollPayment $payment */
+                    $employee = $payment->employee;
+                    $barcode = 'ENV-' . strtoupper(uniqid());
+
+                    $qrData = json_encode([
+                        'employee_id'     => $employee->id,
+                        'employee_number' => $employee->employee_number,
+                        'amount'          => (float) $payment->net_pay,
+                        'period'          => $payment->payrollPeriod?->period_name,
+                        'date'            => now()->format('Y-m-d'),
+                    ]);
+
+                    $pageNumber = (int) floor($index / 3) + 1;
+
+                    $envelopes[] = [
+                        'id' => $payment->id,
+                        'employee_id' => $employee->id,
+                        'employee_number' => $employee->employee_number,
+                        'employee_name' => $employee->full_name,
+                        'position' => $employee->position?->title ?? 'Unknown',
+                        'department' => $employee->department?->name ?? 'Unknown',
+                        'period_name' => $payment->payrollPeriod?->period_name ?? 'Unknown Period',
+                        'period_start_date' => $payment->payrollPeriod?->period_start ?? date('Y-m-d', strtotime('-14 days')),
+                        'period_end_date' => $payment->payrollPeriod?->period_end ?? date('Y-m-d'),
+                        'net_pay' => (float) $payment->net_pay,
+                        'formatted_net_pay' => '₱' . number_format((float) $payment->net_pay, 2),
+                        'barcode' => $barcode,
+                        'qr_code' => 'data:image/svg+xml;base64,' . base64_encode('<svg><text>' . $qrData . '</text></svg>'),
+                        'print_date' => now()->format('Y-m-d'),
+                        'page_number' => $pageNumber,
+                        'total_pages' => $totalPages,
+                    ];
+
+                    $totalAmount += (float) $payment->net_pay;
+                    $index++;
+                }
+            });
+        } else {
+            $payments = $query->get();
+
+            foreach ($payments as $i => $payment) {
+                /** @var PayrollPayment $payment */
+                $employee = $payment->employee;
+                $barcode = 'ENV-' . strtoupper(uniqid());
+
+                $qrData = json_encode([
+                    'employee_id'     => $employee->id,
+                    'employee_number' => $employee->employee_number,
+                    'amount'          => (float) $payment->net_pay,
+                    'period'          => $payment->payrollPeriod?->period_name,
+                    'date'            => now()->format('Y-m-d'),
+                ]);
+
+                $envelopes[] = [
+                    'id' => $payment->id,
+                    'employee_id' => $employee->id,
+                    'employee_number' => $employee->employee_number,
+                    'employee_name' => $employee->full_name,
+                    'position' => $employee->position?->title ?? 'Unknown',
+                    'department' => $employee->department?->name ?? 'Unknown',
+                    'period_name' => $payment->payrollPeriod?->period_name ?? 'Unknown Period',
+                    'period_start_date' => $payment->payrollPeriod?->period_start ?? date('Y-m-d', strtotime('-14 days')),
+                    'period_end_date' => $payment->payrollPeriod?->period_end ?? date('Y-m-d'),
+                    'net_pay' => (float) $payment->net_pay,
+                    'formatted_net_pay' => '₱' . number_format((float) $payment->net_pay, 2),
+                    'barcode' => $barcode,
+                    'qr_code' => 'data:image/svg+xml;base64,' . base64_encode('<svg><text>' . $qrData . '</text></svg>'),
+                    'print_date' => now()->format('Y-m-d'),
+                    'page_number' => (int) floor($i / 3) + 1,
+                    'total_pages' => (int) ceil($payments->count() / 3),
+                ];
+
+                $totalAmount += (float) $payment->net_pay;
+            }
+        }
+
+        $batchNumber = 'ENV-' . now()->format('YmdHis');
+
+        // Prepare data for template
+        $data = [
+            'envelopes' => $envelopes,
+            'period_name' => $period?->period_name ?? 'All Periods',
+            'period_start' => $period?->period_start ?? '',
+            'period_end' => $period?->period_end ?? '',
+            'batch_number' => $batchNumber,
+            'total_envelopes' => count($envelopes),
+            'total_amount' => (float) $totalAmount,
+            'formatted_total' => '₱' . number_format((float) $totalAmount, 2),
+            'generated_by' => auth()->user()->name ?? 'System',
+        ];
+
+        // Build cache key and cache the rendered PDF bytes for 1 hour
+        $employeeKey = !empty($employeeIds) ? implode(',', array_map('intval', (array) $employeeIds)) : 'all';
+        $maxUpdatedAt = (clone $query)->max('updated_at');
+        $cacheKey = 'envelope-pdf-' . $periodId . '-' . md5($employeeKey) . '-' . ($maxUpdatedAt ? strtotime($maxUpdatedAt) : 0);
+
+        $filename = 'cash-envelopes-' . ($period?->period_name ? strtolower(str_replace(' ', '-', $period->period_name)) : 'all')
+                  . '-' . now()->format('Y-m-d') . '.pdf';
+
+        $pdfBytes = Cache::remember($cacheKey, 3600, function () use ($data) {
+            $pdf = app('dompdf.wrapper');
+            // Pass data under 'data' key to match Blade template expectations
+            $pdf->loadView('payroll.payments.cash.envelopes-pdf', ['data' => $data]);
+            $pdf->setPaper('a4', 'landscape');
+            return $pdf->output();
+        });
+
+        return response($pdfBytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    /**
+     * Build report data for accountability report (shared by HTML and PDF)
+     */
+    private function buildReportData(string $periodId): array
+    {
+        $cashMethodId = PaymentMethod::where('method_type', 'cash')->value('id');
+
+        $payments = PayrollPayment::with(['employee.profile', 'employee.department', 'employee.position', 'payrollPeriod'])
+            ->where('payment_method_id', $cashMethodId)
+            ->when($periodId !== 'all', fn($q) => $q->where('payroll_period_id', $periodId))
+            ->get();
+
+        $employees = $payments->map(function ($payment) {
+            /** @var PayrollPayment $payment */
+            return $this->formatCashEmployee($payment);
+        });
+
+        $totalAmount = (float) $employees->sum('net_pay');
+        $distributedEmployees = $employees->where('distribution_status', 'distributed');
+        $unclaimedEmployees  = $employees->where('distribution_status', 'unclaimed');
+        $distributedAmount   = (float) $distributedEmployees->sum('net_pay');
+        $unclaimedAmount     = (float) $unclaimedEmployees->sum('net_pay');
+
+        $periodLabel = $periodId === 'all'
+            ? 'All Periods'
+            : (PayrollPeriod::find($periodId)?->period_name ?? "Period #{$periodId}");
+
+        $report = [
+            'period_id'            => $periodId,
+            'period_label'         => $periodLabel,
+            'total_cash_employees' => $employees->count(),
+            'total_cash_amount'    => $totalAmount,
+            'formatted_total'      => '₱' . number_format($totalAmount, 2),
+            'distributed_count'    => $distributedEmployees->count(),
+            'distributed_amount'   => $distributedAmount,
+            'formatted_distributed'=> '₱' . number_format($distributedAmount, 2),
+            'unclaimed_count'      => $unclaimedEmployees->count(),
+            'unclaimed_amount'     => $unclaimedAmount,
+            'formatted_unclaimed'  => '₱' . number_format($unclaimedAmount, 2),
+            'distribution_rate'    => $totalAmount > 0 ? round(($distributedAmount / $totalAmount) * 100, 2) : 0,
+        ];
+
+        $distributions = CashDistributionBatch::with(['payrollPeriod', 'preparedBy'])
+            ->when($periodId !== 'all', fn($q) => $q->where('payroll_period_id', $periodId))
+            ->latest()
+            ->get()
+            ->map(fn($batch) => [
+                'id'                 => $batch->id,
+                'batch_number'       => $batch->batch_number,
+                'distribution_date'  => $batch->distribution_date,
+                'total_employees'    => $batch->total_employees,
+                'total_cash_amount'  => $batch->total_cash_amount,
+                'formatted_total_cash' => '₱' . number_format((float) $batch->total_cash_amount, 2),
+                'status'             => $batch->status,
+                'status_label'       => ucfirst(str_replace('_', ' ', $batch->status)),
+                'distributed_by'     => $batch->preparedBy?->name ?? null,
+            ]);
+
+        return [
+            'report'        => $report,
+            'employees'     => $employees,
+            'distributions' => $distributions,
+        ];
     }
 
     /**
@@ -235,11 +513,11 @@ class CashPaymentController extends Controller
     {
         $totalAmount = array_sum(array_map(fn ($e) => $e['net_pay'], $cashEmployees));
 
-        $printedEnvelopes = count(array_filter($cashEmployees, fn ($e) => 
+        $printedEnvelopes = count(array_filter($cashEmployees, fn ($e) =>
             in_array($e['envelope_status'], ['printed', 'prepared', 'distributed', 'unclaimed'])
         ));
 
-        $distributedCount = count(array_filter($cashEmployees, fn ($e) => 
+        $distributedCount = count(array_filter($cashEmployees, fn ($e) =>
             in_array($e['distribution_status'], ['distributed', 'claimed'])
         ));
 
@@ -277,6 +555,10 @@ class CashPaymentController extends Controller
                 'period' => $emp['period_name'],
             ]);
 
+            // Get period start/end if available, otherwise use defaults
+            $periodStartDate = $emp['period_start_date'] ?? date('Y-m-d', strtotime('-14 days'));
+            $periodEndDate = $emp['period_end_date'] ?? date('Y-m-d');
+
             $envelopes[] = [
                 'id' => $emp['id'],
                 'employee_id' => $emp['employee_id'],
@@ -284,8 +566,8 @@ class CashPaymentController extends Controller
                 'employee_name' => $emp['employee_name'],
                 'position' => $emp['position'],
                 'period_name' => $emp['period_name'],
-                'period_start_date' => date('Y-m-d', strtotime('-14 days')),
-                'period_end_date' => date('Y-m-d'),
+                'period_start_date' => $periodStartDate,
+                'period_end_date' => $periodEndDate,
                 'net_pay' => $emp['net_pay'],
                 'formatted_net_pay' => $emp['formatted_net_pay'],
                 'barcode' => $barcode,
@@ -301,14 +583,120 @@ class CashPaymentController extends Controller
     }
 
     /**
-     * Get mock payroll periods
+     * Get payroll periods from database
      */
-    private function getMockPayrollPeriods()
+    private function getPayrollPeriods()
     {
+        return PayrollPeriod::select('id', 'period_name', 'period_start', 'period_end', 'payment_date')
+            ->orderByDesc('payment_date')
+            ->get();
+    }
+
+    /**
+     * Format a PayrollPayment record as a CashEmployee for the frontend
+     */
+    private function formatCashEmployee(PayrollPayment $payment)
+    {
+        $employee = $payment->employee;
+
+        $statusColorMap = [
+            'pending'    => 'gray',
+            'processing' => 'blue',
+            'paid'       => 'green',
+            'failed'     => 'red',
+            'unclaimed'  => 'orange',
+        ];
+
+        $distributionStatusMap = [
+            'paid'      => 'distributed',
+            'unclaimed' => 'unclaimed',
+        ];
+
         return [
-            ['id' => 1, 'name' => 'November 2025 - 1st Half'],
-            ['id' => 2, 'name' => 'November 2025 - 2nd Half'],
-            ['id' => 3, 'name' => 'October 2025'],
+            'id'                    => $payment->id,
+            'employee_id'           => $employee?->id,
+            'employee_number'       => $employee?->employee_number ?? 'UNKNOWN',
+            'employee_name'         => $employee?->full_name ?? 'Unknown Employee',
+            'department'            => $employee?->department?->name ?? 'Unknown',
+            'department_id'         => $employee?->department_id,
+            'position'              => $employee?->position?->title ?? 'Unknown',
+            'email'                 => $employee?->profile?->email ?? '',
+            'phone'                 => $employee?->profile?->phone_number ?? '',
+            'payroll_period_id'     => $payment->payroll_period_id,
+            'period_name'           => $payment->payrollPeriod?->period_name ?? 'Unknown Period',
+            'period_start_date'     => $payment->payrollPeriod?->period_start ?? null,
+            'period_end_date'       => $payment->payrollPeriod?->period_end ?? null,
+            'net_pay'               => (float) $payment->net_pay,
+            'formatted_net_pay'     => '₱' . number_format((float) $payment->net_pay, 2),
+            'gross_pay'             => (float) $payment->gross_pay,
+            'formatted_gross_pay'   => '₱' . number_format((float) $payment->gross_pay, 2),
+            'payment_status'        => $payment->status,
+            'payment_status_label'  => ucfirst(str_replace('_', ' ', $payment->status)),
+            'payment_status_color'  => $statusColorMap[$payment->status] ?? 'gray',
+            'distribution_status'   => $distributionStatusMap[$payment->status] ?? 'pending',
+            'payment_method'        => 'cash',
+            'payment_reference'     => $payment->payment_reference,
+            'paid_at'               => $payment->paid_at?->toDateTimeString(),
+            'distributed_at'        => $payment->paid_at?->toDateTimeString(),
+            'distributed_by'        => null,
+            'created_at'            => $payment->created_at->toDateTimeString(),
+        ];
+    }
+
+    /**
+     * Format a PayrollPayment record as UnclaimedCash for the frontend
+     */
+    private function formatUnclaimedCash(PayrollPayment $payment)
+    {
+        $employee = $payment->employee;
+
+        return [
+            'id' => $payment->id,
+            'payroll_payment_id' => $payment->id,
+            'employee_id' => $employee?->id,
+            'employee_number' => $employee?->employee_number ?? 'UNKNOWN',
+            'employee_name' => $employee?->full_name ?? 'Unknown Employee',
+            'period_name' => $payment->payrollPeriod?->period_name ?? 'Unknown Period',
+            'amount' => (float) $payment->net_pay,
+            'formatted_amount' => '₱' . number_format((float) $payment->net_pay, 2),
+            'days_unclaimed' => now()->diffInDays($payment->created_at),
+            'envelope_prepared_at' => $payment->created_at->toDateString(),
+            'distribution_scheduled_for' => null,
+            'status' => 'pending_collection',
+            'status_label' => 'Pending Collection',
+            'status_color' => 'yellow',
+            'notes' => 'Cash envelope awaiting employee collection',
+        ];
+    }
+
+    /**
+     * Build cash payment summary from employees and batches data
+     */
+    private function buildCashSummary($cashEmployees, $batches)
+    {
+        $employees        = collect($cashEmployees);
+        $totalAmount      = (float) $employees->sum('net_pay');
+        $totalBatches     = count($batches);
+        $completedBatches = collect($batches)->where('status', 'completed')->count();
+
+        $distributedCount  = $employees->where('payment_status', 'paid')->count();
+        $unclaimedCount    = $employees->where('payment_status', 'unclaimed')->count();
+        $pendingCount      = $employees->whereIn('payment_status', ['pending', 'processing'])->count();
+        $unclaimedAmount   = (float) $employees->where('payment_status', 'unclaimed')->sum('net_pay');
+        $distributedAmount = (float) $employees->where('payment_status', 'paid')->sum('net_pay');
+
+        return [
+            'total_cash_employees'    => $employees->count(),
+            'total_cash_amount'       => $totalAmount,
+            'formatted_total_cash'    => '₱' . number_format($totalAmount, 2),
+            'envelopes_prepared'      => $totalBatches,
+            'envelopes_distributed'   => $completedBatches,
+            'distributed_count'       => $distributedCount,
+            'pending_distribution'    => $pendingCount,
+            'unclaimed_count'         => $unclaimedCount,
+            'formatted_unclaimed_amount' => '₱' . number_format($unclaimedAmount, 2),
+            'amount_distributed'      => $distributedAmount,
+            'formatted_amount_distributed' => '₱' . number_format($distributedAmount, 2),
         ];
     }
 

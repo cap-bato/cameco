@@ -22,6 +22,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Search, AlertTriangle, CheckCircle } from 'lucide-react';
 import { router } from '@inertiajs/react';
 
+interface LaravelWindow extends Window {
+    Laravel?: {
+        csrfToken?: string;
+    };
+}
+
 interface AssignEmployeesModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -168,7 +174,7 @@ export function AssignEmployeesModal({ isOpen, onClose, rotation }: AssignEmploy
         
         try {
             // Use window.Laravel if available, otherwise fallback to meta tag
-            let csrfToken = (window as any).Laravel?.csrfToken;
+            let csrfToken = (window as LaravelWindow).Laravel?.csrfToken;
             
             if (!csrfToken) {
                 const csrfTokenMeta = document.head.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');

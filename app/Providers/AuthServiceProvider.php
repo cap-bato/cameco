@@ -42,5 +42,22 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('system.onboarding.initialize', function (User $user) {
             return $user->hasRole('Superadmin');
         });
+
+        // Badge Management Gates (map to dotted permission names)
+        Gate::define('view-badges', function (User $user) {
+            return $user->hasPermissionTo('hr.timekeeping.badges.view');
+        });
+
+        Gate::define('manage-badges', function (User $user) {
+            return $user->hasPermissionTo('hr.timekeeping.badges.manage');
+        });
+
+        Gate::define('bulk-import-badges', function (User $user) {
+            return $user->hasPermissionTo('hr.timekeeping.badges.bulk-import');
+        });
+
+        Gate::define('view-badge-reports', function (User $user) {
+            return $user->hasPermissionTo('hr.timekeeping.badges.reports');
+        });
     }
 }

@@ -72,6 +72,7 @@ interface Document {
     expires_at: string | null;
     notes?: string;
     rejection_reason?: string;
+    mime_type?: string; // e.g. "application/pdf", "image/jpeg"
 }
 
 interface EmployeeDocumentsTabProps {
@@ -116,39 +117,16 @@ const DOCUMENT_TYPE_SUGGESTIONS: Record<string, string[]> = {
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_FILE_TYPES = ['.pdf', '.jpg', '.jpeg', '.png', '.docx'];
 
-// Mock data for initial load
-const mockDocuments: Document[] = [
-    {
-        id: 1,
-        name: 'Birth Certificate',
-        document_type: 'Birth Certificate (PSA)',
-        file_name: 'birth_certificate_psa.pdf',
-        file_size: 245000,
-        category: 'personal',
-        status: 'approved',
-        uploaded_at: '2024-01-15',
-        uploaded_by: 'HR Staff',
-        expires_at: null,
-    },
-    {
-        id: 2,
-        name: 'NBI Clearance',
-        document_type: 'NBI Clearance',
-        file_name: 'nbi_clearance_2024.pdf',
-        file_size: 180000,
-        category: 'government',
-        status: 'approved',
-        uploaded_at: '2024-03-20',
-        uploaded_by: 'HR Staff',
-        expires_at: '2025-03-20',
-    },
-];
+// ...existing code...
+import { DocumentPreview } from '@/components/hr/document-preview';
 
 export function EmployeeDocumentsTab({ employeeId, documents: initialDocuments }: EmployeeDocumentsTabProps) {
     const { toast } = useToast();
     
     // State management
-    const [documents, setDocuments] = useState<Document[]>(initialDocuments || mockDocuments);
+    const [documents, setDocuments] = useState<Document[]>(initialDocuments ?? []);
+    // ...existing code...
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -158,6 +136,14 @@ export function EmployeeDocumentsTab({ employeeId, documents: initialDocuments }
     const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
     const [documentToReject, setDocumentToReject] = useState<Document | null>(null);
     const [rejectionReason, setRejectionReason] = useState('');
+
+    // Compute preview and download URLs for the view dialog
+    const previewUrl = viewingDocument
+        ? `/hr/employees/${employeeId}/api/documents/${viewingDocument.id}/preview`
+        : '';
+    const downloadUrl = viewingDocument
+        ? `/hr/employees/${employeeId}/api/documents/${viewingDocument.id}/download-file`
+        : '';
     
     // Upload form state
     const [showUploadForm, setShowUploadForm] = useState(false);
@@ -177,7 +163,7 @@ export function EmployeeDocumentsTab({ employeeId, documents: initialDocuments }
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`/hr/api/hr/employees/${employeeId}/documents`, {
+            const response = await fetch(`/hr/employees/${employeeId}/api/documents`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -252,7 +238,7 @@ export function EmployeeDocumentsTab({ employeeId, documents: initialDocuments }
                 });
             }, 200);
 
-            const response = await fetch(`/hr/api/hr/employees/${employeeId}/documents`, {
+            const response = await fetch(`/hr/employees/${employeeId}/api/documents`, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -303,7 +289,7 @@ export function EmployeeDocumentsTab({ employeeId, documents: initialDocuments }
     // Download document
     const handleDownload = async (documentId: number) => {
         try {
-            const response = await fetch(`/hr/api/hr/employees/${employeeId}/documents/${documentId}/download`, {
+            const response = await fetch(`/hr/employees/${employeeId}/api/documents/${documentId}/download`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -339,7 +325,7 @@ export function EmployeeDocumentsTab({ employeeId, documents: initialDocuments }
     // Approve document
     const handleApprove = async (documentId: number) => {
         try {
-            const response = await fetch(`/hr/api/hr/employees/${employeeId}/documents/${documentId}/approve`, {
+            const response = await fetch(`/hr/employees/${employeeId}/api/documents/${documentId}/approve`, {
                 method: 'PUT',
                 headers: {
                     'Accept': 'application/json',
@@ -377,7 +363,7 @@ export function EmployeeDocumentsTab({ employeeId, documents: initialDocuments }
         if (!documentToReject || !rejectionReason) return;
 
         try {
-            const response = await fetch(`/hr/api/hr/employees/${employeeId}/documents/${documentToReject.id}/reject`, {
+            const response = await fetch(`/hr/employees/${employeeId}/api/documents/${documentToReject.id}/reject`, {
                 method: 'PUT',
                 headers: {
                     'Accept': 'application/json',
@@ -417,7 +403,7 @@ export function EmployeeDocumentsTab({ employeeId, documents: initialDocuments }
         if (!documentToDelete) return;
 
         try {
-            const response = await fetch(`/hr/api/hr/employees/${employeeId}/documents/${documentToDelete.id}`, {
+            const response = await fetch(`/hr/employees/${employeeId}/api/documents/${documentToDelete.id}`, {
                 method: 'DELETE',
                 headers: {
                     'Accept': 'application/json',
@@ -964,51 +950,31 @@ export function EmployeeDocumentsTab({ employeeId, documents: initialDocuments }
                             </div>
 
                             {/* Mock Document Preview */}
-                            <div className="flex-1 overflow-y-auto px-6 py-6">
-                                <div className="min-h-full border rounded-lg bg-gray-50 flex items-center justify-center p-8">
-                                    <div className="text-center max-w-2xl">
-                                        <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-lg shadow-sm mb-4">
-                                            <FileText className="h-10 w-10 text-primary" />
-                                        </div>
-                                        <h3 className="text-lg font-semibold mb-2">{viewingDocument.document_type}</h3>
-                                        <p className="text-sm text-muted-foreground mb-1">{viewingDocument.file_name}</p>
-                                        <p className="text-xs text-muted-foreground mb-6">
-                                            {formatFileSize(viewingDocument.file_size)} • PDF Document
-                                        </p>
-                                        
-                                        {/* Rejection Reason */}
-                                        {viewingDocument.status === 'rejected' && viewingDocument.rejection_reason && (
-                                            <Alert variant="destructive" className="mb-4">
-                                                <AlertCircle className="h-4 w-4" />
-                                                <AlertDescription>
-                                                    <strong>Rejection Reason:</strong> {viewingDocument.rejection_reason}
-                                                </AlertDescription>
-                                            </Alert>
-                                        )}
+                            <div className="flex-1 overflow-hidden px-6 py-4">
+                                {/* Rejection / Notes alerts stay above */}
+                                {viewingDocument?.status === 'rejected' && viewingDocument?.rejection_reason && (
+                                    <Alert variant="destructive" className="mb-4">
+                                        <AlertCircle className="h-4 w-4" />
+                                        <AlertDescription>
+                                            <strong>Rejection Reason:</strong> {viewingDocument.rejection_reason}
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+                                {viewingDocument?.notes && (
+                                    <Alert className="mb-4">
+                                        <AlertDescription>
+                                            <strong>Notes:</strong> {viewingDocument.notes}
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
 
-                                        {/* Notes */}
-                                        {viewingDocument.notes && (
-                                            <Alert className="mb-4">
-                                                <AlertDescription>
-                                                    <strong>Notes:</strong> {viewingDocument.notes}
-                                                </AlertDescription>
-                                            </Alert>
-                                        )}
-                                        
-                                        <div className="bg-white border rounded-lg p-6 text-left shadow-sm">
-                                            <div className="space-y-2 text-sm text-gray-700">
-                                                <div className="pb-3 mb-3 border-b">
-                                                    <p className="font-semibold text-lg text-gray-900">
-                                                        {viewingDocument.name}
-                                                    </p>
-                                                </div>
-                                                <p className="text-xs italic text-gray-500">
-                                                    Document preview will be available once file storage is implemented (Phase 4).
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                                <DocumentPreview
+                                    previewUrl={previewUrl}
+                                    mimeType={viewingDocument?.mime_type ?? 'application/octet-stream'}
+                                    fileName={viewingDocument?.file_name}
+                                    downloadUrl={downloadUrl}
+                                    className="h-[500px]"
+                                />
                             </div>
 
                             {/* Action Buttons */}

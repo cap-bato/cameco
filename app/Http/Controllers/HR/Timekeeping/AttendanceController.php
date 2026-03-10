@@ -7,47 +7,125 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Illuminate\Http\JsonResponse;
+use App\Models\DailyAttendanceSummary;
+use App\Models\AttendanceEvent;
+use App\Models\Employee;
+use App\Models\RfidDevice;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class AttendanceController extends Controller
 {
     /**
-     * Display a listing of attendance records with mock data.
+     * Display a listing of attendance records with real data.
      */
     public function index(Request $request): Response
     {
-        // Generate 50+ attendance records with various statuses
-        $records = $this->getMockAttendanceRecords();
+        // Build query for daily attendance summaries with eager loading (Task 7.2.1: Fix N+1)
+        $query = DailyAttendanceSummary::with([
+            'employee:id,employee_number,profile_id,department_id,status',
+            'employee.profile:id,first_name,last_name',
+            'employee.department:id,name',
+            'workSchedule:id,name,time_in,time_out',
+            'leaveRequest:id,leave_type'
+        ])->orderBy('attendance_date', 'desc');
 
-        // Apply filters if provided
-        if ($request->has('department_id')) {
-            $records = array_filter($records, fn($r) => $r['department_id'] == $request->department_id);
+        // Apply date filter (default to current month)
+        $dateFrom = $request->get('date_from', now()->startOfMonth()->toDateString());
+        $dateTo = $request->get('date_to', now()->toDateString());
+        
+        $query->whereBetween('attendance_date', [$dateFrom, $dateTo]);
+
+        // Apply other filters
+        if ($request->filled('department_id')) {
+            $query->whereHas('employee', function ($q) use ($request) {
+                $q->where('department_id', $request->department_id);
+            });
         }
         
-        if ($request->has('status')) {
-            $records = array_filter($records, fn($r) => $r['status'] == $request->status);
+        if ($request->filled('status')) {
+            // Map status to boolean fields
+            switch ($request->status) {
+                case 'present':
+                    $query->where('is_present', true)->where('is_late', false);
+                    break;
+                case 'late':
+                    $query->where('is_late', true);
+                    break;
+                case 'absent':
+                    $query->where('is_absent', true);
+                    break;
+                case 'on_leave':
+                    $query->whereNotNull('leave_request_id');
+                    break;
+            }
         }
 
-        if ($request->has('source')) {
-            $records = array_filter($records, fn($r) => $r['source'] == $request->source);
-        }
+        // Get records
+        $records = $query->limit(100)->get();
+
+        // Transform for frontend
+        $attendance = $records->map(function ($record) {
+            $employee = $record->employee;
+            
+            // Determine status
+            $status = 'absent';
+            if ($record->is_present && !$record->is_late) {
+                $status = 'present';
+            } elseif ($record->is_late) {
+                $status = 'late';
+            } elseif ($record->leave_request_id) {
+                $status = 'on_leave';
+            }
+            
+            return [
+                'id' => $record->id,
+                'employee_id' => $employee ? $employee->employee_number : 'Unknown',
+                'employee_name' => $employee && $employee->profile ? 
+                    "{$employee->profile->first_name} {$employee->profile->last_name}" : 
+                    'Unknown Employee',
+                'date' => $record->attendance_date->format('Y-m-d'),
+                'time_in' => $record->time_in ? $record->time_in->format('H:i:s') : null,
+                'time_out' => $record->time_out ? $record->time_out->format('H:i:s') : null,
+                'break_start' => $record->break_start ? $record->break_start->format('H:i:s') : null,
+                'break_end' => $record->break_end ? $record->break_end->format('H:i:s') : null,
+                'total_hours' => round($record->total_hours ?? 0, 2),
+                'overtime_hours' => round($record->overtime_hours ?? 0, 2),
+                'status' => $status,
+                'source' => $record->source ?? 'edge_machine',
+                'is_late' => $record->is_late,
+                'late_minutes' => $record->late_minutes ?? 0,
+                'is_corrected' => $record->correction_applied,
+                'notes' => $record->notes,
+            ];
+        });
 
         // Calculate summary statistics
         $summary = [
-            'total_records' => count($records),
-            'edge_machine_records' => count(array_filter($records, fn($r) => $r['source'] === 'edge_machine')),
-            'manual_records' => count(array_filter($records, fn($r) => $r['source'] === 'manual')),
-            'imported_records' => count(array_filter($records, fn($r) => $r['source'] === 'imported')),
-            'present_count' => count(array_filter($records, fn($r) => $r['status'] === 'present')),
-            'late_count' => count(array_filter($records, fn($r) => $r['status'] === 'late')),
-            'absent_count' => count(array_filter($records, fn($r) => $r['status'] === 'absent')),
-            'on_leave_count' => count(array_filter($records, fn($r) => $r['status'] === 'on_leave')),
-            'present_rate' => count($records) > 0 ? round((count(array_filter($records, fn($r) => $r['status'] === 'present')) / count($records)) * 100, 1) : 0,
-            'avg_hours' => 8.2,
+            'total_records' => $records->count(),
+            'present_count' => $records->where('is_present', true)->where('is_late', false)->count(),
+            'late_count' => $records->where('is_late', true)->count(),
+            'absent_count' => $records->where('is_absent', true)->count(),
+            'on_leave_count' => $records->whereNotNull('leave_request_id')->count(),
+            'present_rate' => $records->count() > 0 ? 
+                round(($records->where('is_present', true)->count() / $records->count()) * 100, 1) : 0,
         ];
 
+        // Get employee list for dropdown
+        $employees = Employee::with('profile:id,first_name,last_name')
+            ->select('id', 'employee_number', 'profile_id')
+            ->where('status', 'active')
+            ->get()
+            ->map(fn($emp) => [
+                'id' => $emp->id,
+                'employee_id' => $emp->employee_number,
+                'name' => $emp->profile ? "{$emp->profile->first_name} {$emp->profile->last_name}" : 'Unknown',
+            ]);
+
         return Inertia::render('HR/Timekeeping/Attendance/Index', [
-            'attendance' => array_values($records),
+            'attendance' => $attendance,
             'summary' => $summary,
+            'employees' => $employees,
             'filters' => $request->only(['department_id', 'status', 'source', 'date_from', 'date_to']),
         ]);
     }

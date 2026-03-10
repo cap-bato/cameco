@@ -1,23 +1,11 @@
-import { Head, usePage } from '@inertiajs/react';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Head, usePage, Link } from '@inertiajs/react';
+import { useCallback } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { SummaryCard } from '@/components/timekeeping/summary-card';
-import { LedgerHealthWidget } from '@/components/timekeeping/ledger-health-widget';
-import { TimeLogsStream } from '@/components/timekeeping/time-logs-stream';
-import { LogsFilterPanel, LogsFilterConfig, defaultFilters } from '@/components/timekeeping/logs-filter-panel';
-import { EventReplayControl } from '@/components/timekeeping/event-replay-control';
-import { ChevronDown, ChevronUp, Filter, RefreshCw, AlertCircle } from 'lucide-react';
-import { 
-    fetchTimeLogs, 
-    fetchLedgerHealth,
-    TimeLogFilters,
-    LedgerHealthStatus
-} from '@/services/mock-timekeeping-api';
-import type { AttendanceEvent } from '@/types/timekeeping-pages';
+import { ExternalLink, Activity, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
 
 interface StatusDistribution {
     status: string;
@@ -43,6 +31,45 @@ interface Analytics {
     top_issues: TopIssue[];
 }
 
+interface LedgerHealthStatus {
+    status: string;
+    last_sequence_id: number;
+    events_today: number;
+    devices_online: number;
+    devices_offline: number;
+    last_sync: string;
+    avg_latency_ms: number;
+    hash_verification: {
+        total_checked: number;
+        passed: number;
+        failed: number;
+    };
+    performance: {
+        events_per_hour: number;
+        avg_processing_time_ms: number;
+        queue_depth: number;
+    };
+    alerts: Array<{ severity: string; message: string; timestamp: string }>;
+}
+
+interface Violation {
+    id: number;
+    employee: string;
+    type: string;
+    time: string;
+    severity: 'low' | 'medium' | 'high';
+    corrected_at: string;
+}
+
+interface DailyTrend {
+    date: string;
+    label: string;
+    present: number;
+    late: number;
+    absent: number;
+    attendance_rate: number;
+}
+
 export default function TimekeepingOverview() {
     const page = usePage();
     const analytics = (page.props as { analytics?: Analytics }).analytics || {
@@ -50,339 +77,48 @@ export default function TimekeepingOverview() {
         status_distribution: [],
         top_issues: [],
     };
-
-    // State for API data
-    const [timeLogs, setTimeLogs] = useState<AttendanceEvent[]>([]);
-    const [ledgerHealth, setLedgerHealth] = useState<LedgerHealthStatus | null>(null);
-    const [isLoadingLogs, setIsLoadingLogs] = useState(true);
-    const [isLoadingHealth, setIsLoadingHealth] = useState(true);
-    const [logsError, setLogsError] = useState<string | null>(null);
-    const [healthError, setHealthError] = useState<string | null>(null);
     
-    // State for Live Event Stream visibility and filters
-    const [showEventStream, setShowEventStream] = useState(true);
-    const [showFilterPanel, setShowFilterPanel] = useState(true);
-    const [filters, setFilters] = useState<LogsFilterConfig>(defaultFilters);
-    const [autoRefresh, setAutoRefresh] = useState(false);
-    const [lastRefreshTime, setLastRefreshTime] = useState(new Date());
+    // Get ledgerHealth from Inertia props (passed from controller)
+    const ledgerHealth = (page.props as { ledgerHealth?: LedgerHealthStatus }).ledgerHealth || null;
     
-    // State for replay mode (Task 1.8.3)
-    const [replayMode, setReplayMode] = useState(false);
-    const [replayEvents, setReplayEvents] = useState<Array<{
-        id: number;
-        sequenceId: number;
-        employeeId: string;
-        employeeName: string;
-        eventType: 'time_in' | 'time_out' | 'break_start' | 'break_end';
-        timestamp: string;
-        deviceId: string;
-        deviceLocation: string;
-        employeePhoto?: string;
-        rfidCard: string;
-        verified: boolean;
-        hashChain?: string;
-        latencyMs?: number;
-    }>>([]);
+    // Get recentViolations from Inertia props (passed from controller)
+    const recentViolations = (page.props as { recentViolations?: Violation[] }).recentViolations || [];
+    
+    // Get dailyTrends from Inertia props (passed from controller)
+    const dailyTrends = (page.props as { dailyTrends?: DailyTrend[] }).dailyTrends || [];
+    
+    // Calculate totals for each day and format day names
+    const trendsWithTotals = dailyTrends.map(trend => ({
+        ...trend,
+        total: trend.present + trend.late + trend.absent,
+        day: new Date(trend.date).toLocaleDateString('en-US', { weekday: 'long' })
+    }));
 
-    // Fetch time logs from API (Task 2.2.1)
-    const loadTimeLogs = useCallback(async () => {
-        setIsLoadingLogs(true);
-        setLogsError(null);
-        
-        try {
-            const apiFilters: TimeLogFilters = {
-                date_from: filters.customDateFrom || undefined,
-                date_to: filters.customDateTo || undefined,
-                device_id: filters.deviceLocations.length > 0 && !filters.deviceLocations.includes('all') 
-                    ? filters.deviceLocations[0] 
-                    : undefined,
-                event_type: filters.eventTypes.length > 0 ? filters.eventTypes[0] : undefined,
-                page: 1,
-                per_page: 50,
-            };
-
-            const response = await fetchTimeLogs(apiFilters);
-            setTimeLogs(response.data);
-            setLastRefreshTime(new Date());
-        } catch (error: unknown) {
-            console.error('Failed to load time logs:', error);
-            setLogsError(error instanceof Error ? error.message : 'Failed to load time logs');
-        } finally {
-            setIsLoadingLogs(false);
-        }
-    }, [filters]);
-
-    // Fetch ledger health from API (Task 2.2.1)
-    const loadLedgerHealth = useCallback(async () => {
-        setIsLoadingHealth(true);
-        setHealthError(null);
-        
-        try {
-            const health = await fetchLedgerHealth();
-            setLedgerHealth(health);
-        } catch (error: unknown) {
-            console.error('Failed to load ledger health:', error);
-            setHealthError(error instanceof Error ? error.message : 'Failed to load health status');
-        } finally {
-            setIsLoadingHealth(false);
-        }
-    }, []);
-
-    // Initial data load
-    useEffect(() => {
-        loadTimeLogs();
-        loadLedgerHealth();
-    }, [loadTimeLogs, loadLedgerHealth]);
-
-    // Auto-refresh effect (polls API every 30 seconds when enabled)
-    useEffect(() => {
-        if (!autoRefresh) return;
-
-        const intervalId = setInterval(() => {
-            loadTimeLogs();
-            loadLedgerHealth();
-        }, 30000); // 30 seconds
-
-        return () => clearInterval(intervalId);
-    }, [autoRefresh, loadTimeLogs, loadLedgerHealth]);
-
-    // Retry handler for errors
-    const handleRetryLogs = () => {
-        loadTimeLogs();
+    // Simple status mapping function
+    const getStatusIcon = (status: string) => {
+        if (status === 'healthy') return <CheckCircle className="h-5 w-5 text-green-600" />;
+        if (status === 'degraded') return <AlertTriangle className="h-5 w-5 text-yellow-600" />;
+        return <AlertCircle className="h-5 w-5 text-red-600" />;
     };
 
-    const handleRetryHealth = () => {
-        loadLedgerHealth();
+    const getStatusColor = (status: string) => {
+        if (status === 'healthy') return 'bg-green-50 border-green-200';
+        if (status === 'degraded') return 'bg-yellow-50 border-yellow-200';
+        return 'bg-red-50 border-red-200';
     };
 
-    // Transform API health status to widget format
-    const transformedHealthState = useMemo(() => {
-        if (!ledgerHealth) return null;
-
-        return {
-            status: ledgerHealth.status,
-            lastSequence: ledgerHealth.metrics.last_sequence_id,
-            lastProcessedAgo: ledgerHealth.metrics.last_processed_at 
-                ? `${Math.floor((Date.now() - new Date(ledgerHealth.metrics.last_processed_at).getTime()) / 60000)}m ago`
-                : 'Never',
-            processingRate: ledgerHealth.performance.events_per_hour,
-            integrityStatus: ledgerHealth.metrics.hash_chain_intact ? 'verified' as const : 'hash_mismatch_detected' as const,
-            devicesOnline: ledgerHealth.metrics.device_sync_status.online,
-            devicesOffline: ledgerHealth.metrics.device_sync_status.offline,
-            backlog: ledgerHealth.metrics.pending_events,
-            processingRateHistory: [
-                ledgerHealth.performance.events_per_hour,
-                ledgerHealth.performance.events_per_hour - 5,
-                ledgerHealth.performance.events_per_hour + 3,
-                ledgerHealth.performance.events_per_hour - 2,
-                ledgerHealth.performance.events_per_hour + 1,
-                ledgerHealth.performance.events_per_hour,
-                ledgerHealth.performance.events_per_hour + 2,
-                ledgerHealth.performance.events_per_hour - 1,
-                ledgerHealth.performance.events_per_hour,
-                ledgerHealth.performance.events_per_hour + 3,
-                ledgerHealth.performance.events_per_hour - 2,
-                ledgerHealth.performance.events_per_hour,
-            ]
-        };
-    }, [ledgerHealth]);
+    const getStatusBadge = (status: string) => {
+        if (status === 'healthy') return <Badge className="bg-green-600">Healthy</Badge>;
+        if (status === 'degraded') return <Badge variant="secondary" className="bg-yellow-600">Degraded</Badge>;
+        return <Badge variant="destructive">Critical</Badge>;
+    };
 
     // Handler for View Logs action
     const handleViewLogs = useCallback((filterType: string) => {
-        // In production, this would navigate to the full attendance logs page with pre-applied filters
+        // Navigate to attendance records page with pre-applied filters
         console.log(`Navigating to logs with filter: ${filterType}`);
         // Example: router.visit('/hr/timekeeping/attendance', { data: { filter: filterType } });
     }, []);
-
-    // Handler for filter changes
-    const handleFiltersChange = (newFilters: LogsFilterConfig) => {
-        setFilters(newFilters);
-    };
-
-    // Handler for clearing all filters
-    const handleClearFilters = () => {
-        setFilters(defaultFilters);
-    };
-
-    // Handler for replay visible events change (Task 1.8.3)
-    // Convert ReplayEvent[] to TimeLogEntry[] format for the stream
-    const handleReplayVisibleEventsChange = useCallback((events: { 
-        id: number;
-        sequenceId: number;
-        employeeId: string;
-        employeeName: string;
-        eventType: 'time_in' | 'time_out' | 'break_start' | 'break_end';
-        timestamp: string;
-        deviceId: string;
-        deviceLocation: string;
-    }[]) => {
-        // Convert replay events to TimeLogEntry format
-        const convertedEvents = events.map(event => ({
-            ...event,
-            employeePhoto: undefined,
-            rfidCard: '****-****',
-            verified: true,
-            hashChain: undefined,
-            latencyMs: undefined
-        }));
-        setReplayEvents(convertedEvents);
-    }, []);
-
-    // Handler to toggle replay mode
-    const handleToggleReplayMode = () => {
-        setReplayMode(!replayMode);
-        if (!replayMode) {
-            setAutoRefresh(false); // Disable auto-refresh when entering replay mode
-        }
-    };
-
-    // Convert time logs to TimeLogEntry format for the stream
-    const convertedLogs = useMemo(() => {
-        return timeLogs.map(log => ({
-            id: log.id,
-            sequenceId: log.id,
-            employeeId: `EMP-${log.id}`,
-            employeeName: `Employee ${log.id}`,
-            employeePhoto: undefined,
-            rfidCard: '****-0000',
-            eventType: log.event_type,
-            timestamp: log.timestamp,
-            deviceId: log.device_id || 'UNKNOWN',
-            deviceLocation: log.device_location || 'Unknown Location',
-            verified: true,
-            hashChain: undefined,
-            latencyMs: undefined,
-        }));
-    }, [timeLogs]);
-
-    // Filter logs based on comprehensive filter configuration
-    const filteredLogs = useMemo(() => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const last7Days = new Date(today);
-        last7Days.setDate(last7Days.getDate() - 7);
-
-        return convertedLogs.filter((log) => {
-            // 1. Date range filter
-            const logDate = new Date(log.timestamp);
-            let dateMatch = true;
-            
-            switch (filters.dateRange) {
-                case 'today':
-                    dateMatch = logDate >= today;
-                    break;
-                case 'yesterday':
-                    dateMatch = logDate >= yesterday && logDate < today;
-                    break;
-                case 'this_week':
-                    dateMatch = logDate >= last7Days;
-                    break;
-                case 'custom':
-                    if (filters.customDateFrom && filters.customDateTo) {
-                        const fromDate = new Date(filters.customDateFrom);
-                        const toDate = new Date(filters.customDateTo);
-                        toDate.setHours(23, 59, 59, 999); // Include entire end date
-                        dateMatch = logDate >= fromDate && logDate <= toDate;
-                    }
-                    break;
-                default:
-                    dateMatch = true;
-            }
-
-            if (!dateMatch) return false;
-
-            // 2. Department filter (mock implementation - would need department data in log)
-            // For now, we'll skip this as mockTimeLogs doesn't have department field
-            // In production, this would check: log.department === filters.department
-            if (filters.department !== 'all') {
-                // Mock: randomly assign some employees to departments for demo
-                const mockDepartments = ['production', 'admin', 'sales', 'warehouse', 'quality', 'maintenance'];
-                const employeeDept = mockDepartments[parseInt(log.employeeId.slice(-1)) % mockDepartments.length];
-                if (employeeDept !== filters.department) return false;
-            }
-
-            // 3. Event type filter
-            if (filters.eventTypes.length > 0 && !filters.eventTypes.includes(log.eventType)) {
-                return false;
-            }
-
-            // 4. Verification status filter
-            if (filters.verificationStatus !== 'all') {
-                const logVerificationStatus = log.verified ? 'verified' : 'failed';
-                if (logVerificationStatus !== filters.verificationStatus) {
-                    // Check for pending status (could be based on latency or other criteria)
-                    if (filters.verificationStatus === 'pending' && log.latencyMs && log.latencyMs > 500) {
-                        // Allow through if latency suggests pending
-                    } else {
-                        return false;
-                    }
-                }
-            }
-
-            // 5. Device location filter
-            if (filters.deviceLocations.length > 0 && !filters.deviceLocations.includes('all')) {
-                if (!filters.deviceLocations.includes(log.deviceId)) {
-                    return false;
-                }
-            }
-
-            // 6. Employee search filter
-            if (filters.employeeSearch) {
-                const searchLower = filters.employeeSearch.toLowerCase();
-                const nameMatch = log.employeeName.toLowerCase().includes(searchLower);
-                const idMatch = log.employeeId.toLowerCase().includes(searchLower);
-                if (!nameMatch && !idMatch) {
-                    return false;
-                }
-            }
-
-            // 7. Sequence range filter
-            if (filters.sequenceRangeFrom && log.sequenceId < filters.sequenceRangeFrom) {
-                return false;
-            }
-            if (filters.sequenceRangeTo && log.sequenceId > filters.sequenceRangeTo) {
-                return false;
-            }
-
-            // 8. Latency threshold filter
-            if (filters.latencyThreshold && log.latencyMs) {
-                if (log.latencyMs <= filters.latencyThreshold) {
-                    return false;
-                }
-            }
-
-            // 9. Violation type filter
-            if (filters.violationType && filters.violationType !== 'all') {
-                // Mock violation detection based on event type and time
-                // In production, this would check actual violation records
-                const hour = new Date(log.timestamp).getHours();
-                let hasViolation = false;
-
-                switch (filters.violationType) {
-                    case 'late_arrival':
-                        hasViolation = log.eventType === 'time_in' && hour > 8;
-                        break;
-                    case 'early_departure':
-                        hasViolation = log.eventType === 'time_out' && hour < 17;
-                        break;
-                    case 'extended_break':
-                        hasViolation = log.eventType === 'break_end' && hour > 13;
-                        break;
-                    case 'missing_punch':
-                        // Would need paired event detection
-                        hasViolation = false;
-                        break;
-                }
-
-                if (!hasViolation) return false;
-            }
-
-            // All filters passed
-            return true;
-        });
-    }, [convertedLogs, filters]);
 
     const breadcrumbs = [
         { title: 'HR', href: '/hr' },
@@ -401,44 +137,51 @@ export default function TimekeepingOverview() {
                     <p className="text-gray-600">Monitor attendance metrics and trends </p>
                 </div>
 
-                {/* Ledger Health Widget - Full Width at Top */}
-                {isLoadingHealth ? (
-                    <Card>
+                {/* Ledger Health Overview Card - Simple Status */}
+                {ledgerHealth ? (
+                    <Card className={`border ${getStatusColor(ledgerHealth.status)}`}>
                         <CardHeader>
-                            <Skeleton className="h-6 w-48" />
-                            <Skeleton className="h-4 w-64 mt-2" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="grid gap-4 md:grid-cols-4">
-                                <Skeleton className="h-24" />
-                                <Skeleton className="h-24" />
-                                <Skeleton className="h-24" />
-                                <Skeleton className="h-24" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                ) : healthError ? (
-                    <Card className="border-red-200 bg-red-50">
-                        <CardContent className="pt-6">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <AlertCircle className="h-5 w-5 text-red-600" />
+                                    {getStatusIcon(ledgerHealth.status)}
                                     <div>
-                                        <p className="font-medium text-red-900">Failed to load ledger health</p>
-                                        <p className="text-sm text-red-700">{healthError}</p>
+                                        <CardTitle>RFID Ledger Status</CardTitle>
+                                        <CardDescription>Event stream and device health overview</CardDescription>
                                     </div>
                                 </div>
-                                <Button variant="outline" size="sm" onClick={handleRetryHealth}>
-                                    Retry
-                                </Button>
+                                {getStatusBadge(ledgerHealth.status)}
                             </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div>
+                                    <div className="text-muted-foreground">Devices Online</div>
+                                    <div className="text-2xl font-bold text-green-600">{ledgerHealth.devices_online}</div>
+                                </div>
+                                <div>
+                                    <div className="text-muted-foreground">Devices Offline</div>
+                                    <div className="text-2xl font-bold text-red-600">{ledgerHealth.devices_offline}</div>
+                                </div>
+                                <div>
+                                    <div className="text-muted-foreground">Events Today</div>
+                                    <div className="text-2xl font-bold">{ledgerHealth.events_today}</div>
+                                </div>
+                                <div>
+                                    <div className="text-muted-foreground">Processing Rate</div>
+                                    <div className="text-2xl font-bold">{ledgerHealth.performance.events_per_hour}/hr</div>
+                                </div>
+                            </div>
+                            <Link href="/hr/timekeeping/ledger" className="block mt-4">
+                                <Button className="w-full gap-2">
+                                    View Full Ledger & Replay
+                                    <ExternalLink className="h-4 w-4" />
+                                </Button>
+                            </Link>
                         </CardContent>
                     </Card>
-                ) : transformedHealthState ? (
-                    <LedgerHealthWidget healthState={transformedHealthState} />
                 ) : null}
 
-                {/* Two Column Layout: Summary Cards + Live Event Stream */}
+                {/* Two Column Layout: Summary Cards + Analytics */}
                 <div className="grid gap-6 lg:grid-cols-3">
                     {/* Left Column: Summary Cards and Other Widgets */}
                     <div className="lg:col-span-1 space-y-6">
@@ -529,153 +272,229 @@ export default function TimekeepingOverview() {
                         </Card>
                     </div>
 
-                    {/* Right Column: Live Event Stream & Filters */}
+                    {/* Right Column: Quick Actions & Insights */}
                     <div className="lg:col-span-2 space-y-4">
-                        {/* Filters Panel */}
-                        {showFilterPanel && (
-                            <LogsFilterPanel
-                                filters={filters}
-                                onFiltersChange={handleFiltersChange}
-                                onClearFilters={handleClearFilters}
-                            />
-                        )}
-
-                        {/* Section Header with Toggle */}
-                        <Card>
+                        {/* View Full Ledger Card */}
+                        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
                             <CardHeader>
-                                <div className="flex items-center justify-between flex-wrap gap-2">
-                                    <div className="flex items-center gap-3">
-                                        <CardTitle>Live Event Stream</CardTitle>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setShowEventStream(!showEventStream)}
-                                            className="h-8 w-8 p-0"
-                                        >
-                                            {showEventStream ? (
-                                                <ChevronUp className="h-4 w-4" />
-                                            ) : (
-                                                <ChevronDown className="h-4 w-4" />
-                                            )}
-                                        </Button>
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-3">
-                                        <CardDescription className="mt-0 hidden sm:block">
-                                            {filteredLogs.length} event{filteredLogs.length !== 1 ? 's' : ''} • Real-time RFID attendance monitoring
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <Activity className="h-5 w-5 text-blue-600" />
+                                            RFID Event Ledger
+                                        </CardTitle>
+                                        <CardDescription className="mt-2">
+                                            View detailed event stream with replay controls and device monitoring
                                         </CardDescription>
-                                        
-                                        {/* Filter Panel Toggle */}
-                                        <div className="flex items-center gap-2 border-l pl-3">
-                                            <Button
-                                                variant={showFilterPanel ? 'default' : 'outline'}
-                                                size="sm"
-                                                onClick={() => setShowFilterPanel(!showFilterPanel)}
-                                                className="h-8 gap-2"
-                                            >
-                                                <Filter className="h-3 w-3" />
-                                                <span className="text-xs">
-                                                    {showFilterPanel ? 'Hide' : 'Show'} Filters
-                                                </span>
-                                            </Button>
-                                        </div>
-
-                                        {/* Auto-Refresh Toggle */}
-                                        <div className="flex items-center gap-2 border-l pl-3">
-                                            <Button
-                                                variant={autoRefresh ? 'default' : 'outline'}
-                                                size="sm"
-                                                onClick={() => setAutoRefresh(!autoRefresh)}
-                                                className="h-8 gap-2"
-                                            >
-                                                <RefreshCw className={`h-3 w-3 ${autoRefresh ? 'animate-spin' : ''}`} />
-                                                <span className="text-xs">
-                                                    {autoRefresh ? 'Auto ON' : 'Auto OFF'}
-                                                </span>
-                                            </Button>
-                                        </div>
                                     </div>
+                                    <Link href="/hr/timekeeping/ledger">
+                                        <Button className="gap-2">
+                                            View Full Ledger
+                                            <ExternalLink className="h-4 w-4" />
+                                        </Button>
+                                    </Link>
                                 </div>
-
-                                {/* Last refresh time indicator */}
-                                {autoRefresh && showEventStream && (
-                                    <div className="mt-2 text-xs text-muted-foreground">
-                                        Last refreshed: {lastRefreshTime.toLocaleTimeString()} • Updates every 30 seconds
-                                    </div>
-                                )}
                             </CardHeader>
                         </Card>
 
-                        {/* Event Stream Component */}
-                        {showEventStream && (
-                            <>
-                                {isLoadingLogs ? (
-                                    <Card>
-                                        <CardContent className="pt-6">
-                                            <div className="space-y-4">
-                                                {[...Array(5)].map((_, i) => (
-                                                    <div key={i} className="flex gap-4">
-                                                        <Skeleton className="h-12 w-12 rounded-full" />
-                                                        <div className="flex-1 space-y-2">
-                                                            <Skeleton className="h-4 w-3/4" />
-                                                            <Skeleton className="h-3 w-1/2" />
-                                                        </div>
-                                                    </div>
-                                                ))}
+                        {/* Quick Actions */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Quick Actions</CardTitle>
+                                <CardDescription>Common timekeeping operations</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <Button 
+                                        variant="outline" 
+                                        className="justify-start h-auto py-4"
+                                        onClick={() => handleViewLogs('all')}
+                                    >
+                                        <div className="text-left">
+                                            <div className="font-semibold">View Attendance Records</div>
+                                            <div className="text-xs text-muted-foreground mt-1">Browse all employee attendance</div>
+                                        </div>
+                                    </Button>
+                                    <Button 
+                                        variant="outline" 
+                                        className="justify-start h-auto py-4"
+                                        onClick={() => console.log('Navigate to import')}
+                                    >
+                                        <div className="text-left">
+                                            <div className="font-semibold">Import Timesheets</div>
+                                            <div className="text-xs text-muted-foreground mt-1">Upload and process attendance data</div>
+                                        </div>
+                                    </Button>
+                                    <Button 
+                                        variant="outline" 
+                                        className="justify-start h-auto py-4"
+                                        onClick={() => console.log('Navigate to overtime')}
+                                    >
+                                        <div className="text-left">
+                                            <div className="font-semibold">Manage Overtime</div>
+                                            <div className="text-xs text-muted-foreground mt-1">Review and approve overtime requests</div>
+                                        </div>
+                                    </Button>
+                                    <Link href="/hr/timekeeping/ledger">
+                                        <Button 
+                                            variant="outline" 
+                                            className="justify-start h-auto py-4 w-full"
+                                        >
+                                            <div className="text-left">
+                                                <div className="font-semibold">View RFID Ledger</div>
+                                                <div className="text-xs text-muted-foreground mt-1">Real-time event stream and replay</div>
                                             </div>
-                                        </CardContent>
-                                    </Card>
-                                ) : logsError ? (
-                                    <Card className="border-red-200 bg-red-50">
-                                        <CardContent className="pt-6">
-                                            <div className="flex flex-col items-center justify-center gap-4 py-8">
-                                                <AlertCircle className="h-12 w-12 text-red-600" />
-                                                <div className="text-center">
-                                                    <p className="font-medium text-red-900 mb-2">Failed to load events</p>
-                                                    <p className="text-sm text-red-700 mb-4">{logsError}</p>
-                                                    <Button variant="outline" onClick={handleRetryLogs}>
-                                                        <RefreshCw className="h-4 w-4 mr-2" />
-                                                        Retry
-                                                    </Button>
+                                        </Button>
+                                    </Link>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Device Status Summary */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Device Status Summary</CardTitle>
+                                <CardDescription>RFID reader network health</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                                        <div className="text-3xl font-bold text-green-700">
+                                            {ledgerHealth?.devices_online || 0}
+                                        </div>
+                                        <div className="text-sm text-green-600 mt-1">Online</div>
+                                    </div>
+                                    <div className="text-center p-4 bg-red-50 rounded-lg">
+                                        <div className="text-3xl font-bold text-red-700">
+                                            {ledgerHealth?.devices_offline || 0}
+                                        </div>
+                                        <div className="text-sm text-red-600 mt-1">Offline</div>
+                                    </div>
+                                    <div className="text-center p-4 bg-blue-50 rounded-lg">
+                                        <div className="text-3xl font-bold text-blue-700">
+                                            {(ledgerHealth?.devices_online || 0) + (ledgerHealth?.devices_offline || 0)}
+                                        </div>
+                                        <div className="text-sm text-blue-600 mt-1">Total</div>
+                                    </div>
+                                </div>
+                                <Link href="/hr/timekeeping/ledger" className="block mt-4">
+                                    <Button variant="outline" className="w-full gap-2">
+                                        View Device Dashboard
+                                        <ExternalLink className="h-4 w-4" />
+                                    </Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
+
+                        {/* Recent Violations */}
+                        <Card>
+                            <CardHeader>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle>Recent Violations</CardTitle>
+                                        <CardDescription>Latest attendance policy violations</CardDescription>
+                                    </div>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => handleViewLogs('violations')}
+                                    >
+                                        View All
+                                    </Button>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-3">
+                                    {recentViolations.length > 0 ? (
+                                        recentViolations.map((violation) => (
+                                            <div key={violation.id} className="flex items-center justify-between p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors">
+                                                <div>
+                                                    <div className="font-medium text-sm">{violation.employee}</div>
+                                                    <div className="text-xs text-muted-foreground">{violation.type} • {violation.time}</div>
                                                 </div>
+                                                <Badge 
+                                                    variant={
+                                                        violation.severity === 'high' ? 'destructive' :
+                                                        violation.severity === 'medium' ? 'default' :
+                                                        'secondary'
+                                                    }
+                                                    className="capitalize"
+                                                >
+                                                    {violation.severity}
+                                                </Badge>
                                             </div>
-                                        </CardContent>
-                                    </Card>
-                                ) : (
-                                    <TimeLogsStream 
-                                        logs={replayMode ? replayEvents : filteredLogs} 
-                                        maxHeight="calc(100vh - 500px)"
-                                        showLiveIndicator={!replayMode}
-                                        autoScroll={!replayMode}
-                                    />
-                                )}
-                            </>
-                        )}
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-6 text-muted-foreground">
+                                            No recent violations
+                                        </div>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                        {/* Replay Mode Toggle */}
-                        <div className="flex items-center justify-center gap-2 mt-4">
-                            <Button
-                                variant={replayMode ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={handleToggleReplayMode}
-                                className="gap-2"
-                            >
-                                {replayMode ? '📺 Replay Mode Active' : '📺 Enable Replay Mode'}
-                            </Button>
-                            {replayMode && (
-                                <Badge variant="secondary">
-                                    Showing {replayEvents.length} events
-                                </Badge>
-                            )}
-                        </div>
-
-                        {/* Event Replay Control (Task 1.8.3 & 1.8.4) */}
-                        {replayMode && (
-                            <EventReplayControl 
-                                className="mt-6" 
-                                onVisibleEventsChange={handleReplayVisibleEventsChange}
-                            />
-                        )}
+                        {/* Attendance Trends Chart Placeholder */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Daily Attendance Trends</CardTitle>
+                                <CardDescription>Last 7 days attendance patterns</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-3">
+                                    {trendsWithTotals.length > 0 ? (
+                                        trendsWithTotals.map((day, index) => {
+                                            const presentPercentage = day.total > 0 ? (day.present / day.total) * 100 : 0;
+                                            const latePercentage = day.total > 0 ? (day.late / day.total) * 100 : 0;
+                                            const absentPercentage = day.total > 0 ? (day.absent / day.total) * 100 : 0;
+                                            
+                                            return (
+                                                <div key={index} className="space-y-1">
+                                                    <div className="flex items-center justify-between text-sm">
+                                                        <span className="font-medium">{day.day}</span>
+                                                        <span className="text-muted-foreground">{day.total} employees</span>
+                                                    </div>
+                                                    <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-muted">
+                                                        <div 
+                                                            className="bg-green-500" 
+                                                            style={{ width: `${presentPercentage}%` }}
+                                                            title={`Present: ${day.present}`}
+                                                        />
+                                                        <div 
+                                                            className="bg-yellow-500" 
+                                                            style={{ width: `${latePercentage}%` }}
+                                                            title={`Late: ${day.late}`}
+                                                        />
+                                                        <div 
+                                                            className="bg-red-500" 
+                                                            style={{ width: `${absentPercentage}%` }}
+                                                            title={`Absent: ${day.absent}`}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <div className="text-center py-6 text-muted-foreground">
+                                            No attendance data available
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex items-center justify-center gap-4 mt-4 text-xs">
+                                    <div className="flex items-center gap-1">
+                                        <div className="w-3 h-3 rounded bg-green-500"></div>
+                                        <span>Present</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <div className="w-3 h-3 rounded bg-yellow-500"></div>
+                                        <span>Late</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <div className="w-3 h-3 rounded bg-red-500"></div>
+                                        <span>Absent</span>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </div>
                 </div>
             </div>

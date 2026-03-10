@@ -10,6 +10,14 @@
 /**
  * Main page props for Payroll Review & Approval
  */
+export interface AvailablePeriod {
+    id: number;
+    label: string;
+    status: string;
+    period_start: string;
+    period_end: string;
+}
+
 export interface PayrollReviewPageProps {
     payroll_period: PayrollPeriodSummary;
     summary: PayrollReviewSummary;
@@ -17,6 +25,7 @@ export interface PayrollReviewPageProps {
     exceptions: PayrollException[];
     approval_workflow: ApprovalWorkflow;
     employee_calculations: EmployeeCalculationPreview[];
+    available_periods: AvailablePeriod[];
 }
 
 /**

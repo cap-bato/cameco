@@ -408,6 +408,13 @@ class LeaveManagementService
      * This method is called by a scheduled job (monthly) to add leave credits
      * to all active employees based on their leave policies.
      * 
+     * Requirements:
+     * - Runs on 1st day of each month
+     * - Accrues 1.25 days/month (15 days ÷ 12 months) for VL/SL
+     * - Prorates for new hires based on hire_date
+     * - Only accrues for Regular employees
+     * - Logs transactions for audit trail
+     * 
      * @return array Summary of accrual processing
      */
     public function processMonthlyAccrual(): array
@@ -421,8 +428,10 @@ class LeaveManagementService
             $balancesCreated = 0;
             $errors = [];
 
-            // Get all active employees
-            $employees = Employee::where('status', 'active')->get();
+            // Get all active employees with Regular employment type only
+            $employees = Employee::where('status', 'active')
+                ->where('employment_type', 'Regular')
+                ->get();
 
             // Get all active leave policies
             $policies = LeavePolicy::where('is_active', true)->get();
@@ -449,7 +458,7 @@ class LeaveManagementService
                             $balancesCreated++;
                         }
 
-                        // Calculate monthly accrual
+                        // Calculate monthly accrual (prorated for new hires)
                         $accrualAmount = $this->calculateMonthlyAccrual($employee, $policy);
 
                         // Update balance
@@ -459,17 +468,19 @@ class LeaveManagementService
 
                         $balancesUpdated++;
 
-                        // Log accrual
+                        // Log accrual transaction for audit trail
                         activity('leave_accrual_processed')
                             ->performedOn($balance)
                             ->withProperties([
                                 'employee_id' => $employee->id,
                                 'leave_policy_id' => $policy->id,
+                                'policy_code' => $policy->code,
                                 'accrual_amount' => $accrualAmount,
                                 'year' => $currentYear,
                                 'month' => $currentMonth,
                                 'new_earned' => $balance->earned,
                                 'new_remaining' => $balance->remaining,
+                                'employment_type' => $employee->employment_type,
                             ])
                             ->log('Monthly leave accrual processed');
                     } catch (\Exception $e) {
@@ -527,6 +538,15 @@ class LeaveManagementService
      * This method is called at the end of each year to carry forward
      * unused leave balances to the next year based on policy rules.
      * 
+     * Carryover Rules (uses new leave_policies columns):
+     * - carryover_conversion = 'cash': Excess days marked for payroll deduction
+     * - carryover_conversion = 'forfeit': Excess days forfeited, keep max_carryover_days
+     * - carryover_conversion = 'none': Carry forward all days without cap
+     * 
+     * Philippines Labor Code Compliance:
+     * - VL (Vacation Leave): Max 10 days carryover (rest converted to cash)
+     * - SL (Sick Leave): Max 7 days carryover (rest forfeited)
+     * 
      * @param int $year The year to process carryover for
      * @return array Summary of carryover processing
      */
@@ -539,6 +559,8 @@ class LeaveManagementService
             $balancesProcessed = 0;
             $balancesCreated = 0;
             $totalCarriedForward = 0;
+            $totalForfeited = 0;
+            $totalMarkedForPayroll = 0;
 
             // Get all balances for the specified year
             $balances = LeaveBalance::with(['employee', 'leavePolicy'])
@@ -559,48 +581,74 @@ class LeaveManagementService
                     continue;
                 }
 
-                // Calculate carryover amount (limited by max_carryover)
-                $carryoverAmount = min($balance->remaining, $policy->max_carryover);
+                $carryoverAmount = 0;
+                $forfeitedAmount = 0;
+                $payrollAmount = 0;
+                $conversionType = $policy->carryover_conversion ?? 'none';
+                $maxCarryoverDays = $policy->max_carryover_days ?? $policy->max_carryover ?? 0;
 
-                // Create or update balance for next year
-                $nextYearBalance = LeaveBalance::firstOrCreate(
-                    [
-                        'employee_id' => $balance->employee_id,
-                        'leave_policy_id' => $balance->leave_policy_id,
-                        'year' => $nextYear,
-                    ],
-                    [
-                        'earned' => 0,
-                        'used' => 0,
-                        'remaining' => 0,
-                        'carried_forward' => 0,
-                    ]
-                );
-
-                if ($nextYearBalance->wasRecentlyCreated) {
-                    $balancesCreated++;
+                // Process based on carryover_conversion policy
+                if ($conversionType === 'forfeit') {
+                    // Forfeit conversion: Keep only max_carryover_days, rest forfeited
+                    $carryoverAmount = min($balance->remaining, $maxCarryoverDays);
+                    $forfeitedAmount = $balance->remaining - $carryoverAmount;
+                } elseif ($conversionType === 'cash') {
+                    // Cash conversion: Keep max_carryover_days, excess marked for payroll
+                    $carryoverAmount = min($balance->remaining, $maxCarryoverDays);
+                    $payrollAmount = $balance->remaining - $carryoverAmount;
+                } else {
+                    // 'none' or default: Carry forward all remaining days
+                    $carryoverAmount = $balance->remaining;
                 }
 
-                // Add carryover to next year
-                $nextYearBalance->carried_forward = $carryoverAmount;
-                $nextYearBalance->earned += $carryoverAmount;
-                $nextYearBalance->remaining += $carryoverAmount;
-                $nextYearBalance->save();
+                // Create or update balance for next year
+                if ($carryoverAmount > 0) {
+                    $nextYearBalance = LeaveBalance::firstOrCreate(
+                        [
+                            'employee_id' => $balance->employee_id,
+                            'leave_policy_id' => $balance->leave_policy_id,
+                            'year' => $nextYear,
+                        ],
+                        [
+                            'earned' => 0,
+                            'used' => 0,
+                            'remaining' => 0,
+                            'carried_forward' => 0,
+                        ]
+                    );
+
+                    if ($nextYearBalance->wasRecentlyCreated) {
+                        $balancesCreated++;
+                    }
+
+                    // Add carryover to next year
+                    $nextYearBalance->carried_forward = $carryoverAmount;
+                    $nextYearBalance->earned += $carryoverAmount;
+                    $nextYearBalance->remaining += $carryoverAmount;
+                    $nextYearBalance->save();
+
+                    $totalCarriedForward += $carryoverAmount;
+                }
 
                 $balancesProcessed++;
-                $totalCarriedForward += $carryoverAmount;
+                $totalForfeited += $forfeitedAmount;
+                $totalMarkedForPayroll += $payrollAmount;
 
-                // Log carryover
+                // Log carryover processing
                 activity('leave_carryover_processed')
-                    ->performedOn($nextYearBalance)
+                    ->performedOn($balance)
                     ->withProperties([
                         'employee_id' => $balance->employee_id,
                         'leave_policy_id' => $balance->leave_policy_id,
+                        'policy_code' => $policy->code,
                         'from_year' => $year,
                         'to_year' => $nextYear,
                         'carryover_amount' => $carryoverAmount,
                         'previous_remaining' => $balance->remaining,
-                        'max_carryover' => $policy->max_carryover,
+                        'max_carryover_days' => $maxCarryoverDays,
+                        'conversion_type' => $conversionType,
+                        'forfeited_amount' => $forfeitedAmount,
+                        'payroll_amount' => $payrollAmount,
                     ])
                     ->log('Year-end leave carryover processed');
             }
@@ -613,6 +661,8 @@ class LeaveManagementService
                 'balances_processed' => $balancesProcessed,
                 'balances_created' => $balancesCreated,
                 'total_carried_forward' => $totalCarriedForward,
+                'total_forfeited' => $totalForfeited,
+                'total_marked_for_payroll' => $totalMarkedForPayroll,
             ]);
 
             return [
@@ -622,6 +672,8 @@ class LeaveManagementService
                 'balances_processed' => $balancesProcessed,
                 'balances_created' => $balancesCreated,
                 'total_carried_forward' => $totalCarriedForward,
+                'total_forfeited' => $totalForfeited,
+                'total_marked_for_payroll' => $totalMarkedForPayroll,
             ];
         } catch (\Exception $e) {
             DB::rollBack();

@@ -50,8 +50,8 @@ export default function BankFilesIndex({
     console.log('Delete file:', id);
   };
 
-  const confirmedFiles = bankFiles.filter((f) => f.status === 'confirmed').length;
-  const pendingFiles = bankFiles.filter((f) => f.status === 'generated').length;
+  const completedFiles = bankFiles.filter((f) => f.status === 'completed').length;
+  const readyFiles = bankFiles.filter((f) => f.status === 'ready').length;
   const totalAmount = bankFiles.reduce((sum, f) => sum + f.total_amount, 0);
 
   return (
@@ -85,11 +85,11 @@ export default function BankFilesIndex({
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Confirmed Files</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">Completed Files</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold text-green-600">{confirmedFiles}</p>
-              <p className="mt-1 text-xs text-gray-600">Ready for bank submission</p>
+              <p className="text-3xl font-bold text-green-600">{completedFiles}</p>
+              <p className="mt-1 text-xs text-gray-600">Successfully processed</p>
             </CardContent>
           </Card>
 
@@ -111,14 +111,57 @@ export default function BankFilesIndex({
         </div>
 
         {/* Alerts */}
-        {pendingFiles > 0 && (
+        {readyFiles > 0 && (
           <Alert className="border-yellow-200 bg-yellow-50">
             <AlertCircle className="h-4 w-4 text-yellow-600" />
             <AlertDescription className="text-yellow-800">
-              You have {pendingFiles} generated file(s) awaiting validation and upload to the bank.
+              You have {readyFiles} file(s) in 'Ready' status awaiting validation and upload to the bank.
             </AlertDescription>
           </Alert>
         )}
+
+        {/* Status Filter Reference */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Bank File Status Reference</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between border-b pb-2">
+                <span className="font-medium">Status</span>
+                <span className="font-medium">Description</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-gray-600">Draft</span>
+                <span className="text-gray-500">File created but not yet ready</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-gray-600">Ready</span>
+                <span className="text-gray-500">File ready for bank submission</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-gray-600">Submitted</span>
+                <span className="text-gray-500">File submitted to bank</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-gray-600">Processing</span>
+                <span className="text-gray-500">Bank is processing the file</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-gray-600">Completed</span>
+                <span className="text-gray-500">Successfully processed</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-gray-600">Partial</span>
+                <span className="text-gray-500">Partially completed with some failures</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-gray-600">Failed</span>
+                <span className="text-gray-500">Processing failed</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Reference Card */}
         <Card className="border-blue-200 bg-blue-50">
