@@ -151,6 +151,20 @@ class Employee extends Model
         return $this->hasMany(RfidCardMapping::class);
     }
 
+    /**
+     * Get daily attendance summaries for this employee.
+     * 
+     * Returns aggregated daily attendance records with time tracking,
+     * leave status, and business rule flags (late, absent, overtime).
+     * 
+     * Phase 1 Task 1.1: Real attendance data integration
+     */
+    public function dailyAttendanceSummaries(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\DailyAttendanceSummary::class)
+            ->orderBy('attendance_date', 'desc');
+    }
+
     // ========== Payroll Module Relationships ==========
 
     /**

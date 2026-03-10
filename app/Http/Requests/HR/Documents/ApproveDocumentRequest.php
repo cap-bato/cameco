@@ -11,8 +11,7 @@ class ApproveDocumentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        // Authorization handled by middleware (hr.documents.approve permission)
-        return true;
+        return $this->user()?->can('hr.documents.requests.approve') ?? false;
     }
 
     /**
@@ -21,7 +20,11 @@ class ApproveDocumentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'notes' => ['nullable', 'string', 'max:500'],
+            'template_id' => ['nullable', 'integer', 'exists:document_templates,id'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'send_email' => ['boolean'],
+            'effective_date' => ['nullable', 'date'],
+            'expiry_date' => ['nullable', 'date', 'after:effective_date'],
         ];
     }
 
@@ -31,7 +34,8 @@ class ApproveDocumentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'notes.max' => 'Notes must not exceed 500 characters.',
+            'template_id.exists' => 'The selected template does not exist.',
+            'expiry_date.after' => 'Expiry date must be after effective date.',
         ];
     }
 }

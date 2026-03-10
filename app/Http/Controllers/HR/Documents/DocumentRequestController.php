@@ -3,8 +3,16 @@
 namespace App\Http\Controllers\HR\Documents;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\HR\Documents\ApproveDocumentRequest;
+use App\Http\Requests\HR\Documents\RejectDocumentRequest;
+use App\Models\DocumentRequest;
+use App\Notifications\DocumentRequestProcessed;
+use App\Services\DocumentGeneratorService;
 use App\Traits\LogsSecurityAudits;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class DocumentRequestController extends Controller
@@ -16,133 +24,66 @@ class DocumentRequestController extends Controller
      */
     public function index(Request $request)
     {
-        // Mock data for testing
-        $requests = collect([
-            [
-                'id' => 1,
-                'employee_id' => 1,
-                'employee_name' => 'Juan dela Cruz',
-                'employee_number' => 'EMP-2024-001',
-                'department' => 'IT Department',
-                'document_type' => 'Certificate of Employment',
-                'purpose' => 'Bank loan application',
-                'priority' => 'urgent',
-                'status' => 'pending',
-                'requested_at' => now()->subHours(2)->format('Y-m-d H:i:s'),
-                'processed_by' => null,
-                'processed_at' => null,
-            ],
-            [
-                'id' => 2,
-                'employee_id' => 2,
-                'employee_name' => 'Maria Santos',
-                'employee_number' => 'EMP-2024-002',
-                'department' => 'HR Department',
-                'document_type' => 'Payslip',
-                'purpose' => 'Visa application',
-                'priority' => 'high',
-                'status' => 'processing',
-                'requested_at' => now()->subHours(5)->format('Y-m-d H:i:s'),
-                'processed_by' => 'HR Admin',
-                'processed_at' => now()->subHours(1)->format('Y-m-d H:i:s'),
-            ],
-            [
-                'id' => 3,
-                'employee_id' => 3,
-                'employee_name' => 'Pedro Reyes',
-                'employee_number' => 'EMP-2024-003',
-                'department' => 'Finance',
-                'document_type' => 'BIR Form 2316',
-                'purpose' => 'Annual tax filing',
-                'priority' => 'normal',
-                'status' => 'completed',
-                'requested_at' => now()->subDays(2)->format('Y-m-d H:i:s'),
-                'processed_by' => 'Payroll Manager',
-                'processed_at' => now()->subDay()->format('Y-m-d H:i:s'),
-                'generated_document_path' => '/storage/documents/bir-2316-pedro-reyes-2024.pdf',
-            ],
-            [
-                'id' => 4,
-                'employee_id' => 4,
-                'employee_name' => 'Ana Garcia',
-                'employee_number' => 'EMP-2024-004',
-                'department' => 'Operations',
-                'document_type' => 'Employment Contract',
-                'purpose' => 'Personal records',
-                'priority' => 'normal',
-                'status' => 'completed',
-                'requested_at' => now()->subDays(5)->format('Y-m-d H:i:s'),
-                'processed_by' => 'HR Manager',
-                'processed_at' => now()->subDays(4)->format('Y-m-d H:i:s'),
-                'generated_document_path' => '/storage/documents/contract-ana-garcia.pdf',
-            ],
-            [
-                'id' => 5,
-                'employee_id' => 1,
-                'employee_name' => 'Juan dela Cruz',
-                'employee_number' => 'EMP-2024-001',
-                'department' => 'IT Department',
-                'document_type' => 'SSS/PhilHealth/Pag-IBIG Contribution',
-                'purpose' => 'Loan application',
-                'priority' => 'high',
-                'status' => 'rejected',
-                'requested_at' => now()->subDays(3)->format('Y-m-d H:i:s'),
-                'processed_by' => 'HR Staff',
-                'processed_at' => now()->subDays(2)->format('Y-m-d H:i:s'),
-                'rejection_reason' => 'Incomplete contribution records for Q1 2024. Please contact payroll for clarification.',
-            ],
-            [
-                'id' => 6,
-                'employee_id' => 5,
-                'employee_name' => 'Carlos Mendoza',
-                'employee_number' => 'EMP-2024-005',
-                'department' => 'Marketing',
-                'document_type' => 'Leave Credits Statement',
-                'purpose' => 'Personal planning',
-                'priority' => 'normal',
-                'status' => 'pending',
-                'requested_at' => now()->subDays(1)->format('Y-m-d H:i:s'),
-                'processed_by' => null,
-                'processed_at' => null,
-            ],
-        ]);
+        // Build base query joining employee profile info for search and display
+        $query = DocumentRequest::with(['employee.profile', 'processedBy'])
+            ->select('document_requests.*')
+            ->join('employees', 'employees.id', '=', 'document_requests.employee_id')
+            ->join('employee_profiles', 'employee_profiles.employee_id', '=', 'employees.id')
+            ->leftJoin('users', 'users.id', '=', 'document_requests.processed_by')
+            ->orderByRaw("FIELD(document_requests.status, 'pending', 'processing', 'completed', 'rejected')")
+            ->orderBy('requested_at', 'desc');
 
-        // Apply filters
+        // Filters
         if ($request->filled('status')) {
-            $requests = $requests->where('status', $request->status);
+            $query->where('document_requests.status', $request->status);
         }
 
         if ($request->filled('document_type')) {
-            $requests = $requests->where('document_type', $request->document_type);
+            $query->where('document_requests.document_type', $request->document_type);
         }
 
         if ($request->filled('date_from')) {
-            $requests = $requests->filter(function ($req) use ($request) {
-                return $req['requested_at'] >= $request->date_from;
-            });
+            $query->whereDate('document_requests.requested_at', '>=', $request->date_from);
         }
 
         if ($request->filled('date_to')) {
-            $requests = $requests->filter(function ($req) use ($request) {
-                return $req['requested_at'] <= $request->date_to . ' 23:59:59';
-            });
+            $query->whereDate('document_requests.requested_at', '<=', $request->date_to);
         }
 
         if ($request->filled('search')) {
-            $search = strtolower($request->search);
-            $requests = $requests->filter(function ($req) use ($search) {
-                return str_contains(strtolower($req['employee_name']), $search) ||
-                       str_contains(strtolower($req['employee_number']), $search) ||
-                       str_contains(strtolower($req['document_type']), $search);
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('employees.employee_number', 'like', "%{$search}%")
+                    ->orWhereRaw("CONCAT(employee_profiles.first_name, ' ', employee_profiles.last_name) LIKE ?", ["%{$search}%"]);
             });
         }
 
-        // Calculate statistics
+        // Fetch results and map to frontend format
+        $requests = $query->get()->map(function ($req) {
+            return [
+                'id' => $req->id,
+                'employee_id' => $req->employee_id,
+                'employee_name' => $req->employee->profile->full_name ?? 'N/A',
+                'employee_number' => $req->employee->employee_number ?? null,
+                'department' => $req->employee->department_name ?? 'N/A',
+                'document_type' => $this->formatDocumentType($req->document_type),
+                'purpose' => $req->purpose ?? 'Not specified',
+                'priority' => $this->calculatePriority($req),
+                'status' => $req->status,
+                'requested_at' => $req->requested_at?->format('Y-m-d H:i:s'),
+                'processed_by' => $req->processedBy?->name,
+                'processed_at' => $req->processed_at?->format('Y-m-d H:i:s'),
+                'generated_document_path' => $req->file_path,
+                'rejection_reason' => $req->rejection_reason,
+            ];
+        });
+
+        // Statistics (use model scopes where available)
         $statistics = [
-            'pending' => collect($requests)->where('status', 'pending')->count(),
-            'processing' => collect($requests)->where('status', 'processing')->count(),
-            'completed' => collect($requests)->where('status', 'completed')->count(),
-            'rejected' => collect($requests)->where('status', 'rejected')->count(),
+            'pending' => DocumentRequest::pending()->count(),
+            'processing' => DocumentRequest::where('status', 'processing')->count(),
+            'completed' => DocumentRequest::processed()->count(),
+            'rejected' => DocumentRequest::rejected()->count(),
         ];
 
         // Log security audit
@@ -160,64 +101,332 @@ class DocumentRequestController extends Controller
     }
 
     /**
-     * Process a document request (approve or reject).
+     * Convert stored document type to human friendly label
+     */
+    private function formatDocumentType(string $type): string
+    {
+        return match($type) {
+            'certificate_of_employment' => 'Certificate of Employment',
+            'payslip' => 'Payslip',
+            'bir_form_2316' => 'BIR Form 2316',
+            'government_compliance' => 'SSS/PhilHealth/Pag-IBIG Contribution',
+            default => ucwords(str_replace('_', ' ', $type)),
+        };
+    }
+
+    /**
+     * Determine priority based on document type and age
+     */
+    private function calculatePriority(DocumentRequest $request): string
+    {
+        // Urgent: government compliance or pending >= 3 days
+        if ($request->document_type === 'government_compliance') {
+            return 'urgent';
+        }
+
+        if ($request->requested_at instanceof \Illuminate\Support\Carbon) {
+            $daysPending = $request->requested_at->diffInDays(now());
+        } else {
+            try {
+                $daysPending = \Illuminate\Support\Carbon::parse($request->requested_at)->diffInDays(now());
+            } catch (\Throwable $e) {
+                $daysPending = 0;
+            }
+        }
+
+        if ($daysPending >= 3) {
+            return 'urgent';
+        }
+
+        // High: BIR forms or pending >= 1 day
+        if ($request->document_type === 'bir_form_2316' || $daysPending >= 1) {
+            return 'high';
+        }
+
+        return 'normal';
+    }
+
+    /**
+     * Process a document request (approve or reject). Keeps backward compatibility
+     * for clients that post a single `action` field.
      */
     public function process(Request $request, $id)
     {
-        $validated = $request->validate([
-            'action' => 'required|in:approve,reject',
-            'template_id' => 'required_if:action,approve|nullable|integer',
-            'notes' => 'nullable|string|max:500',
-            'rejection_reason' => 'required_if:action,reject|nullable|string|max:500',
-            'send_email' => 'boolean',
-        ]);
-
-        // In production:
-        // 1. Fetch document request from database
-        // 2. If approve: Generate document from template, upload, notify employee
-        // 3. If reject: Update status, save reason, notify employee
-        // 4. Update processed_by and processed_at
-
-        $action = $validated['action'];
+        $action = $request->input('action');
 
         if ($action === 'approve') {
-            // Mock document generation
-            $generatedDocument = [
-                'filename' => 'COE_Juan_dela_Cruz_' . now()->format('Ymd') . '.pdf',
-                'path' => '/storage/documents/coe-juan-dela-cruz-' . now()->format('Ymd') . '.pdf',
-                'size' => '125 KB',
-            ];
+            // Validate using the same rules as ApproveDocumentRequest
+            $validated = $request->validate([
+                'template_id' => 'nullable|integer|exists:document_templates,id',
+                'notes' => 'nullable|string|max:1000',
+                'send_email' => 'boolean',
+                'effective_date' => 'nullable|date',
+                'expiry_date' => 'nullable|date|after:effective_date',
+            ]);
 
-            $this->logAudit(
-                'document_requests.approve',
-                'info',
-                [
-                    'request_id' => $id,
-                    'template_id' => $validated['template_id'] ?? null,
-                    'send_email' => $validated['send_email'] ?? false,
-                    'document' => $generatedDocument,
-                ]
-            );
+            $documentRequest = DocumentRequest::with('employee.profile')->findOrFail($id);
+            return $this->performApprove($documentRequest, $validated);
+        } elseif ($action === 'reject') {
+            $validated = $request->validate([
+                'rejection_reason' => 'required|string|min:10|max:500',
+                'notes' => 'nullable|string|max:1000',
+                'send_email' => 'boolean',
+            ]);
 
-            return redirect()->route('hr.documents.requests.index')
-                ->with('success', 'Document request approved and generated successfully');
-        }
-
-        if ($action === 'reject') {
-            $this->logAudit(
-                'document_requests.reject',
-                'info',
-                [
-                    'request_id' => $id,
-                    'rejection_reason' => $validated['rejection_reason'],
-                ]
-            );
-
-            return redirect()->route('hr.documents.requests.index')
-                ->with('success', 'Document request rejected. Employee has been notified.');
+            $documentRequest = DocumentRequest::with('employee.profile')->findOrFail($id);
+            return $this->performReject($documentRequest, $validated);
         }
 
         return redirect()->route('hr.documents.requests.index')
             ->with('error', 'Invalid action');
     }
-}
+
+    /**
+     * Approve document request (route entrypoint using FormRequest).
+     */
+    public function approve(ApproveDocumentRequest $request, $id)
+    {
+        $validated = $request->validated();
+
+        $documentRequest = DocumentRequest::with('employee.profile')->findOrFail($id);
+        return $this->performApprove($documentRequest, $validated);
+    }
+
+    /**
+     * Perform the approve logic for a single DocumentRequest.
+     */
+    private function performApprove(DocumentRequest $documentRequest, array $validated)
+    {
+        DB::beginTransaction();
+
+        try {
+            if ($documentRequest->status !== 'pending') {
+                return back()->with('error', 'This request has already been processed');
+            }
+
+            // Generate document
+            $generator = new DocumentGeneratorService();
+            $filePath = $generator->generate($documentRequest);
+
+            // Update request status
+            $documentRequest->process(
+                auth()->user(),
+                $filePath,
+                $validated['notes'] ?? null
+            );
+
+            // Store document in employee_documents table for future access
+            DB::table('employee_documents')->insert([
+                'employee_id' => $documentRequest->employee_id,
+                'document_type' => $documentRequest->document_type,
+                'document_category' => $this->getDocumentCategory($documentRequest->document_type),
+                'file_path' => $filePath,
+                'file_name' => basename($filePath),
+                'mime_type' => 'application/pdf',
+                'file_size' => Storage::size($filePath),
+                'uploaded_by' => auth()->id(),
+                'status' => 'approved',
+                'notes' => "Generated from document request #{$documentRequest->id}",
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // Send notification
+            if ($validated['send_email'] ?? true) {
+                $documentRequest->employee->user->notify(
+                    new DocumentRequestProcessed($documentRequest, 'approved', $filePath)
+                );
+                $documentRequest->markEmployeeNotified();
+            }
+
+            // Log audit
+            $this->logAudit(
+                'document_request.approved',
+                'info',
+                [
+                    'request_id' => $documentRequest->id,
+                    'employee_id' => $documentRequest->employee_id,
+                    'document_type' => $documentRequest->document_type,
+                    'file_path' => $filePath,
+                ]
+            );
+
+            DB::commit();
+
+            return redirect()->route('hr.documents.requests.index')
+                ->with('success', "Document request approved and {$documentRequest->document_type} generated successfully");
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            \Log::error('Document request approval failed', [
+                'request_id' => $documentRequest->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return back()->with('error', 'Failed to approve document request: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Reject document request (route entrypoint using FormRequest).
+     */
+    public function reject(RejectDocumentRequest $request, $id)
+    {
+        $validated = $request->validated();
+
+        $documentRequest = DocumentRequest::with('employee.profile')->findOrFail($id);
+        return $this->performReject($documentRequest, $validated);
+    }
+
+    /**
+     * Perform the reject logic for a single DocumentRequest.
+     */
+    private function performReject(DocumentRequest $documentRequest, array $validated)
+    {
+        DB::beginTransaction();
+
+        try {
+            if ($documentRequest->status !== 'pending') {
+                return back()->with('error', 'This request has already been processed');
+            }
+
+            // Reject request
+            $documentRequest->reject(
+                auth()->user(),
+                $validated['rejection_reason'],
+                $validated['notes'] ?? null
+            );
+
+            // Send notification
+            if ($validated['send_email'] ?? true) {
+                $documentRequest->employee->user->notify(
+                    new DocumentRequestProcessed($documentRequest, 'rejected')
+                );
+                $documentRequest->markEmployeeNotified();
+            }
+
+            // Log audit
+            $this->logAudit(
+                'document_request.rejected',
+                'warning',
+                [
+                    'request_id' => $documentRequest->id,
+                    'employee_id' => $documentRequest->employee_id,
+                    'rejection_reason' => $validated['rejection_reason'],
+                ]
+            );
+
+            DB::commit();
+
+            return redirect()->route('hr.documents.requests.index')
+                ->with('success', 'Document request rejected and employee notified');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            \Log::error('Document request rejection failed', [
+                'request_id' => $documentRequest->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return back()->with('error', 'Failed to reject document request: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Bulk approve document requests
+     */
+    public function bulkApprove(Request $request)
+    {
+        $validated = $request->validate([
+            'request_ids' => 'required|array|min:1',
+            'request_ids.*' => 'integer|exists:document_requests,id',
+            'notes' => 'nullable|string|max:1000',
+            'send_email' => 'boolean',
+        ]);
+
+        $successCount = 0;
+        $failCount = 0;
+        $errors = [];
+
+        foreach ($validated['request_ids'] as $requestId) {
+            try {
+                $documentRequest = DocumentRequest::with('employee.profile')->findOrFail($requestId);
+                $this->performApprove($documentRequest, [
+                    'notes' => $validated['notes'] ?? null,
+                    'send_email' => $validated['send_email'] ?? true,
+                ]);
+                $successCount++;
+            } catch (\Exception $e) {
+                $failCount++;
+                $errors[] = "Request #{$requestId}: {$e->getMessage()}";
+            }
+        }
+
+        $message = "Bulk approve completed: {$successCount} succeeded";
+        if ($failCount > 0) {
+            $message .= ", {$failCount} failed";
+        }
+
+        return redirect()->route('hr.documents.requests.index')
+            ->with($failCount > 0 ? 'warning' : 'success', $message)
+            ->with('bulk_errors', $errors);
+    }
+
+    /**
+     * Bulk reject document requests
+     */
+    public function bulkReject(Request $request)
+    {
+        $validated = $request->validate([
+            'request_ids' => 'required|array|min:1',
+            'request_ids.*' => 'integer|exists:document_requests,id',
+            'rejection_reason' => 'required|string|max:500|min:10',
+            'notes' => 'nullable|string|max:1000',
+            'send_email' => 'boolean',
+        ]);
+
+        $successCount = 0;
+        $failCount = 0;
+        $errors = [];
+
+        foreach ($validated['request_ids'] as $requestId) {
+            try {
+                $documentRequest = DocumentRequest::with('employee.profile')->findOrFail($requestId);
+                $this->performReject($documentRequest, [
+                    'rejection_reason' => $validated['rejection_reason'],
+                    'notes' => $validated['notes'] ?? null,
+                    'send_email' => $validated['send_email'] ?? true,
+                ]);
+                $successCount++;
+            } catch (\Exception $e) {
+                $failCount++;
+                $errors[] = "Request #{$requestId}: {$e->getMessage()}";
+            }
+        }
+
+        $message = "Bulk reject completed: {$successCount} rejected";
+        if ($failCount > 0) {
+            $message .= ", {$failCount} failed";
+        }
+
+        return redirect()->route('hr.documents.requests.index')
+            ->with($failCount > 0 ? 'warning' : 'success', $message)
+            ->with('bulk_errors', $errors);
+    }
+
+    /**
+     * Get document category for storage
+     */
+    private function getDocumentCategory(string $type): string
+    {
+        return match($type) {
+            'certificate_of_employment' => 'employment',
+            'payslip' => 'employment',
+            'bir_form_2316' => 'government',
+            'government_compliance' => 'government',
+            default => 'special',
+        };
+    }
