@@ -5,6 +5,7 @@ namespace App\Http\Controllers\HR\Timekeeping;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceCorrection;
 use App\Models\AttendanceEvent;
+use App\Models\DailyAttendanceSummary;
 use App\Events\Timekeeping\AttendanceCorrectionRequested;
 use App\Events\Timekeeping\AttendanceCorrectionApproved;
 use App\Events\Timekeeping\AttendanceCorrectionRejected;
@@ -12,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
 /**
@@ -176,18 +178,8 @@ class AttendanceCorrectionController extends Controller
                 'processed_at' => now(),
             ]);
 
-            // Apply correction to daily_attendance_summary
-            // Note: In real implementation, this would update the summary table
-            // For now, we log the action as the summary table logic isn't fully implemented
-            Log::info('Attendance correction approved - Summary update needed', [
-                'correction_id' => $correction->id,
-                'attendance_event_id' => $correction->attendance_event_id,
-                'approved_by' => auth()->id(),
-                'hours_difference' => $correction->hours_difference,
-            ]);
-
-            // TODO: Implement actual summary update logic
-            // $this->updateDailyAttendanceSummary($correction);
+            // Apply correction to daily_attendance_summary with corrected times
+            $this->updateDailyAttendanceSummary($correction);
 
             // Log audit trail
             Log::info('Attendance correction approved', [
@@ -381,22 +373,119 @@ class AttendanceCorrectionController extends Controller
 
     /**
      * Helper: Update daily attendance summary with corrected values.
-     * 
+     *
+     * Uses AttendanceCorrection->attendanceEvent to resolve employee/date,
+     * applies corrected timestamps, and recalculates derived metrics.
+     * Preserves existing is_finalized state.
+     *
      * @param AttendanceCorrection $correction
      * @return void
      */
     private function updateDailyAttendanceSummary(AttendanceCorrection $correction): void
     {
-        // TODO: Implement summary table update logic
-        // This would:
-        // 1. Find the daily_attendance_summary record for the event date
-        // 2. Recalculate total_hours with corrected values
-        // 3. Update computed fields (late_minutes, undertime_minutes, etc.)
-        // 4. Mark as corrected with reference to correction_id
+        $attendanceEvent = $correction->attendanceEvent;
+
+        if (!$attendanceEvent) {
+            Log::warning('Cannot update daily summary: correction has no attendanceEvent', [
+                'correction_id' => $correction->id,
+                'attendance_event_id' => $correction->attendance_event_id,
+            ]);
+            return;
+        }
+
+        $attendanceDate = Carbon::parse($attendanceEvent->event_date)->toDateString();
+
+        // Use Carbon date object for proper comparison with 'date' cast column
+        $summaryDate = Carbon::parse($attendanceDate);
         
-        Log::info('Daily attendance summary update placeholder', [
+        $summary = DailyAttendanceSummary::where('employee_id', $attendanceEvent->employee_id)
+            ->whereDate('attendance_date', $summaryDate)
+            ->first();
+        
+        if (!$summary) {
+            // Create new if not found, but ensure work_schedule_id is set
+            $existingSummary = DailyAttendanceSummary::where('employee_id', $attendanceEvent->employee_id)
+                ->orderBy('attendance_date', 'DESC')
+                ->first();
+            
+            $workScheduleId = $existingSummary ? $existingSummary->work_schedule_id : 1;
+            
+            $summary = new DailyAttendanceSummary([
+                'employee_id' => $attendanceEvent->employee_id,
+                'attendance_date' => $summaryDate,
+                'work_schedule_id' => $workScheduleId,
+            ]);
+        }
+
+        // Apply corrected timestamps to the summary row.
+        if ($correction->corrected_time_in) {
+            $summary->time_in = Carbon::parse($attendanceDate . ' ' . $correction->corrected_time_in)->toDateTimeString();
+        }
+
+        if ($correction->corrected_time_out) {
+            $summary->time_out = Carbon::parse($attendanceDate . ' ' . $correction->corrected_time_out)->toDateTimeString();
+        }
+
+        if ($correction->corrected_break_start) {
+            $summary->break_start = Carbon::parse($attendanceDate . ' ' . $correction->corrected_break_start)->toDateTimeString();
+        }
+
+        if ($correction->corrected_break_end) {
+            $summary->break_end = Carbon::parse($attendanceDate . ' ' . $correction->corrected_break_end)->toDateTimeString();
+        }
+
+        // Recompute derived values using standard 8:00-17:00 shift assumptions.
+        if ($summary->time_in && $summary->time_out) {
+            $timeIn = Carbon::parse($summary->time_in);
+            $timeOut = Carbon::parse($summary->time_out);
+            $shiftStart = Carbon::parse($attendanceDate . ' 08:00:00');
+            $shiftEnd = Carbon::parse($attendanceDate . ' 17:00:00');
+
+            $breakMinutes = (int) ($summary->break_duration ?? 60);
+            if ($summary->break_start && $summary->break_end) {
+                $breakMinutes = max(
+                    0,
+                    Carbon::parse($summary->break_end)->diffInMinutes(Carbon::parse($summary->break_start), false)
+                );
+            }
+
+            $grossMinutes = max(0, $timeIn->diffInMinutes($timeOut, false));
+            $netMinutes = max(0, $grossMinutes - $breakMinutes);
+
+            $regularMinutes = min($netMinutes, 480);
+            $overtimeMinutes = max(0, $netMinutes - 480);
+
+            $lateBaseMinutes = max(0, $shiftStart->diffInMinutes($timeIn, false));
+            $graceMinutes = 15;
+            $lateMinutes = max(0, $lateBaseMinutes - $graceMinutes);
+
+            $scheduledMinutes = max(0, $shiftStart->diffInMinutes($shiftEnd, false) - $breakMinutes);
+
+            $summary->break_duration = $breakMinutes;
+            $summary->total_hours_worked = round($netMinutes / 60, 2);
+            $summary->regular_hours = round($regularMinutes / 60, 2);
+            $summary->overtime_hours = round($overtimeMinutes / 60, 2);
+            $summary->late_minutes = $lateMinutes;
+            $summary->undertime_minutes = max(0, $scheduledMinutes - $regularMinutes);
+            $summary->is_present = true;
+            $summary->is_late = $lateMinutes > 0;
+            $summary->is_overtime = $overtimeMinutes > 0;
+            $summary->is_undertime = $summary->undertime_minutes > 0;
+        }
+
+        // Only set after migration adds the column.
+        if (Schema::hasColumn('daily_attendance_summary', 'correction_applied')) {
+            $summary->correction_applied = true;
+        }
+
+        $summary->calculated_at = now();
+        $summary->save();
+
+        Log::info('Daily attendance summary updated after correction approval', [
             'correction_id' => $correction->id,
             'attendance_event_id' => $correction->attendance_event_id,
+            'employee_id' => $attendanceEvent->employee_id,
+            'attendance_date' => $attendanceDate,
         ]);
     }
 }

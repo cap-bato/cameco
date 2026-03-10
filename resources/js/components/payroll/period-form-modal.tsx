@@ -15,9 +15,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Badge } from '@/components/ui/badge';
 import { useState, useEffect } from 'react';
-import { Loader2, Calendar, AlertCircle } from 'lucide-react';
-import { PayrollPeriod, PayrollPeriodFormData } from '@/types/payroll-pages';
+import { Loader2, Calendar, AlertCircle, ChevronDown } from 'lucide-react';
+import { PayrollPeriod, PayrollPeriodFormData, DeductionTimingOverride } from '@/types/payroll-pages';
 
 // ============================================================================
 // Type Definitions
@@ -147,6 +153,18 @@ function generatePeriodName(
 }
 
 // ============================================================================
+// Deduction Types Configuration
+// ============================================================================
+
+const DEDUCTION_TYPES = [
+    { key: 'sss', label: 'SSS' },
+    { key: 'philhealth', label: 'PhilHealth' },
+    { key: 'pagibig', label: 'Pag-IBIG' },
+    { key: 'withholding_tax', label: 'Withholding Tax' },
+    { key: 'loans', label: 'Loan Deductions' },
+] as const;
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -164,6 +182,7 @@ export function PeriodFormModal({
         end_date: '',
         cutoff_date: '',
         pay_date: '',
+        deduction_timing: undefined,
     });
 
     const [errors, setErrors] = useState<FormErrors>({});
@@ -173,6 +192,7 @@ export function PeriodFormModal({
     useEffect(() => {
         if (isOpen) {
             if (mode === 'edit' && period) {
+                const calculationConfig = (period as any).calculation_config || {};
                 setFormData({
                     name: period.name,
                     period_type: period.period_type,
@@ -180,6 +200,7 @@ export function PeriodFormModal({
                     end_date: formatDateForInput(period.end_date),
                     cutoff_date: formatDateForInput(period.cutoff_date),
                     pay_date: formatDateForInput(period.pay_date),
+                    deduction_timing: calculationConfig.deduction_timing || undefined,
                 });
             } else {
                 setFormData({
@@ -189,6 +210,7 @@ export function PeriodFormModal({
                     end_date: '',
                     cutoff_date: '',
                     pay_date: '',
+                    deduction_timing: undefined,
                 });
             }
             setErrors({});
@@ -267,6 +289,46 @@ export function PeriodFormModal({
         });
     };
 
+    const handleSetDeductionOverride = (
+        deductionKey: string,
+        field: 'timing' | 'apply_on_period',
+        value: string | number | null
+    ) => {
+        setFormData(prev => {
+            const deductionTiming = { ...prev.deduction_timing } || {};
+            const deductionConfig = { ...(deductionTiming[deductionKey as keyof typeof deductionTiming] || {}) };
+
+            if (field === 'timing') {
+                if (value === 'system_default' || value === '') {
+                    // Clear the override
+                    if (deductionTiming[deductionKey as keyof typeof deductionTiming]) {
+                        delete deductionTiming[deductionKey as keyof typeof deductionTiming];
+                    }
+                } else {
+                    deductionConfig.timing = value as 'per_cutoff' | 'monthly_only' | 'split_monthly';
+                    // Reset apply_on_period when changing timing
+                    if (value !== 'monthly_only' && 'apply_on_period' in deductionConfig) {
+                        delete (deductionConfig as any).apply_on_period;
+                    }
+                    deductionTiming[deductionKey as keyof typeof deductionTiming] = deductionConfig as DeductionTimingOverride;
+                }
+            } else if (field === 'apply_on_period' && deductionConfig.timing) {
+                deductionConfig.apply_on_period = value as 1 | 2;
+                deductionTiming[deductionKey as keyof typeof deductionTiming] = deductionConfig as DeductionTimingOverride;
+            }
+
+            return {
+                ...prev,
+                deduction_timing: Object.keys(deductionTiming).length > 0 ? deductionTiming : undefined,
+            };
+        });
+    };
+
+    const getActiveDeductionOverrideCount = (): number => {
+        if (!formData.deduction_timing) return 0;
+        return Object.values(formData.deduction_timing).filter(v => v !== null && v !== undefined).length;
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -293,6 +355,16 @@ export function PeriodFormModal({
 
         try {
             setIsLoading(true);
+
+            // Filter out "system_default" values from deduction_timing
+            const cleanedDeductionTiming = formData.deduction_timing 
+                ? Object.fromEntries(
+                    Object.entries(formData.deduction_timing).filter(
+                        ([_, config]) => config && config.timing !== 'system_default'
+                    )
+                  )
+                : undefined;
+
             await onSubmit({
                 name: formData.name.trim(),
                 period_type: formData.period_type,
@@ -300,6 +372,7 @@ export function PeriodFormModal({
                 end_date: formData.end_date,
                 cutoff_date: formData.cutoff_date,
                 pay_date: formData.pay_date,
+                deduction_timing: cleanedDeductionTiming,
             });
             onClose();
         } catch (err) {
@@ -478,6 +551,85 @@ export function PeriodFormModal({
                             )}
                         </div>
                     </div>
+
+                    {/* Deduction Timing Overrides */}
+                    <Collapsible defaultOpen={false}>
+                        <CollapsibleTrigger asChild>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="w-full justify-between px-0 hover:bg-transparent"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <ChevronDown className="h-4 w-4 transition-transform" />
+                                    <span>Deduction Timing Overrides</span>
+                                </div>
+                                {getActiveDeductionOverrideCount() > 0 && (
+                                    <Badge variant="secondary">
+                                        {getActiveDeductionOverrideCount()} override{getActiveDeductionOverrideCount() !== 1 ? 's' : ''}
+                                    </Badge>
+                                )}
+                                {getActiveDeductionOverrideCount() === 0 && (
+                                    <Badge variant="outline" className="text-xs">Uses system defaults</Badge>
+                                )}
+                            </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-4 pt-4 border-t mt-4">
+                            <p className="text-sm text-muted-foreground">
+                                Override deduction timing for this period only. Leave blank to use system-wide defaults.
+                            </p>
+                            
+                            <div className="space-y-3">
+                                {DEDUCTION_TYPES.map((deductionType) => {
+                                    const currentOverride = formData.deduction_timing?.[deductionType.key as keyof typeof formData.deduction_timing];
+                                    const currentTiming = currentOverride?.timing ?? 'system_default';
+                                    const currentPeriod = currentOverride?.apply_on_period ?? 2;
+
+                                    return (
+                                        <div key={deductionType.key} className="flex items-center gap-3">
+                                            <Label className="w-36 mb-0">{deductionType.label}</Label>
+                                            <Select
+                                                value={currentTiming}
+                                                onValueChange={(val) =>
+                                                    handleSetDeductionOverride(deductionType.key, 'timing', val)
+                                                }
+                                                disabled={isLoading}
+                                            >
+                                                <SelectTrigger className="w-48">
+                                                    <SelectValue placeholder="System Default" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="system_default">System Default</SelectItem>
+                                                    <SelectItem value="per_cutoff">Every Cutoff</SelectItem>
+                                                    <SelectItem value="monthly_only">Monthly Only</SelectItem>
+                                                    <SelectItem value="split_monthly">Split Monthly</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+
+                                            {/* Conditional period selector for monthly_only */}
+                                            {currentTiming === 'monthly_only' && (
+                                                <Select
+                                                    value={String(currentPeriod)}
+                                                    onValueChange={(val) =>
+                                                        handleSetDeductionOverride(deductionType.key, 'apply_on_period', parseInt(val))
+                                                    }
+                                                    disabled={isLoading}
+                                                >
+                                                    <SelectTrigger className="w-32">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="1">1st Cutoff</SelectItem>
+                                                        <SelectItem value="2">2nd Cutoff</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
 
                     {/* Form Actions */}
                     <div className="flex justify-end gap-3 pt-6 border-t">

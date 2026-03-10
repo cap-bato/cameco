@@ -18,6 +18,10 @@ use Carbon\Carbon;
  */
 class TimekeepingTestDataSeeder extends Seeder
 {
+    // Date range aligned with payroll calculation test period
+    private const SEED_DATE_FROM = '2026-03-01';
+    private const SEED_DATE_TO   = '2026-03-15';
+
     /**
      * Run the database seeds.
      */
@@ -73,21 +77,44 @@ class TimekeepingTestDataSeeder extends Seeder
 
         $this->command->info('Created/retrieved 20 test employees');
 
-        // Create attendance events for the last 7 days
-        $this->command->info('Generating attendance events for last 7 days...');
+        // Assign default work schedule to employees that don't have one
+        $this->command->info('Assigning work schedules to employees...');
+        $defaultSchedule = \App\Models\WorkSchedule::first();
+        $administratorUser = \App\Models\User::first();
         
-        $progressBar = $this->command->getOutput()->createProgressBar(count($employees) * 7);
+        if ($defaultSchedule && $administratorUser) {
+            $scheduleCount = 0;
+            foreach ($employees as $employee) {
+                $hasSchedule = \App\Models\EmployeeSchedule::where('employee_id', $employee->id)
+                    ->whereNull('end_date')
+                    ->exists();
+                
+                if (!$hasSchedule) {
+                    \App\Models\EmployeeSchedule::firstOrCreate(
+                        [
+                            'employee_id' => $employee->id,
+                            'work_schedule_id' => $defaultSchedule->id,
+                            'effective_date' => now()->subDays(30)->toDateString(),
+                        ],
+                        [
+                            'end_date' => null,
+                            'created_by' => $administratorUser->id,
+                        ]
+                    );
+                    $scheduleCount++;
+                }
+            }
+            $this->command->info("  → Assigned work schedule to {$scheduleCount} employees");
+        }
+
+        // Create attendance events for payroll-period working days
+        $workDays = $this->getWorkingDays(self::SEED_DATE_FROM, self::SEED_DATE_TO);
+        $this->command->info('Generating attendance events for ' . count($workDays) . ' working days...');
+
+        $progressBar = $this->command->getOutput()->createProgressBar(count($employees) * count($workDays));
         $progressBar->start();
 
-        for ($day = 6; $day >= 0; $day--) {
-            $date = now()->subDays($day);
-
-            // Skip weekends (Saturday = 6, Sunday = 0)
-            if ($date->dayOfWeek === 0 || $date->dayOfWeek === 6) {
-                $progressBar->advance(count($employees));
-                continue;
-            }
-
+        foreach ($workDays as $date) {
             foreach ($employees as $employee) {
                 $this->createAttendanceForEmployee($employee, $date);
                 $progressBar->advance();
@@ -97,6 +124,88 @@ class TimekeepingTestDataSeeder extends Seeder
         $progressBar->finish();
         $this->command->newLine();
         $this->command->info('Attendance events generated successfully');
+
+        // Step 2: Generate daily summaries from attendance events
+        $this->command->info('Generating daily attendance summaries from events...');
+        
+        $summaryCreated = 0;
+
+        foreach ($workDays as $date) {
+            foreach ($employees as $employee) {
+                try {
+                    // Check if summary already exists
+                    $existing = \App\Models\DailyAttendanceSummary::where('employee_id', $employee->id)
+                        ->whereDate('attendance_date', $date)
+                        ->exists();
+                    
+                    if ($existing) {
+                        continue;
+                    }
+
+                    // Check if attendance events exist
+                    $events = \App\Models\AttendanceEvent::where('employee_id', $employee->id)
+                        ->whereDate('event_date', $date)
+                        ->orderBy('event_time', 'asc')
+                        ->get();
+
+                    if ($events->isEmpty()) {
+                        continue;
+                    }
+
+                    // Extract time_in and time_out
+                    $timeIn = $events->firstWhere('event_type', 'time_in')?->event_time;
+                    $timeOut = $events->lastWhere('event_type', 'time_out')?->event_time;
+
+                    // Calculate hours worked
+                    $totalHours = 0;
+                    if ($timeIn && $timeOut) {
+                        $totalMinutes = $timeIn->diffInMinutes($timeOut);
+                        $totalHours = round($totalMinutes / 60, 2);
+                    }
+
+                    // Create summary record
+                    \App\Models\DailyAttendanceSummary::create([
+                        'employee_id' => $employee->id,
+                        'attendance_date' => $date->toDateString(),
+                        'work_schedule_id' => null,
+                        'time_in' => $timeIn,
+                        'time_out' => $timeOut,
+                        'break_start' => null,
+                        'break_end' => null,
+                        'total_hours_worked' => $totalHours,
+                        'regular_hours' => $totalHours,
+                        'overtime_hours' => 0,
+                        'break_duration' => 0,
+                        'is_present' => $timeIn ? true : false,
+                        'is_late' => false,
+                        'is_undertime' => false,
+                        'is_overtime' => false,
+                        'late_minutes' => null,
+                        'undertime_minutes' => null,
+                        'is_on_leave' => false,
+                        'is_finalized' => false,
+                    ]);
+                    $summaryCreated++;
+                } catch (\Exception $e) {
+                    // Log error for debugging but continue
+                    \Illuminate\Support\Facades\Log::debug("Summary creation skipped for employee {$employee->id}: {$e->getMessage()}");
+                }
+            }
+        }
+
+        $this->command->info("  → Summaries created: {$summaryCreated}");
+
+        // Step 3: Finalize all summaries (mark is_finalized = true so payroll can pick them up)
+        $this->command->info('Finalizing attendance summaries for payroll...');
+        $finalized = \App\Models\DailyAttendanceSummary::whereBetween('attendance_date', [
+            self::SEED_DATE_FROM,
+            self::SEED_DATE_TO,
+            ])
+            ->where('is_finalized', false)
+            ->update(['is_finalized' => true]);
+
+        $this->command->info("  → Finalized {$finalized} attendance rows for payroll processing");
+        $this->command->info('✓ Timekeeping test data seeded successfully!');
     }
 
     /**
@@ -120,13 +229,15 @@ class TimekeepingTestDataSeeder extends Seeder
             $checkOutTime = $date->copy()->setHour(17)->setMinute(random_int(0, 59));
         }
 
+        $baseSequence = ((int) $date->format('Ymd')) * 100000 + ($employee->id * 10);
+
         // Create check-in event
         AttendanceEvent::firstOrCreate(
             [
                 'employee_id' => $employee->id,
                 'event_date' => $date,
                 'event_type' => 'time_in',
-                'ledger_sequence_id' => rand(10000, 999999),
+                'ledger_sequence_id' => $baseSequence + 1,
             ],
             [
                 'event_time' => $checkInTime,
@@ -149,7 +260,7 @@ class TimekeepingTestDataSeeder extends Seeder
                 'employee_id' => $employee->id,
                 'event_date' => $date,
                 'event_type' => 'time_out',
-                'ledger_sequence_id' => rand(10000, 999999),
+                'ledger_sequence_id' => $baseSequence + 2,
             ],
             [
                 'event_time' => $checkOutTime,
@@ -171,10 +282,12 @@ class TimekeepingTestDataSeeder extends Seeder
             // 20% get a correction event
             $correctionReason = ['Early departure', 'Manual override', 'Device malfunction'][rand(0, 2)];
             
-            AttendanceEvent::create([
+            AttendanceEvent::firstOrCreate([
                 'employee_id' => $employee->id,
                 'event_date' => $date,
                 'event_type' => 'time_out',
+                'ledger_sequence_id' => $baseSequence + 3,
+            ], [
                 'event_time' => $checkOutTime->copy()->addMinutes(random_int(-30, 30)),
                 'is_deduplicated' => false,
                 'ledger_hash_verified' => true,
@@ -190,5 +303,27 @@ class TimekeepingTestDataSeeder extends Seeder
                 'ledger_raw_payload' => [],
             ]);
         }
+    }
+
+    /**
+     * Build a list of working days (Mon-Fri) within an inclusive date range.
+     *
+     * @return array<int, Carbon>
+     */
+    private function getWorkingDays(string $startDate, string $endDate): array
+    {
+        $days = [];
+        $cursor = Carbon::parse($startDate)->startOfDay();
+        $end = Carbon::parse($endDate)->startOfDay();
+
+        while ($cursor->lte($end)) {
+            if (!$cursor->isWeekend()) {
+                $days[] = $cursor->copy();
+            }
+
+            $cursor->addDay();
+        }
+
+        return $days;
     }
 }

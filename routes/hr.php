@@ -29,6 +29,8 @@ use App\Http\Controllers\HR\Timekeeping\LedgerDeviceController;
 use App\Http\Controllers\HR\Timekeeping\DeviceController;
 use App\Http\Controllers\HR\Timekeeping\EmployeeTimelineController;
 use App\Http\Controllers\HR\Timekeeping\AnalyticsController as TimekeepingAnalyticsController;
+use App\Http\Controllers\HR\Timekeeping\AttendanceCorrectionController;
+use App\Http\Controllers\HR\Timekeeping\AttendanceFinalizeController;
 use App\Http\Controllers\HR\Appraisal\AppraisalCycleController;
 use App\Http\Controllers\HR\Appraisal\AppraisalController;
 use App\Http\Controllers\HR\Appraisal\PerformanceMetricsController;
@@ -925,6 +927,21 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 Route::put('/{id}/reject', [\App\Http\Controllers\HR\Timekeeping\AttendanceCorrectionController::class, 'reject'])
                     ->middleware('permission:hr.timekeeping.corrections.approve')
                     ->name('reject');
+            });
+
+            // Attendance Finalization API Routes (JSON Responses)
+            // Lock/unlock attendance for a period
+            // ====================================================
+            Route::prefix('api/attendance/finalize')->name('api.attendance.finalize.')->group(function () {
+                // Finalize (lock) attendance for period
+                Route::post('/', [AttendanceFinalizeController::class, 'store'])
+                    ->middleware('permission:hr.timekeeping.attendance.finalize')
+                    ->name('store');
+                
+                // Unfinalize (unlock) attendance for period
+                Route::delete('/', [AttendanceFinalizeController::class, 'destroy'])
+                    ->middleware('permission:hr.timekeeping.attendance.finalize')
+                    ->name('destroy');
             });
 
             // Overtime Management

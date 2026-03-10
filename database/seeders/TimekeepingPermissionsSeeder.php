@@ -21,6 +21,12 @@ class TimekeepingPermissionsSeeder extends Seeder
             'timekeeping.attendance.delete',
             'timekeeping.attendance.correct',
             'timekeeping.attendance.bulk_entry',
+            'hr.timekeeping.attendance.view',
+            'hr.timekeeping.attendance.create',
+            'hr.timekeeping.attendance.update',
+            'hr.timekeeping.attendance.delete',
+            'hr.timekeeping.attendance.correct',
+            'hr.timekeeping.attendance.finalize',
 
             // Attendance Correction Permissions (Task 4.4)
             'hr.timekeeping.corrections.create',
@@ -63,6 +69,15 @@ class TimekeepingPermissionsSeeder extends Seeder
         // Assign all Timekeeping permissions to HR Manager role
         $hrManagerRole->givePermissionTo($permissions);
 
-        $this->command->info('Timekeeping permissions seeded successfully!');
+        // Get Payroll Officer role and assign finalize permission
+        $payrollOfficerRole = \Spatie\Permission\Models\Role::firstOrCreate(
+            ['name' => 'Payroll Officer'],
+            ['guard_name' => 'web']
+        );
+
+        // Assign finalize permission to Payroll Officer
+        $payrollOfficerRole->givePermissionTo('hr.timekeeping.attendance.finalize');
+
+        $this->command->info('✓ Timekeeping permissions seeded successfully!');
     }
 }

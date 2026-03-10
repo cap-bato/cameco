@@ -59,10 +59,35 @@ class PayrollPeriodController extends Controller
             'end_date'    => 'required|date|after:start_date',
             'cutoff_date' => 'required|date',
             'pay_date'    => 'required|date|after:end_date',
+            // Deduction timing overrides (optional)
+            'deduction_timing' => 'nullable|array',
+            'deduction_timing.sss.timing' => 'nullable|in:per_cutoff,monthly_only,split_monthly',
+            'deduction_timing.sss.apply_on_period' => 'nullable|in:1,2',
+            'deduction_timing.philhealth.timing' => 'nullable|in:per_cutoff,monthly_only,split_monthly',
+            'deduction_timing.philhealth.apply_on_period' => 'nullable|in:1,2',
+            'deduction_timing.pagibig.timing' => 'nullable|in:per_cutoff,monthly_only,split_monthly',
+            'deduction_timing.pagibig.apply_on_period' => 'nullable|in:1,2',
+            'deduction_timing.withholding_tax.timing' => 'nullable|in:per_cutoff,monthly_only,split_monthly',
+            'deduction_timing.withholding_tax.apply_on_period' => 'nullable|in:1,2',
+            'deduction_timing.loans.timing' => 'nullable|in:per_cutoff,monthly_only,split_monthly',
+            'deduction_timing.loans.apply_on_period' => 'nullable|in:1,2',
         ]);
 
         try {
             $start = Carbon::parse($validated['start_date']);
+
+            // Prepare calculation_config with deduction_timing overrides
+            $calculationConfig = [];
+            if (!empty($validated['deduction_timing'])) {
+                // Only store overrides where timing is explicitly set (not null)
+                $overrides = array_filter(
+                    $validated['deduction_timing'],
+                    fn($v) => is_array($v) && !empty($v['timing'])
+                );
+                if (!empty($overrides)) {
+                    $calculationConfig['deduction_timing'] = $overrides;
+                }
+            }
 
             PayrollPeriod::create([
                 'period_number'           => $this->generatePeriodNumber($validated['start_date']),
@@ -78,6 +103,7 @@ class PayrollPeriodController extends Controller
                 'adjustment_deadline'     => $validated['cutoff_date'],
                 'status'                  => 'draft',
                 'created_by'              => auth()->id(),
+                'calculation_config'      => !empty($calculationConfig) ? $calculationConfig : null,
             ]);
 
             return redirect()->route('payroll.periods.index')
@@ -127,6 +153,18 @@ class PayrollPeriodController extends Controller
             'end_date'    => 'required|date|after:start_date',
             'cutoff_date' => 'required|date',
             'pay_date'    => 'required|date|after:end_date',
+            // Deduction timing overrides (optional)
+            'deduction_timing' => 'nullable|array',
+            'deduction_timing.sss.timing' => 'nullable|in:per_cutoff,monthly_only,split_monthly',
+            'deduction_timing.sss.apply_on_period' => 'nullable|in:1,2',
+            'deduction_timing.philhealth.timing' => 'nullable|in:per_cutoff,monthly_only,split_monthly',
+            'deduction_timing.philhealth.apply_on_period' => 'nullable|in:1,2',
+            'deduction_timing.pagibig.timing' => 'nullable|in:per_cutoff,monthly_only,split_monthly',
+            'deduction_timing.pagibig.apply_on_period' => 'nullable|in:1,2',
+            'deduction_timing.withholding_tax.timing' => 'nullable|in:per_cutoff,monthly_only,split_monthly',
+            'deduction_timing.withholding_tax.apply_on_period' => 'nullable|in:1,2',
+            'deduction_timing.loans.timing' => 'nullable|in:per_cutoff,monthly_only,split_monthly',
+            'deduction_timing.loans.apply_on_period' => 'nullable|in:1,2',
         ]);
 
         try {
@@ -139,6 +177,19 @@ class PayrollPeriodController extends Controller
 
             $start = Carbon::parse($validated['start_date']);
 
+            // Prepare calculation_config with deduction_timing overrides
+            $calculationConfig = [];
+            if (!empty($validated['deduction_timing'])) {
+                // Only store overrides where timing is explicitly set (not null)
+                $overrides = array_filter(
+                    $validated['deduction_timing'],
+                    fn($v) => is_array($v) && !empty($v['timing'])
+                );
+                if (!empty($overrides)) {
+                    $calculationConfig['deduction_timing'] = $overrides;
+                }
+            }
+
             $period->update([
                 'period_name'             => $validated['name'],
                 'period_start'            => $validated['start_date'],
@@ -149,6 +200,7 @@ class PayrollPeriodController extends Controller
                 'timekeeping_cutoff_date' => $validated['cutoff_date'],
                 'leave_cutoff_date'       => $validated['cutoff_date'],
                 'adjustment_deadline'     => $validated['cutoff_date'],
+                'calculation_config'      => !empty($calculationConfig) ? $calculationConfig : null,
             ]);
 
             return redirect()->route('payroll.periods.index')
@@ -262,6 +314,7 @@ class PayrollPeriodController extends Controller
             'pay_date'           => $p->payment_date?->toDateString(),
             'status'             => $this->dbStatusToFrontend($p->status),
             'total_employees'    => $p->total_employees ?? 0,
+            'progress_percentage'=> (float) ($p->progress_percentage ?? 0),
             'total_gross_pay'    => (float) ($p->total_gross_pay ?? 0),
             'total_deductions'   => (float) ($p->total_deductions ?? 0),
             'total_net_pay'      => (float) ($p->total_net_pay ?? 0),

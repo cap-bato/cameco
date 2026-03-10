@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\SystemSetting;
+use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
 use App\Models\Employee;
 use App\Models\Department;
@@ -21,21 +22,41 @@ class ApprovalWorkflowController extends Controller
      */
     public function index(Request $request): Response
     {
-        // Get all workflow settings
-        $settings = SystemSetting::where('category', 'workflow')
+        // Get approval rules from leave_approval settings (matching LeaveApprovalRules frontend interface)
+        $approvalSettings = SystemSetting::where('key', 'LIKE', 'leave_approval.%')
             ->get()
-            ->pluck('value', 'key');
+            ->pluck('value', 'key')
+            ->toArray();
 
-        $workflows = [
-            'leave' => $this->getLeaveWorkflowConfig($settings),
-            'hiring' => $this->getHiringWorkflowConfig($settings),
-            'payroll' => $this->getPayrollWorkflowConfig($settings),
-            'expense' => $this->getExpenseWorkflowConfig($settings),
-            'overtime' => $this->getOvertimeWorkflowConfig($settings),
+        $approvalRules = [
+            'duration_threshold_days' => (int)($approvalSettings['leave_approval.duration.threshold_days'] ?? 5),
+            'duration_tier2_days' => (int)($approvalSettings['leave_approval.duration.tier2_days'] ?? 15),
+            'balance_threshold_days' => (float)($approvalSettings['leave_approval.balance.threshold_days'] ?? 5),
+            'balance_warning_enabled' => filter_var($approvalSettings['leave_approval.balance.warning_enabled'] ?? '1', FILTER_VALIDATE_BOOLEAN),
+            'advance_notice_days' => (int)($approvalSettings['leave_approval.advance_notice.required_days'] ?? 3),
+            'short_notice_requires_approval' => filter_var($approvalSettings['leave_approval.advance_notice.short_requires_approval'] ?? '1', FILTER_VALIDATE_BOOLEAN),
+            'coverage_threshold_percentage' => (float)($approvalSettings['leave_approval.coverage.threshold_percentage'] ?? 75),
+            'coverage_warning_enabled' => filter_var($approvalSettings['leave_approval.coverage.warning_enabled'] ?? '1', FILTER_VALIDATE_BOOLEAN),
+            'unpaid_leave_requires_manager' => filter_var($approvalSettings['leave_approval.leave_type.unpaid_requires_manager'] ?? '1', FILTER_VALIDATE_BOOLEAN),
+            'maternity_requires_admin' => filter_var($approvalSettings['leave_approval.leave_type.maternity_requires_admin'] ?? '1', FILTER_VALIDATE_BOOLEAN),
+            'blackout_periods_enabled' => filter_var($approvalSettings['leave_approval.blackout.enabled'] ?? '0', FILTER_VALIDATE_BOOLEAN),
+            'blackout_dates' => isset($approvalSettings['leave_approval.blackout.dates'])
+                ? json_decode($approvalSettings['leave_approval.blackout.dates'], true)
+                : [],
+            'frequency_limit_enabled' => filter_var($approvalSettings['leave_approval.frequency.enabled'] ?? '0', FILTER_VALIDATE_BOOLEAN),
+            'frequency_max_requests' => (int)($approvalSettings['leave_approval.frequency.max_requests'] ?? 3),
+            'frequency_period_days' => (int)($approvalSettings['leave_approval.frequency.period_days'] ?? 30),
         ];
 
+        // Get active leave types for the workflow tester
+        $leaveTypes = LeavePolicy::where('is_active', true)
+            ->orderBy('name')
+            ->get(['code', 'name', 'is_paid'])
+            ->toArray();
+
         return Inertia::render('Admin/ApprovalWorkflows/Index', [
-            'workflows' => $workflows,
+            'approvalRules' => $approvalRules,
+            'leaveTypes' => $leaveTypes,
         ]);
     }
 

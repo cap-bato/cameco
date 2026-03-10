@@ -433,7 +433,6 @@ export default function LeaveHistory({
                     </CardContent>
                 </Card>
             </div>
-            </div>
         </AppLayout>
     );
 }

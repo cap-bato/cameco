@@ -533,7 +533,7 @@ class LedgerPollingService
                 // Create attendance event from ledger entry
                 $attendanceEvent = AttendanceEvent::create([
                     'employee_id' => $employeeId,
-                    'event_date' => $ledgerEvent->scan_timestamp->date(),
+                    'event_date' => $ledgerEvent->scan_timestamp->toDateString(),
                     'event_time' => $ledgerEvent->scan_timestamp,
                     'event_type' => $ledgerEvent->event_type,
                     'ledger_sequence_id' => $ledgerEvent->sequence_id,
@@ -577,10 +577,15 @@ class LedgerPollingService
      */
     private function resolveEmployeeId(string $employeeRfid): ?int
     {
-        // TODO: Implement RFID to employee mapping lookup
-        // For now, return first employee or null
-        $employee = \App\Models\Employee::first();
-        return $employee?->id;
+        $mapping = \App\Models\RfidCardMapping::where('card_uid', $employeeRfid)
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                  ->orWhere('expires_at', '>', now());
+            })
+            ->first();
+
+        return $mapping?->employee_id;
     }
 
     /**

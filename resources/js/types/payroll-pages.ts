@@ -252,6 +252,21 @@ export interface PayrollPeriod {
 }
 
 /**
+ * Deduction Timing Type
+ * Determines when deductions are applied in payroll calculation
+ */
+export type DeductionTimingType = 'per_cutoff' | 'monthly_only' | 'split_monthly';
+
+/**
+ * Deduction Timing Configuration Override
+ * Applied per payroll period to override global defaults
+ */
+export interface DeductionTimingOverride {
+    timing: DeductionTimingType;
+    apply_on_period?: 1 | 2;               // Only used when timing = 'monthly_only'
+}
+
+/**
  * Create/Edit Payroll Period Form Data
  */
 export interface PayrollPeriodFormData {
@@ -261,6 +276,13 @@ export interface PayrollPeriodFormData {
     end_date: string;                      // ISO date string
     cutoff_date: string;                   // ISO date string
     pay_date: string;                      // ISO date string
+    deduction_timing?: {
+        sss?: DeductionTimingOverride | null;
+        philhealth?: DeductionTimingOverride | null;
+        pagibig?: DeductionTimingOverride | null;
+        withholding_tax?: DeductionTimingOverride | null;
+        loans?: DeductionTimingOverride | null;
+    };
 }
 
 /**

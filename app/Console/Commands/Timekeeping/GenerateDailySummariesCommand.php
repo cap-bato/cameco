@@ -5,6 +5,7 @@ namespace App\Console\Commands\Timekeeping;
 use Illuminate\Console\Command;
 use App\Services\Timekeeping\AttendanceSummaryService;
 use App\Models\Employee;
+use App\Models\DailyAttendanceSummary;
 use Carbon\Carbon;
 
 /**
@@ -26,7 +27,8 @@ class GenerateDailySummariesCommand extends Command
      */
     protected $signature = 'timekeeping:generate-daily-summaries
                             {--date= : Specific date to generate summaries for (YYYY-MM-DD)}
-                            {--force : Force regeneration even if summaries exist}';
+                          {--force : Force regeneration even if summaries exist}
+                          {--auto-finalize : Automatically finalize attendance after successful generation}';
 
     /**
      * The console command description.
@@ -67,6 +69,8 @@ class GenerateDailySummariesCommand extends Command
                         $targetDate
                     );
 
+                    $summary = $summaryService->applyBusinessRules($summary, $targetDate);
+
                     $summaryService->storeDailySummary($summary);
                     $successCount++;
 
@@ -80,6 +84,19 @@ class GenerateDailySummariesCommand extends Command
 
             $progressBar->finish();
             $this->newLine(2);
+
+            // Auto-finalize if requested and no errors occurred
+            if ($this->option('auto-finalize') && $errorCount === 0) {
+                try {
+                    $finalized = DailyAttendanceSummary::whereDate('attendance_date', $targetDate)
+                        ->where('is_finalized', false)
+                        ->update(['is_finalized' => true]);
+                    
+                    $this->info("✓ Auto-finalized {$finalized} attendance summaries for {$targetDate->toDateString()}");
+                } catch (\Exception $e) {
+                    $this->warn("Auto-finalization failed: {$e->getMessage()}");
+                }
+            }
 
             $this->info("✓ Summary generation completed:");
             $this->table(

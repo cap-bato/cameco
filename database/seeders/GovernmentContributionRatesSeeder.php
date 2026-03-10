@@ -37,14 +37,15 @@ class GovernmentContributionRatesSeeder extends Seeder
             ['O', 10750, 11249.99, 11000, 495, 935, 10],
             ['P', 11250, 11749.99, 11500, 517.50, 977.50, 10],
             ['Q', 11750, 12249.99, 12000, 540, 1020, 10],
-            ['R', 12250, 12749.99, 12500, 562.50, 1062.50, 20],
-            ['S', 12750, 13249.99, 13000, 585, 1105, 20],
-            ['T', 13250, 13749.99, 13500, 607.50, 1147.50, 20],
-            ['U', 13750, 14249.99, 14000, 630, 1190, 20],
-            ['V', 14250, 14749.99, 14500, 652.50, 1232.50, 20],
-            ['W', 14750, 15249.99, 15000, 675, 1275, 20],
-            ['X', 15250, 15749.99, 15500, 697.50, 1317.50, 20],
-            ['Y', 15750, 16249.99, 16000, 720, 1360, 20],
+            // EC switches to ₱30 at MSC ≥ ₱15,000 (SSS EC table is 2-tier: ₱10 / ₱30)
+            ['R', 12250, 12749.99, 12500, 562.50, 1062.50, 10],
+            ['S', 12750, 13249.99, 13000, 585, 1105, 10],
+            ['T', 13250, 13749.99, 13500, 607.50, 1147.50, 10],
+            ['U', 13750, 14249.99, 14000, 630, 1190, 10],
+            ['V', 14250, 14749.99, 14500, 652.50, 1232.50, 10],
+            ['W', 14750, 15249.99, 15000, 675, 1275, 30],
+            ['X', 15250, 15749.99, 15500, 697.50, 1317.50, 30],
+            ['Y', 15750, 16249.99, 16000, 720, 1360, 30],
             ['Z', 16250, 16749.99, 16500, 742.50, 1402.50, 30],
             ['AA', 16750, 17249.99, 17000, 765, 1445, 30],
             ['AB', 17250, 17749.99, 17500, 787.50, 1487.50, 30],
@@ -67,25 +68,29 @@ class GovernmentContributionRatesSeeder extends Seeder
         ];
         
         foreach ($sssRates as $rate) {
-            DB::table('government_contribution_rates')->insert([
-                'agency' => 'sss',
-                'rate_type' => 'bracket',
-                'bracket_code' => $rate[0],
-                'compensation_min' => $rate[1],
-                'compensation_max' => $rate[2],
-                'monthly_salary_credit' => $rate[3],
-                'employee_rate' => 4.5,
-                'employer_rate' => 8.5,
-                'total_rate' => 13.0,
-                'employee_amount' => $rate[4],
-                'employer_amount' => $rate[5],
-                'ec_amount' => $rate[6],
-                'total_amount' => $rate[4] + $rate[5] + $rate[6],
-                'effective_from' => $effectiveFrom,
-                'is_active' => true,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+            DB::table('government_contribution_rates')->updateOrInsert(
+                [
+                    'agency'         => 'sss',
+                    'rate_type'      => 'bracket',
+                    'bracket_code'   => $rate[0],
+                    'effective_from' => $effectiveFrom,
+                ],
+                [
+                    'compensation_min'      => $rate[1],
+                    'compensation_max'      => $rate[2],
+                    'monthly_salary_credit' => $rate[3],
+                    'employee_rate'         => 4.5,
+                    'employer_rate'         => 8.5,
+                    'total_rate'            => 13.0,
+                    'employee_amount'       => $rate[4],
+                    'employer_amount'       => $rate[5],
+                    'ec_amount'             => $rate[6],
+                    'total_amount'          => $rate[4] + $rate[5] + $rate[6],
+                    'is_active'             => true,
+                    'created_at'            => $now,
+                    'updated_at'            => $now,
+                ]
+            );
         }
         
         // ============================================================
@@ -95,24 +100,28 @@ class GovernmentContributionRatesSeeder extends Seeder
         // Maximum: ₱5,000/month (₱100,000 basic salary)
         // ============================================================
         
-        DB::table('government_contribution_rates')->insert([
-            'agency' => 'philhealth',
-            'rate_type' => 'premium_rate',
-            'bracket_code' => null,
-            'compensation_min' => 10000,
-            'compensation_max' => 100000,
-            'employee_rate' => 2.5,
-            'employer_rate' => 2.5,
-            'total_rate' => 5.0,
-            'minimum_contribution' => 500, // ₱500 total (₱250 EE + ₱250 ER)
-            'maximum_contribution' => 5000, // ₱5,000 total (₱2,500 EE + ₱2,500 ER)
-            'premium_ceiling' => 100000,
-            'effective_from' => $effectiveFrom,
-            'is_active' => true,
-            'notes' => 'PhilHealth premium is 5% of basic salary with ₱10k-₱100k range. Minimum ₱500/month, Maximum ₱5,000/month.',
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+        DB::table('government_contribution_rates')->updateOrInsert(
+            [
+                'agency'         => 'philhealth',
+                'rate_type'      => 'premium_rate',
+                'bracket_code'   => null,
+                'effective_from' => $effectiveFrom,
+            ],
+            [
+                'compensation_min'     => 10000,
+                'compensation_max'     => 100000,
+                'employee_rate'        => 2.5,
+                'employer_rate'        => 2.5,
+                'total_rate'           => 5.0,
+                'minimum_contribution' => 500,   // PHP500 total (PHP250 EE + PHP250 ER)
+                'maximum_contribution' => 5000,  // PHP5,000 total (PHP2,500 EE + PHP2,500 ER)
+                'premium_ceiling'      => 100000,
+                'is_active'            => true,
+                'notes'                => 'PhilHealth premium is 5% of basic salary with PHP10k-PHP100k range. Minimum PHP500/month, Maximum PHP5,000/month.',
+                'created_at'           => $now,
+                'updated_at'           => $now,
+            ]
+        );
         
         // ============================================================
         // PAG-IBIG CONTRIBUTION RATES (2024 - RA 9679)
@@ -121,41 +130,49 @@ class GovernmentContributionRatesSeeder extends Seeder
         // Employee ceiling: ₱100/month
         // ============================================================
         
-        // Low earners (≤ ₱1,500)
-        DB::table('government_contribution_rates')->insert([
-            'agency' => 'pagibig',
-            'rate_type' => 'contribution_rate',
-            'bracket_code' => 'LOW',
-            'compensation_min' => 0,
-            'compensation_max' => 1500,
-            'employee_rate' => 1.0,
-            'employer_rate' => 2.0,
-            'total_rate' => 3.0,
-            'contribution_ceiling' => 100, // Employee max ₱100
-            'effective_from' => $effectiveFrom,
-            'is_active' => true,
-            'notes' => 'For salary ≤ ₱1,500: 1% employee + 2% employer',
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
-        
-        // Regular earners (> ₱1,500)
-        DB::table('government_contribution_rates')->insert([
-            'agency' => 'pagibig',
-            'rate_type' => 'contribution_rate',
-            'bracket_code' => 'REGULAR',
-            'compensation_min' => 1500.01,
-            'compensation_max' => null,
-            'employee_rate' => 2.0,
-            'employer_rate' => 2.0,
-            'total_rate' => 4.0,
-            'contribution_ceiling' => 100, // Employee max ₱100
-            'effective_from' => $effectiveFrom,
-            'is_active' => true,
-            'notes' => 'For salary > ₱1,500: 2% employee + 2% employer. Employee contribution capped at ₱100.',
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+        // Low earners (<= PHP1,500)
+        DB::table('government_contribution_rates')->updateOrInsert(
+            [
+                'agency'         => 'pagibig',
+                'rate_type'      => 'contribution_rate',
+                'bracket_code'   => 'LOW',
+                'effective_from' => $effectiveFrom,
+            ],
+            [
+                'compensation_min'     => 0,
+                'compensation_max'     => 1500,
+                'employee_rate'        => 1.0,
+                'employer_rate'        => 2.0,
+                'total_rate'           => 3.0,
+                'contribution_ceiling' => 100,  // Employee max PHP100
+                'is_active'            => true,
+                'notes'                => 'For salary <= PHP1,500: 1% employee + 2% employer',
+                'created_at'           => $now,
+                'updated_at'           => $now,
+            ]
+        );
+
+        // Regular earners (> PHP1,500)
+        DB::table('government_contribution_rates')->updateOrInsert(
+            [
+                'agency'         => 'pagibig',
+                'rate_type'      => 'contribution_rate',
+                'bracket_code'   => 'REGULAR',
+                'effective_from' => $effectiveFrom,
+            ],
+            [
+                'compensation_min'     => 1500.01,
+                'compensation_max'     => null,
+                'employee_rate'        => 2.0,
+                'employer_rate'        => 2.0,
+                'total_rate'           => 4.0,
+                'contribution_ceiling' => 100,  // Employee max PHP100
+                'is_active'            => true,
+                'notes'                => 'For salary > PHP1,500: 2% employee + 2% employer. Employee contribution capped at PHP100.',
+                'created_at'           => $now,
+                'updated_at'           => $now,
+            ]
+        );
         
         $this->command->info('Government contribution rates seeded successfully!');
         $this->command->info('- SSS: 44 brackets');

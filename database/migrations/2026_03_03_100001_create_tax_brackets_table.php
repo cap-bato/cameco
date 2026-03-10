@@ -25,9 +25,10 @@ return new class extends Migration
             $table->decimal('tax_rate', 5, 2)->default(0); // Percentage (0-35)
             $table->decimal('excess_over', 12, 2)->default(0); // Amount to subtract from income
 
-            // Exemptions (TRAIN Law)
-            $table->decimal('personal_exemption', 10, 2)->default(50000); // ₱50k standard
-            $table->decimal('additional_exemption', 10, 2)->default(25000); // ₱25k per dependent
+            // TRAIN Law abolished personal exemptions — these columns are retained for
+            // historical/pre-TRAIN records only. All 2018+ records must store 0.
+            $table->decimal('personal_exemption', 10, 2)->default(0);
+            $table->decimal('additional_exemption', 10, 2)->default(0);
             $table->integer('max_dependents')->default(4);
 
             // Effective Period

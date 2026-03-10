@@ -90,8 +90,10 @@ class TaxBracketsSeeder extends Seeder
             ],
         ];
         
-        $personalExemption = 50000;      // Standard personal exemption (TRAIN)
-        $additionalExemptionPerDependent = 25000; // Per dependent (TRAIN)
+        // TRAIN Law (RA 10963, effective 2018) abolished personal exemptions.
+        // The ₱250,000 zero-bracket is the replacement; no additional exemption is subtracted.
+        $personalExemption = 0;
+        $additionalExemptionPerDependent = 0;
 
         // Insert tax brackets for each status
         foreach ($taxStatuses as $status => $description) {
@@ -105,33 +107,6 @@ class TaxBracketsSeeder extends Seeder
             $additionalExemption = $additionalExemptionPerDependent * $dependents;
 
             foreach ($brackets as $bracket) {
-<<<<<<< copilot/sub-pr-31
-                DB::table('tax_brackets')->insert([
-                    'tax_status' => $status,
-                    'status_description' => $description,
-                    'bracket_level' => $bracket['level'],
-                    'income_from' => $bracket['income_from'],
-                    'income_to' => $bracket['income_to'],
-                    'base_tax' => $bracket['base_tax'],
-                    'tax_rate' => $bracket['tax_rate'],
-                    'excess_over' => $bracket['excess_over'],
-                    'personal_exemption' => $personalExemption,
-                    'additional_exemption' => $additionalExemption,
-                    'max_dependents' => $dependents,
-                    'effective_from' => $effectiveFrom,
-                    'is_active' => true,
-                    'notes' => sprintf(
-                        'TRAIN Law tax bracket for %s. Exemptions: ₱%s personal + ₱%s additional (%d dependent(s) × ₱%s each)',
-                        $description,
-                        number_format($personalExemption),
-                        number_format($additionalExemption),
-                        $dependents,
-                        number_format($additionalExemptionPerDependent)
-                    ),
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
-=======
                 DB::table('tax_brackets')->updateOrInsert(
                     [
                         'tax_status' => $status,
@@ -150,7 +125,7 @@ class TaxBracketsSeeder extends Seeder
                         'max_dependents' => 4,
                         'is_active' => true,
                         'notes' => sprintf(
-                            'TRAIN Law tax bracket for %s. Exemptions: ₱%s personal + ₱%s × %d dependents',
+                            'TRAIN Law tax bracket for %s. Exemptions: PHP%s personal + PHP%s x %d dependents',
                             $description,
                             number_format($personalExemption),
                             number_format($additionalExemption),
@@ -160,7 +135,6 @@ class TaxBracketsSeeder extends Seeder
                         'updated_at' => $now,
                     ]
                 );
->>>>>>> main
             }
         }
         

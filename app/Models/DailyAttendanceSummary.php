@@ -75,6 +75,8 @@ class DailyAttendanceSummary extends Model
         'ledger_verified',
         'calculated_at',
         'is_finalized',
+        'correction_applied',
+        'needs_schedule_review',
     ];
 
     // Cast attributes to appropriate types
@@ -97,6 +99,8 @@ class DailyAttendanceSummary extends Model
         'is_on_leave' => 'boolean',
         'ledger_verified' => 'boolean',
         'is_finalized' => 'boolean',
+        'correction_applied' => 'boolean',
+        'needs_schedule_review' => 'boolean',
         'calculated_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -172,6 +176,11 @@ class DailyAttendanceSummary extends Model
     public function scopeUnverified($query)
     {
         return $query->where('ledger_verified', false);
+    }
+
+    public function scopeNeedsScheduleReview($query)
+    {
+        return $query->where('needs_schedule_review', true);
     }
 
     // Helper methods
