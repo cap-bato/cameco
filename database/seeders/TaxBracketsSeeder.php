@@ -90,8 +90,10 @@ class TaxBracketsSeeder extends Seeder
             ],
         ];
         
-        $personalExemption = 50000;      // Standard personal exemption (TRAIN)
-        $additionalExemptionPerDependent = 25000; // Per dependent (TRAIN)
+        // TRAIN Law (RA 10963, effective 2018) abolished personal exemptions.
+        // The ₱250,000 zero-bracket is the replacement; no additional exemption is subtracted.
+        $personalExemption = 0;
+        $additionalExemptionPerDependent = 0;
 
         // Insert tax brackets for each status
         foreach ($taxStatuses as $status => $description) {
@@ -123,7 +125,7 @@ class TaxBracketsSeeder extends Seeder
                         'max_dependents' => 4,
                         'is_active' => true,
                         'notes' => sprintf(
-                            'TRAIN Law tax bracket for %s. Exemptions: ₱%s personal + ₱%s × %d dependents',
+                            'TRAIN Law tax bracket for %s. Exemptions: PHP%s personal + PHP%s x %d dependents',
                             $description,
                             number_format($personalExemption),
                             number_format($additionalExemption),

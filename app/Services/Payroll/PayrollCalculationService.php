@@ -12,6 +12,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use App\Models\GovernmentContributionRate;
+use App\Models\TaxBracket;
 
 /**
  * PayrollCalculationService
@@ -117,7 +119,7 @@ class PayrollCalculationService
             $undertimeMinutes = $attendanceSummaries->sum('undertime_minutes');
 
             // Step 4: Calculate basic pay
-            $basicPay = $this->calculateBasicPay($daysWorked, $payrollInfo);
+            $basicPay = $this->calculateBasicPay($daysWorked, $payrollInfo, $period);
 
             // Step 5: Calculate overtime pay
             $overtimePay = $this->calculateOvertimePay($overtimeHours, $payrollInfo);
@@ -133,21 +135,41 @@ class PayrollCalculationService
             // Step 8: Calculate gross pay
             $grossPay = $basicPay + $overtimePay + $componentAmounts + $totalAllowances;
 
-            // Step 9: Calculate government contributions
-            $sssContribution = $this->calculateSSSContribution($payrollInfo);
-            $philhealthContribution = $this->calculatePhilHealthContribution($payrollInfo);
-            $pagibigContribution = $this->calculatePagIBIGContribution($payrollInfo);
+            // Step 9 & 10: Government contributions and tax — monthly obligations, 2nd half only.
+            // SSS, PhilHealth, Pag-IBIG, and withholding tax are each a monthly obligation.
+            // Deducting on every semi-monthly period would double-charge the employee.
+            $periodHalf = $this->getPeriodHalf($period);
 
-            // Step 10: Calculate withholding tax
-            $taxableIncome = $grossPay - $sssContribution - $philhealthContribution - $pagibigContribution;
-            $withholdingTax = $this->calculateWithholdingTax($taxableIncome, $payrollInfo->tax_status);
+            if ($periodHalf === 2) {
+                // Bracket lookups use basic_salary (the full monthly figure stored in payroll_info),
+                // so we pass $payrollInfo directly — no projection needed for contribution amounts.
+                $sssContribution        = $this->calculateSSSContribution($payrollInfo);
+                $philhealthContribution = $this->calculatePhilHealthContribution($payrollInfo);
+                $pagibigContribution    = $this->calculatePagIBIGContribution($payrollInfo);
+
+                // Withholding tax: annualise the MONTHLY gross (not the half-period gross).
+                // basicPay is already half the monthly salary, so ×2 projects back to monthly.
+                $monthlyGross   = ($basicPay * 2) + $totalAllowances;
+                $monthlyTaxable = $monthlyGross - $sssContribution - $philhealthContribution - $pagibigContribution;
+                $withholdingTax = $this->calculateWithholdingTax($monthlyTaxable, $payrollInfo->tax_status);
+            } else {
+                // 1st half: no government deductions — paid as salary advance only.
+                $sssContribution        = 0.0;
+                $philhealthContribution = 0.0;
+                $pagibigContribution    = 0.0;
+                $withholdingTax         = 0.0;
+            }
 
             // Step 11: Get active deductions
             $deductions = $this->allowanceDeductionService->getActiveDeductions($employee);
             $totalDeductions = $deductions->sum('amount');
 
-            // Step 12: Calculate loan deductions
-            $loanDeductions = $this->loanManagementService->processLoanDeduction($employee, $period);
+            // Step 12: Calculate loan deductions — monthly obligation, 2nd half only.
+            // scheduleLoanDeductions() creates one installment per calendar month. Calling
+            // processLoanDeduction() on both halves would consume two installments per month.
+            $loanDeductions = $periodHalf === 2
+                ? $this->loanManagementService->processLoanDeduction($employee, $period)
+                : 0.0;
 
             // Step 13: Calculate late/undertime deductions
             $lateDeduction = $this->calculateLateDeduction($lateMinutes, $payrollInfo);
@@ -160,12 +182,21 @@ class PayrollCalculationService
             // Step 15: Calculate net pay
             $netPay = $grossPay - $allDeductions;
 
-            // Step 16: Force-delete any existing calculation (for recalculation).
-            // Must use forceDelete() because SoftDeletes leaves the row in the DB,
-            // which would still violate the unique_employee_period_version constraint.
-            EmployeePayrollCalculation::where('employee_id', $employee->id)
+            // Step 16: Supersede any existing calculation to preserve audit trail.
+            // Soft-delete the old record (leaves it visible to withTrashed() audits),
+            // then create the new version pointing back to it via previous_version_id.
+            $existingCalculation = EmployeePayrollCalculation::where('employee_id', $employee->id)
                 ->where('payroll_period_id', $period->id)
-                ->forceDelete();
+                ->latest('version')
+                ->first();
+
+            $newVersion = $existingCalculation ? $existingCalculation->version + 1 : 1;
+            $previousVersionId = $existingCalculation?->id;
+
+            if ($existingCalculation) {
+                $existingCalculation->update(['calculation_status' => 'superseded']);
+                $existingCalculation->delete(); // soft delete only — row stays in DB with deleted_at set
+            }
 
             $expectedDays = Carbon::parse($period->period_start)
                 ->diffInWeekdays(Carbon::parse($period->period_end)) + 1;
@@ -209,6 +240,8 @@ class PayrollCalculationService
                 'total_deductions'           => (float) $allDeductions,
                 'net_pay'                    => (float) $netPay,
                 'final_net_pay'              => (float) $netPay,
+                'version'                    => $newVersion,
+                'previous_version_id'        => $previousVersionId,
                 'calculation_status'         => 'calculated',
                 'calculated_at'             => Carbon::now(),
             ]);
@@ -277,16 +310,17 @@ class PayrollCalculationService
             $totalDeductions = $calculations->sum('total_deductions');
             $totalNetPay = $calculations->sum('net_pay');
 
-            // Calculate employer contributions
+            // Calculate employer contributions using DB bracket data (Option A)
             $totalEmployerSSS = $calculations->sum(function ($calc) {
-                return $calc->sss_contribution * 1.45; // Employer contribution rate
+                $bracket = GovernmentContributionRate::findSSSBracket((float) $calc->basic_monthly_salary);
+                return $bracket
+                    ? (float) $bracket->employer_amount
+                    : (float) $calc->sss_contribution * (8.5 / 4.5);
             });
-            $totalEmployerPhilHealth = $calculations->sum(function ($calc) {
-                return $calc->philhealth_contribution * 1.00; // Employer contribution rate
-            });
-            $totalEmployerPagIBIG = $calculations->sum(function ($calc) {
-                return $calc->pagibig_contribution * 0.20; // Employer contribution rate
-            });
+            // PhilHealth: 1:1 EE:ER split (both 2.5%)
+            $totalEmployerPhilHealth = $calculations->sum('philhealth_contribution');
+            // Pag-IBIG: employer rate mirrors employee rate (both 2%, same PHP100 ceiling)
+            $totalEmployerPagIBIG = $calculations->sum('pagibig_contribution');
 
             $totalEmployerCost = $totalGrossPay + $totalEmployerSSS + $totalEmployerPhilHealth + $totalEmployerPagIBIG;
 
@@ -327,18 +361,32 @@ class PayrollCalculationService
     /**
      * Calculate basic pay for employee
      *
+     * For semi-monthly payroll, monthly-salaried employees receive exactly half
+     * their basic salary per period (1st half and 2nd half are equal).
+     *
      * @param int $daysWorked
      * @param EmployeePayrollInfo $payrollInfo
+     * @param PayrollPeriod $period  Used in Phase 2 for contribution half-gating
      * @return float
      */
-    private function calculateBasicPay(int $daysWorked, EmployeePayrollInfo $payrollInfo): float
+    private function calculateBasicPay(int $daysWorked, EmployeePayrollInfo $payrollInfo, PayrollPeriod $period): float
     {
         return match ($payrollInfo->salary_type) {
-            'monthly' => $payrollInfo->basic_salary,
+            'monthly' => $payrollInfo->basic_salary / 2,  // semi-monthly: always half per period
             'daily' => $daysWorked * ($payrollInfo->daily_rate ?? 0),
             'hourly' => $daysWorked * 8 * ($payrollInfo->hourly_rate ?? 0),
             default => 0,
         };
+    }
+
+    /**
+     * Determine which half of the month the payroll period falls in.
+     * 1st half: period_start day ≤ 15 (days 1–15)
+     * 2nd half: period_start day > 15 (days 16–end)
+     */
+    private function getPeriodHalf(PayrollPeriod $period): int
+    {
+        return Carbon::parse($period->period_start)->day <= 15 ? 1 : 2;
     }
 
     /**
@@ -384,16 +432,17 @@ class PayrollCalculationService
             return 0;
         }
 
-        // SSS contribution rates based on bracket (simplified)
-        // In production, should use government_contribution_rates table
-        $salary = $payrollInfo->basic_salary;
+        $bracket = GovernmentContributionRate::findSSSBracket((float) $payrollInfo->basic_salary);
 
-        if ($salary < 4250) return $salary * 0.08; // E1 bracket
-        if ($salary < 8000) return $salary * 0.08; // E2 bracket
-        if ($salary < 16000) return $salary * 0.08; // E3 bracket
-        if ($salary < 30000) return $salary * 0.08; // E4 bracket
-        if ($salary < 40000) return $salary * 0.08; // E5 bracket
-        return $salary * 0.08; // E6 bracket
+        if (!$bracket) {
+            Log::warning('SSS bracket not found for salary, returning 0', [
+                'employee_id' => $payrollInfo->employee_id,
+                'salary'      => $payrollInfo->basic_salary,
+            ]);
+            return 0;
+        }
+
+        return (float) $bracket->employee_amount;
     }
 
     /**
@@ -408,8 +457,23 @@ class PayrollCalculationService
             return 0;
         }
 
-        // PhilHealth contribution: 2.75% of basic salary (employee share)
-        return $payrollInfo->basic_salary * 0.0275;
+        $rate = GovernmentContributionRate::getPhilHealthRate();
+
+        if (!$rate) {
+            Log::warning('PhilHealth rate not found in DB, returning 0', [
+                'employee_id' => $payrollInfo->employee_id,
+            ]);
+            return 0;
+        }
+
+        $salary   = (float) $payrollInfo->basic_salary;
+        $eeRate   = (float) $rate->employee_rate / 100;
+        $computed = $salary * $eeRate;
+
+        $minEE = (float) ($rate->minimum_contribution / 2);
+        $maxEE = (float) ($rate->maximum_contribution / 2);
+
+        return max($minEE, min($maxEE, $computed));
     }
 
     /**
@@ -424,11 +488,22 @@ class PayrollCalculationService
             return 0;
         }
 
-        // Pag-IBIG contribution rates:
-        // If salary > 1,500: 1% employee, 2% employer
-        // If salary <= 1,500: Only employer pays 0.1%
-        $rate = $payrollInfo->pagibig_employee_rate ?? 1.0; // Default 1%
-        return $payrollInfo->basic_salary * ($rate / 100);
+        $salary = (float) $payrollInfo->basic_salary;
+        $rate   = GovernmentContributionRate::getPagIbigRate($salary);
+
+        if (!$rate) {
+            Log::warning('Pag-IBIG rate not found in DB, returning 0', [
+                'employee_id' => $payrollInfo->employee_id,
+                'salary'      => $salary,
+            ]);
+            return 0;
+        }
+
+        $eeRate   = (float) $rate->employee_rate / 100;
+        $computed = $salary * $eeRate;
+        $ceiling  = (float) ($rate->contribution_ceiling ?? 100);
+
+        return min($ceiling, $computed);
     }
 
     /**
@@ -440,23 +515,28 @@ class PayrollCalculationService
      */
     private function calculateWithholdingTax(float $taxableIncome, string $taxStatus): float
     {
-        // Tax-exempt status
         if ($taxStatus === 'Z') {
             return 0;
         }
 
-        // Simplified withholding tax calculation
-        // In production, use government_tax_brackets table for exact BIR rates
-        // Current simplified rates (monthly):
         $annualIncome = $taxableIncome * 12;
 
-        if ($annualIncome <= 250000) return 0; // Non-taxable
-        if ($annualIncome <= 400000) return ($annualIncome - 250000) * 0.05 / 12;
-        if ($annualIncome <= 800000) return (150000 * 0.05 + ($annualIncome - 400000) * 0.10) / 12;
-        if ($annualIncome <= 2000000) return (150000 * 0.05 + 400000 * 0.10 + ($annualIncome - 800000) * 0.15) / 12;
-        
-        // For higher incomes
-        return (150000 * 0.05 + 400000 * 0.10 + 1200000 * 0.15 + ($annualIncome - 2000000) * 0.20) / 12;
+        if ($annualIncome <= 0) {
+            return 0;
+        }
+
+        $bracket = TaxBracket::findBracket($annualIncome, $taxStatus)
+                ?? TaxBracket::findBracket($annualIncome, 'S');
+
+        if (!$bracket) {
+            Log::warning('Tax bracket not found, returning 0', [
+                'tax_status'    => $taxStatus,
+                'annual_income' => $annualIncome,
+            ]);
+            return 0;
+        }
+
+        return round($bracket->calculateTax($annualIncome) / 12, 2);
     }
 
     /**

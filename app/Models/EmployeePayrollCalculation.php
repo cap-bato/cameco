@@ -269,6 +269,17 @@ class EmployeePayrollCalculation extends Model
         });
     }
 
+    public function scopeCurrent($query)
+    {
+        return $query->whereNull('deleted_at')
+                     ->where('calculation_status', '!=', 'superseded');
+    }
+
+    public function scopeVersionHistory($query)
+    {
+        return $query->withTrashed()->orderBy('version', 'asc');
+    }
+
     // ============================================================
     // Helper Methods
     // ============================================================
@@ -303,6 +314,15 @@ class EmployeePayrollCalculation extends Model
         $percentage = ($difference / $previousVersion->final_net_pay) * 100;
 
         return round($percentage, 2);
+    }
+
+    public function allVersions()
+    {
+        return EmployeePayrollCalculation::withTrashed()
+            ->where('employee_id', $this->employee_id)
+            ->where('payroll_period_id', $this->payroll_period_id)
+            ->orderBy('version', 'desc')
+            ->get();
     }
 
     public function calculateTotalEarnings(): float
