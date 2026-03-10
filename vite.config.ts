@@ -10,7 +10,8 @@ export default defineConfig({
         port: 5173,
         strictPort: true,
         hmr: {
-            host: 'cameco.local',
+            host: 'localhost',
+            port: 5173,
         }
     },
     plugins: [
