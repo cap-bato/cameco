@@ -45,7 +45,8 @@ class BankFilesController extends Controller
             ->ordered()
             ->get()
             ->map(fn($m) => [
-                'id' => $m->bank_code ?? $m->display_name,
+                // Use display_name as the identifier so it aligns with generateFile() validation (BDO, Metrobank)
+                'id' => $m->display_name,
                 'name' => $m->display_name,
                 'code' => $m->bank_code,
                 'supported_formats' => ['csv', 'txt'],
