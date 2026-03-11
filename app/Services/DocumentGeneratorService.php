@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\DocumentRequest;
-use App\Models\Employee;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;

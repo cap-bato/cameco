@@ -37,17 +37,25 @@ class LeavePolicy extends Model
         'effective_date' => 'date',
     ];
 
-    public function balances()
+    public function leaveBalances()
     {
         return $this->hasMany(LeaveBalance::class);
     }
 
-    public function requests()
+    public function leaveRequests()
     {
         return $this->hasMany(LeaveRequest::class);
     }
 
-    public function carryForwardRule()
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function scopeInactive($query)
+    {
+        return $query->where('is_active', false);
+    }
     {
         return $this->hasOne(LeaveCarryForwardRule::class);
     }

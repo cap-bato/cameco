@@ -23,6 +23,7 @@ class LoansController extends Controller
      */
     public function index(Request $request)
     {
+        $this->authorize('viewAny', EmployeeLoan::class);
         $search = $request->input('search');
         $employeeId = $request->input('employee_id');
         $departmentId = $request->input('department_id');
