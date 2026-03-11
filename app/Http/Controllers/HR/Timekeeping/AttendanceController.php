@@ -26,7 +26,7 @@ class AttendanceController extends Controller
             'employee:id,employee_number,profile_id,department_id,status',
             'employee.profile:id,first_name,last_name',
             'employee.department:id,name',
-            'workSchedule:id,name,time_in,time_out',
+            'workSchedule:id,name',
             'leaveRequest:id,leave_type'
         ])->orderBy('attendance_date', 'desc');
 

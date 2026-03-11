@@ -216,6 +216,24 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 Route::post('/{request}/process', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'process'])
                     ->middleware('permission:hr.documents.upload')
                     ->name('process');
+                
+                // Individual approve/reject endpoints (use FormRequests for authorization/validation)
+                Route::post('/{request}/approve', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'approve'])
+                    ->middleware('permission:hr.documents.approve')
+                    ->name('approve');
+
+                Route::post('/{request}/reject', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'reject'])
+                    ->middleware('permission:hr.documents.reject')
+                    ->name('reject');
+                
+                // Bulk actions for document requests
+                Route::post('/bulk/approve', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'bulkApprove'])
+                    ->middleware('permission:hr.documents.upload')
+                    ->name('bulk-approve');
+
+                Route::post('/bulk/reject', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'bulkReject'])
+                    ->middleware('permission:hr.documents.upload')
+                    ->name('bulk-reject');
             });
 
             // API Endpoints for Document Generation

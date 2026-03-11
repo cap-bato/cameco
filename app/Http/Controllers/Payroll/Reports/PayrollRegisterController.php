@@ -3,339 +3,241 @@
 namespace App\Http\Controllers\Payroll\Reports;
 
 use App\Http\Controllers\Controller;
+use App\Models\Department;
+use App\Models\EmployeePayrollCalculation;
+use App\Models\PayrollPeriod;
+use App\Models\SalaryComponent;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Carbon\Carbon;
 
 class PayrollRegisterController extends Controller
 {
     /**
      * Display the Payroll Register Report page
-     * 
-     * @param Request $request
-     * @return \Inertia\Response
      */
     public function index(Request $request)
     {
-        // Get query parameters for filtering
-        $periodId = $request->input('period_id', 'all');
-        $departmentId = $request->input('department_id', 'all');
+        $periodId      = $request->input('period_id', 'all');
+        $departmentId  = $request->input('department_id', 'all');
         $employeeStatus = $request->input('employee_status', 'all');
         $componentFilter = $request->input('component_filter', 'all');
-        $search = $request->input('search', '');
+        $search        = $request->input('search', '');
 
-        // Mock payroll periods
-        $periods = $this->getMockPeriods();
-        
-        // Mock departments
-        $departments = $this->getMockDepartments();
-        
-        // Mock employee statuses
+        // ------------------------------------------------------------------
+        // Periods list (last 12 from DB)
+        // ------------------------------------------------------------------
+        $periods = PayrollPeriod::orderByDesc('period_start')
+            ->limit(12)
+            ->get()
+            ->map(fn($p) => [
+                'id'          => $p->id,
+                'name'        => $p->period_name,
+                'period_type' => $p->period_type ?? 'semi_monthly',
+                'start_date'  => $p->period_start?->format('Y-m-d'),
+                'end_date'    => $p->period_end?->format('Y-m-d'),
+                'pay_date'    => $p->payment_date?->format('Y-m-d'),
+            ])
+            ->toArray();
+
+        // Resolve selected period
+        $resolvedId     = ($periodId !== 'all') ? (int) $periodId : null;
+        $selectedPeriod = $resolvedId
+            ? PayrollPeriod::find($resolvedId)
+            : PayrollPeriod::orderByDesc('period_start')->first();
+
+        // ------------------------------------------------------------------
+        // Departments & static status list
+        // ------------------------------------------------------------------
+        $departments = Department::select('id', 'name')->get()->toArray();
+
         $employeeStatuses = [
-            ['id' => 'active', 'label' => 'Active'],
+            ['id' => 'active',   'label' => 'Active'],
             ['id' => 'inactive', 'label' => 'Inactive'],
             ['id' => 'on_leave', 'label' => 'On Leave'],
         ];
 
-        // Mock salary components
-        $components = $this->getMockSalaryComponents();
+        // ------------------------------------------------------------------
+        // Salary components from DB (id, code, name, type)
+        // ------------------------------------------------------------------
+        $components = SalaryComponent::where('is_active', true)
+            ->select('id', 'code', 'name', 'component_type')
+            ->orderBy('display_order')
+            ->get()
+            ->map(fn($c) => [
+                'id'   => $c->id,
+                'code' => $c->code,
+                'name' => $c->name,
+                'type' => $c->component_type,
+            ])
+            ->toArray();
 
-        // Get register data with filters applied
-        $registerData = $this->getRegisterData(
-            $periodId,
-            $departmentId,
-            $employeeStatus,
-            $componentFilter,
-            $search
-        );
+        // ------------------------------------------------------------------
+        // Employee payroll calculations for the selected period
+        // ------------------------------------------------------------------
+        $registerData      = collect();
+        $summary           = $this->buildEmptySummary();
+        $departmentBreakdown = [];
+
+        if ($selectedPeriod) {
+            $query = EmployeePayrollCalculation::with('employee')
+                ->where('payroll_period_id', $selectedPeriod->id);
+
+            // Department filter
+            if ($departmentId !== 'all' && $departmentId) {
+                $query->whereHas('employee', fn($q) => $q->where('department_id', (int) $departmentId));
+            }
+
+            // Employment status filter
+            if ($employeeStatus !== 'all') {
+                $statusValues = match ($employeeStatus) {
+                    'inactive' => ['inactive', 'terminated', 'archived'],
+                    default    => [$employeeStatus],
+                };
+                $query->whereIn('employment_status', $statusValues);
+            }
+
+            // Search filter (PostgreSQL ilike for case-insensitive)
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('employee_name', 'ilike', '%' . $search . '%')
+                      ->orWhere('employee_number', 'ilike', '%' . $search . '%');
+                });
+            }
+
+            $calculations = $query->get();
+
+            $statusMap = [
+                'active'     => 'active',
+                'on_leave'   => 'on_leave',
+                'inactive'   => 'inactive',
+                'terminated' => 'inactive',
+                'archived'   => 'inactive',
+            ];
+
+            $registerData = $calculations->map(function ($calc) use ($statusMap) {
+                $deptId  = $calc->employee?->department_id ?? 0;
+                $netPay  = (float) ($calc->final_net_pay ?? $calc->net_pay ?? 0);
+
+                return [
+                    'id'              => $calc->id,
+                    'employee_id'     => $calc->employee_id,
+                    'period_id'       => $calc->payroll_period_id,
+                    'employee_number' => $calc->employee_number ?? '',
+                    'full_name'       => $calc->employee_name ?? '',
+                    'department_id'   => $deptId,
+                    'department_name' => $calc->department ?? '',
+                    'position'        => $calc->position ?? '',
+                    'status'          => $statusMap[$calc->employment_status ?? 'active'] ?? 'active',
+                    // Earnings
+                    'basic_salary'    => (float) ($calc->basic_pay ?? 0),
+                    'overtime'        => (float) ($calc->total_overtime_pay ?? 0),
+                    'rice_allowance'  => (float) ($calc->meal_allowance ?? 0),
+                    'cola'            => (float) ($calc->communication_allowance ?? 0),
+                    'gross_pay'       => (float) ($calc->gross_pay ?? 0),
+                    // Deductions
+                    'sss'             => (float) ($calc->sss_contribution ?? 0),
+                    'philhealth'      => (float) ($calc->philhealth_contribution ?? 0),
+                    'pagibig'         => (float) ($calc->pagibig_contribution ?? 0),
+                    'withholding_tax' => (float) ($calc->withholding_tax ?? 0),
+                    'total_deductions' => (float) ($calc->total_deductions ?? 0),
+                    // Net Pay
+                    'net_pay'         => $netPay,
+                    // Component breakdown (matches existing frontend shape)
+                    'components'      => [
+                        ['code' => 'BASIC',      'name' => 'Basic Salary',       'type' => 'earning',   'amount' => (float) ($calc->basic_pay ?? 0)],
+                        ['code' => 'OT_REG',     'name' => 'Regular Overtime',   'type' => 'earning',   'amount' => (float) ($calc->total_overtime_pay ?? 0)],
+                        ['code' => 'RICE',       'name' => 'Rice Allowance',     'type' => 'benefit',   'amount' => (float) ($calc->meal_allowance ?? 0)],
+                        ['code' => 'COLA',       'name' => 'COLA',               'type' => 'allowance', 'amount' => (float) ($calc->communication_allowance ?? 0)],
+                        ['code' => 'SSS',        'name' => 'SSS Contribution',   'type' => 'deduction', 'amount' => -(float) ($calc->sss_contribution ?? 0)],
+                        ['code' => 'PHILHEALTH', 'name' => 'PhilHealth',         'type' => 'deduction', 'amount' => -(float) ($calc->philhealth_contribution ?? 0)],
+                        ['code' => 'PAGIBIG',    'name' => 'Pag-IBIG',           'type' => 'deduction', 'amount' => -(float) ($calc->pagibig_contribution ?? 0)],
+                        ['code' => 'WTAX',       'name' => 'Withholding Tax',    'type' => 'tax',       'amount' => -(float) ($calc->withholding_tax ?? 0)],
+                    ],
+                ];
+            });
+
+            $summary           = $this->buildSummary($registerData);
+            $departmentBreakdown = $this->buildDepartmentBreakdown($registerData);
+        }
 
         return Inertia::render('Payroll/Reports/Register/Index', [
-            'register_data' => $registerData['employees'],
-            'summary' => $registerData['summary'],
-            'department_breakdown' => $registerData['department_breakdown'],
-            'periods' => $periods,
-            'departments' => $departments,
-            'employee_statuses' => $employeeStatuses,
-            'salary_components' => $components,
-            'filters' => [
-                'period_id' => $periodId,
-                'department_id' => $departmentId,
+            'register_data'        => $registerData->values()->toArray(),
+            'summary'              => $summary,
+            'department_breakdown' => $departmentBreakdown,
+            'periods'              => $periods,
+            'departments'          => $departments,
+            'employee_statuses'    => $employeeStatuses,
+            'salary_components'    => $components,
+            'filters'              => [
+                'period_id'       => $periodId,
+                'department_id'   => $departmentId,
                 'employee_status' => $employeeStatus,
                 'component_filter' => $componentFilter,
-                'search' => $search,
+                'search'          => $search,
             ],
         ]);
     }
 
-    /**
-     * Get mock payroll periods
-     */
-    private function getMockPeriods()
+    // ------------------------------------------------------------------
+    // Private helpers
+    // ------------------------------------------------------------------
+
+    private function buildEmptySummary(): array
     {
         return [
-            [
-                'id' => 1,
-                'name' => 'November 2025 - 1st Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-11-01',
-                'end_date' => '2025-11-15',
-                'pay_date' => '2025-11-15',
-            ],
-            [
-                'id' => 2,
-                'name' => 'November 2025 - 2nd Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-11-16',
-                'end_date' => '2025-11-30',
-                'pay_date' => '2025-11-30',
-            ],
-            [
-                'id' => 3,
-                'name' => 'October 2025',
-                'period_type' => 'monthly',
-                'start_date' => '2025-10-01',
-                'end_date' => '2025-10-31',
-                'pay_date' => '2025-10-31',
-            ],
+            'total_employees'            => 0,
+            'total_gross_pay'            => 0,
+            'total_deductions'           => 0,
+            'total_net_pay'              => 0,
+            'formatted_total_gross_pay'  => '₱0.00',
+            'formatted_total_deductions' => '₱0.00',
+            'formatted_total_net_pay'    => '₱0.00',
         ];
     }
 
-    /**
-     * Get mock departments
-     */
-    private function getMockDepartments()
+    private function buildSummary(\Illuminate\Support\Collection $registerData): array
     {
-        return [
-            ['id' => 1, 'name' => 'Engineering'],
-            ['id' => 2, 'name' => 'Sales'],
-            ['id' => 3, 'name' => 'Human Resources'],
-            ['id' => 4, 'name' => 'Finance'],
-            ['id' => 5, 'name' => 'Operations'],
-        ];
-    }
-
-    /**
-     * Get mock salary components
-     */
-    private function getMockSalaryComponents()
-    {
-        return [
-            ['id' => 1, 'code' => 'BASIC', 'name' => 'Basic Salary', 'type' => 'earning'],
-            ['id' => 2, 'code' => 'OT_REG', 'name' => 'Regular Overtime', 'type' => 'earning'],
-            ['id' => 3, 'code' => 'RICE', 'name' => 'Rice Allowance', 'type' => 'benefit'],
-            ['id' => 4, 'code' => 'COLA', 'name' => 'COLA', 'type' => 'allowance'],
-            ['id' => 5, 'code' => 'SSS', 'name' => 'SSS Contribution', 'type' => 'deduction'],
-            ['id' => 6, 'code' => 'WTAX', 'name' => 'Withholding Tax', 'type' => 'tax'],
-            ['id' => 7, 'code' => 'PHILHEALTH', 'name' => 'PhilHealth', 'type' => 'deduction'],
-            ['id' => 8, 'code' => 'PAGIBIG', 'name' => 'Pag-IBIG', 'type' => 'deduction'],
-        ];
-    }
-
-    /**
-     * Get register data with filters applied
-     */
-    private function getRegisterData($periodId, $departmentId, $employeeStatus, $componentFilter, $search)
-    {
-        // Mock employees with payroll data
-        $mockEmployees = $this->getMockEmployeePayrollData();
-
-        // Apply filters
-        $filtered = $mockEmployees;
-
-        if ($periodId !== 'all') {
-            $filtered = array_filter($filtered, fn($emp) => (string)$emp['period_id'] === $periodId);
-        }
-
-        if ($departmentId !== 'all') {
-            $filtered = array_filter($filtered, fn($emp) => (string)$emp['department_id'] === $departmentId);
-        }
-
-        if ($employeeStatus !== 'all') {
-            $filtered = array_filter($filtered, fn($emp) => $emp['status'] === $employeeStatus);
-        }
-
-        if ($search) {
-            $searchLower = strtolower($search);
-            $filtered = array_filter($filtered, fn($emp) => 
-                stripos($emp['full_name'], $searchLower) !== false || 
-                stripos($emp['employee_number'], $searchLower) !== false
-            );
-        }
-
-        // Calculate summary totals
-        $summary = $this->calculateSummary($filtered);
-
-        // Calculate department breakdown
-        $departmentBreakdown = $this->calculateDepartmentBreakdown($filtered);
+        $totalGross      = $registerData->sum('gross_pay');
+        $totalDeductions = $registerData->sum('total_deductions');
+        $totalNet        = $registerData->sum('net_pay');
 
         return [
-            'employees' => array_values($filtered),
-            'summary' => $summary,
-            'department_breakdown' => $departmentBreakdown,
-        ];
-    }
-
-    /**
-     * Get mock employee payroll data
-     */
-    private function getMockEmployeePayrollData()
-    {
-        $employees = [];
-        $departments = [1, 2, 3, 4, 5];
-        $names = [
-            'Maria Santos',
-            'Juan Dela Cruz',
-            'Ana Garcia',
-            'Carlos Lopez',
-            'Rosa Martinez',
-            'Pedro Reyes',
-            'Patricia Fernandez',
-            'Manuel Rodriguez',
-            'Lucia Diaz',
-            'Francisco Torres',
-            'Elena Ruiz',
-            'Antonio Morales',
-            'Isabel Gutierrez',
-            'Luis Jimenez',
-            'Sofia Romero',
-        ];
-
-        $periods = [1, 2, 3];
-
-        for ($i = 0; $i < 15; $i++) {
-            foreach ($periods as $periodId) {
-                $basicSalary = 25000 + (rand(0, 50) * 1000);
-                $overtime = rand(0, 3) * 2000;
-                $rice = 2000;
-                $cola = 1000;
-                $sss = $basicSalary * 0.06;
-                $philhealth = $basicSalary * 0.025;
-                $pagibig = 200;
-                $wtax = max(0, ($basicSalary + $overtime - $sss - $philhealth - $pagibig - $rice - $cola) * 0.12);
-
-                $grossPay = $basicSalary + $overtime;
-                $totalDeductions = $sss + $philhealth + $pagibig + $wtax;
-                $netPay = $grossPay - $totalDeductions;
-
-                $employees[] = [
-                    'id' => ($i * 3) + $periodId,
-                    'employee_id' => $i + 1,
-                    'period_id' => $periodId,
-                    'employee_number' => 'EMP' . str_pad($i + 1, 4, '0', STR_PAD_LEFT),
-                    'full_name' => $names[$i % count($names)] . ' P' . $periodId,
-                    'department_id' => $departments[$i % count($departments)],
-                    'department_name' => $this->getDepartmentName($departments[$i % count($departments)]),
-                    'position' => 'Engineer',
-                    'status' => $i % 3 === 0 ? 'on_leave' : 'active',
-                    'basic_salary' => $basicSalary,
-                    'overtime' => $overtime,
-                    'rice_allowance' => $rice,
-                    'cola' => $cola,
-                    'gross_pay' => $grossPay,
-                    'sss' => $sss,
-                    'philhealth' => $philhealth,
-                    'pagibig' => $pagibig,
-                    'withholding_tax' => $wtax,
-                    'total_deductions' => $totalDeductions,
-                    'net_pay' => $netPay,
-                    'components' => [
-                        ['code' => 'BASIC', 'name' => 'Basic Salary', 'type' => 'earning', 'amount' => $basicSalary],
-                        ['code' => 'OT_REG', 'name' => 'Regular Overtime', 'type' => 'earning', 'amount' => $overtime],
-                        ['code' => 'RICE', 'name' => 'Rice Allowance', 'type' => 'benefit', 'amount' => $rice],
-                        ['code' => 'COLA', 'name' => 'COLA', 'type' => 'allowance', 'amount' => $cola],
-                        ['code' => 'SSS', 'name' => 'SSS Contribution', 'type' => 'deduction', 'amount' => -$sss],
-                        ['code' => 'PHILHEALTH', 'name' => 'PhilHealth', 'type' => 'deduction', 'amount' => -$philhealth],
-                        ['code' => 'PAGIBIG', 'name' => 'Pag-IBIG', 'type' => 'deduction', 'amount' => -$pagibig],
-                        ['code' => 'WTAX', 'name' => 'Withholding Tax', 'type' => 'tax', 'amount' => -$wtax],
-                    ],
-                ];
-            }
-        }
-
-        return $employees;
-    }
-
-    /**
-     * Get department name by ID
-     */
-    private function getDepartmentName($id)
-    {
-        $departments = [
-            1 => 'Engineering',
-            2 => 'Sales',
-            3 => 'Human Resources',
-            4 => 'Finance',
-            5 => 'Operations',
-        ];
-        return $departments[$id] ?? 'Unknown';
-    }
-
-    /**
-     * Calculate summary totals
-     */
-    private function calculateSummary($employees)
-    {
-        $totalEmployees = count($employees);
-        $totalGrossPay = 0;
-        $totalDeductions = 0;
-        $totalNetPay = 0;
-
-        foreach ($employees as $emp) {
-            $totalGrossPay += $emp['gross_pay'];
-            $totalDeductions += $emp['total_deductions'];
-            $totalNetPay += $emp['net_pay'];
-        }
-
-        return [
-            'total_employees' => $totalEmployees,
-            'total_gross_pay' => $totalGrossPay,
-            'total_deductions' => $totalDeductions,
-            'total_net_pay' => $totalNetPay,
-            'formatted_total_gross_pay' => '₱' . number_format($totalGrossPay, 2),
+            'total_employees'            => $registerData->count(),
+            'total_gross_pay'            => $totalGross,
+            'total_deductions'           => $totalDeductions,
+            'total_net_pay'              => $totalNet,
+            'formatted_total_gross_pay'  => '₱' . number_format($totalGross, 2),
             'formatted_total_deductions' => '₱' . number_format($totalDeductions, 2),
-            'formatted_total_net_pay' => '₱' . number_format($totalNetPay, 2),
+            'formatted_total_net_pay'    => '₱' . number_format($totalNet, 2),
         ];
     }
 
-    /**
-     * Calculate department breakdown
-     */
-    private function calculateDepartmentBreakdown($employees)
+    private function buildDepartmentBreakdown(\Illuminate\Support\Collection $registerData): array
     {
-        $breakdown = [];
+        return $registerData
+            ->groupBy('department_id')
+            ->map(function ($rows, $deptId) {
+                $grossTotal = $rows->sum('gross_pay');
+                $deductions = $rows->sum('total_deductions');
+                $netTotal   = $rows->sum('net_pay');
+                $count      = $rows->count();
+                $avgNet     = $count > 0 ? $netTotal / $count : 0;
 
-        foreach ($employees as $emp) {
-            $deptId = $emp['department_id'];
-            $deptName = $emp['department_name'];
-
-            if (!isset($breakdown[$deptId])) {
-                $breakdown[$deptId] = [
-                    'department_id' => $deptId,
-                    'department_name' => $deptName,
-                    'employee_count' => 0,
-                    'total_gross_pay' => 0,
-                    'total_deductions' => 0,
-                    'total_net_pay' => 0,
+                return [
+                    'department_id'               => $deptId,
+                    'department_name'             => $rows->first()['department_name'],
+                    'employee_count'              => $count,
+                    'total_gross_pay'             => $grossTotal,
+                    'total_deductions'            => $deductions,
+                    'total_net_pay'               => $netTotal,
+                    'average_net_pay'             => $avgNet,
+                    'formatted_gross_pay'         => '₱' . number_format($grossTotal, 2),
+                    'formatted_deductions'        => '₱' . number_format($deductions, 2),
+                    'formatted_net_pay'           => '₱' . number_format($netTotal, 2),
+                    'formatted_average_net_pay'   => '₱' . number_format($avgNet, 2),
                 ];
-            }
-
-            $breakdown[$deptId]['employee_count']++;
-            $breakdown[$deptId]['total_gross_pay'] += $emp['gross_pay'];
-            $breakdown[$deptId]['total_deductions'] += $emp['total_deductions'];
-            $breakdown[$deptId]['total_net_pay'] += $emp['net_pay'];
-        }
-
-        // Format numbers
-        foreach ($breakdown as &$dept) {
-            $dept['formatted_gross_pay'] = '₱' . number_format($dept['total_gross_pay'], 2);
-            $dept['formatted_deductions'] = '₱' . number_format($dept['total_deductions'], 2);
-            $dept['formatted_net_pay'] = '₱' . number_format($dept['total_net_pay'], 2);
-            $dept['average_net_pay'] = $dept['employee_count'] > 0 
-                ? $dept['total_net_pay'] / $dept['employee_count'] 
-                : 0;
-            $dept['formatted_average_net_pay'] = '₱' . number_format($dept['average_net_pay'], 2);
-        }
-
-        return array_values($breakdown);
+            })
+            ->values()
+            ->toArray();
     }
 }

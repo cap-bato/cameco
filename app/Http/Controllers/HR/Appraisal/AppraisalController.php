@@ -3,7 +3,12 @@
 namespace App\Http\Controllers\HR\Appraisal;
 
 use App\Http\Controllers\Controller;
+use App\Models\Appraisal;
+use App\Models\AppraisalCycle;
+use App\Models\AppraisalScore;
+use App\Models\Department;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 /**
@@ -31,40 +36,73 @@ class AppraisalController extends Controller
         $departmentId = $request->input('department_id', '');
         $search = $request->input('search', '');
 
-        // Mock appraisals data
-        $mockAppraisals = $this->getMockAppraisals();
+        // Build query with relationships
+        $query = Appraisal::with([
+            'employee.profile:id,first_name,last_name',
+            'employee.department:id,name',
+            'cycle:id,name',
+        ]);
 
         // Apply filters
         if ($cycleId) {
-            $mockAppraisals = array_filter($mockAppraisals, fn($a) => (string)$a['cycle_id'] === $cycleId);
+            $query->where('appraisal_cycle_id', $cycleId);
         }
+        
         if ($status) {
-            $mockAppraisals = array_filter($mockAppraisals, fn($a) => $a['status'] === $status);
+            $query->where('status', $status);
         }
+        
         if ($departmentId) {
-            $mockAppraisals = array_filter($mockAppraisals, fn($a) => (string)$a['department_id'] === $departmentId);
+            $query->whereHas('employee', fn($q) => $q->where('department_id', $departmentId));
         }
+        
         if ($search) {
-            $mockAppraisals = array_filter($mockAppraisals, function ($a) use ($search) {
-                return stripos($a['employee_name'], $search) !== false ||
-                       stripos($a['employee_number'], $search) !== false;
+            $query->whereHas('employee', function ($q) use ($search) {
+                $q->where('employee_number', 'like', "%{$search}%")
+                  ->orWhereHas('profile', fn($pq) => $pq->where('first_name', 'like', "%{$search}%")
+                      ->orWhere('last_name', 'like', "%{$search}%")
+                  );
             });
         }
 
-        // Get cycles and departments for filters
-        $cycles = $this->getMockCycles();
-        $departments = $this->getMockDepartments();
+        // Get appraisals and format for frontend
+        $appraisals = $query->latest()->get()->map(function ($a) {
+            return [
+                'id' => $a->id,
+                'employee_id' => $a->employee_id,
+                'employee_name' => ($a->employee?->profile?->first_name ?? '') . ' ' . ($a->employee?->profile?->last_name ?? ''),
+                'employee_number' => $a->employee?->employee_number,
+                'department_id' => $a->employee?->department_id,
+                'department_name' => $a->employee?->department?->name,
+                'cycle_id' => $a->appraisal_cycle_id,
+                'cycle_name' => $a->cycle?->name,
+                'status' => $a->status,
+                'status_label' => $a->status_label,
+                'status_color' => $a->status_color,
+                'overall_score' => $a->overall_score,
+                'attendance_rate' => null,  // TODO: pull from timekeeping when integrated
+                'lateness_count' => 0,
+                'violation_count' => 0,
+                'created_at' => $a->created_at?->toDateTimeString(),
+                'updated_at' => $a->updated_at?->toDateTimeString(),
+            ];
+        });
+
+        // Get cycles for filter dropdown
+        $cycles = AppraisalCycle::orderByDesc('start_date')
+            ->get(['id', 'name'])
+            ->map(fn($c) => ['id' => $c->id, 'name' => $c->name]);
+
+        // Get departments for filter dropdown
+        $departments = Department::orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn($d) => ['id' => $d->id, 'name' => $d->name]);
 
         return Inertia::render('HR/Appraisals/Index', [
-            'appraisals' => array_values($mockAppraisals),
+            'appraisals' => $appraisals,
             'cycles' => $cycles,
             'departments' => $departments,
-            'filters' => [
-                'cycle_id' => $cycleId,
-                'status' => $status,
-                'department_id' => $departmentId,
-                'search' => $search,
-            ],
+            'filters' => compact('cycleId', 'status', 'departmentId', 'search'),
         ]);
     }
 
@@ -73,111 +111,67 @@ class AppraisalController extends Controller
      */
     public function show($id)
     {
-        // Mock appraisal details
-        $appraisal = [
-            'id' => 1,
-            'employee_id' => 1,
-            'employee_name' => 'Juan dela Cruz',
-            'employee_number' => 'EMP-2023-001',
-            'department_id' => 1,
-            'department_name' => 'Engineering',
-            'cycle_id' => 1,
-            'cycle_name' => 'Annual Review 2025',
-            'status' => 'in_progress',
-            'status_label' => 'In Progress',
-            'status_color' => 'bg-blue-100 text-blue-800',
-            'overall_score' => null,
-            'feedback' => null,
-            'attendance_rate' => 94.5,
-            'lateness_count' => 2,
+        // Fetch appraisal with all relationships
+        $appraisal = Appraisal::with([
+            'employee.profile',
+            'employee.department:id,name',
+            'employee.position:id,title',
+            'cycle:id,name,start_date,end_date',
+            'scores.criteria:id,name,weight,max_score',
+        ])->findOrFail($id);
+
+        // Format appraisal data for frontend
+        $appraisalData = [
+            'id' => $appraisal->id,
+            'employee_id' => $appraisal->employee_id,
+            'employee_name' => ($appraisal->employee?->profile?->first_name ?? '') . ' ' . ($appraisal->employee?->profile?->last_name ?? ''),
+            'employee_number' => $appraisal->employee?->employee_number,
+            'department_name' => $appraisal->employee?->department?->name,
+            'cycle_name' => $appraisal->cycle?->name,
+            'status' => $appraisal->status,
+            'status_label' => $appraisal->status_label,
+            'status_color' => $appraisal->status_color,
+            'overall_score' => $appraisal->overall_score,
+            'feedback' => $appraisal->feedback,
+            'attendance_rate' => null,  // TODO: timekeeping integration
+            'lateness_count' => 0,
             'violation_count' => 0,
-            'created_by' => 'HR Manager',
-            'updated_by' => null,
-            'created_at' => '2025-01-10 08:00:00',
-            'updated_at' => '2025-11-18 14:30:00',
-            'scores' => [
-                [
-                    'id' => 1,
-                    'appraisal_id' => 1,
-                    'criterion' => 'Quality of Work',
-                    'score' => 8,
-                    'weight' => 20,
-                    'notes' => 'Consistently delivers high-quality work. Attention to detail is excellent.',
-                    'created_at' => '2025-11-18 14:00:00',
-                    'updated_at' => '2025-11-18 14:00:00',
-                ],
-                [
-                    'id' => 2,
-                    'appraisal_id' => 1,
-                    'criterion' => 'Attendance & Punctuality',
-                    'score' => 9,
-                    'weight' => 20,
-                    'notes' => 'Excellent attendance record. Always on time.',
-                    'created_at' => '2025-11-18 14:00:00',
-                    'updated_at' => '2025-11-18 14:00:00',
-                ],
-                [
-                    'id' => 3,
-                    'appraisal_id' => 1,
-                    'criterion' => 'Behavior & Conduct',
-                    'score' => 8.5,
-                    'weight' => 20,
-                    'notes' => 'Professional demeanor and respectful towards colleagues.',
-                    'created_at' => '2025-11-18 14:00:00',
-                    'updated_at' => '2025-11-18 14:00:00',
-                ],
-                [
-                    'id' => 4,
-                    'appraisal_id' => 1,
-                    'criterion' => 'Productivity',
-                    'score' => 7.5,
-                    'weight' => 20,
-                    'notes' => 'Meets deadlines and produces adequate output.',
-                    'created_at' => '2025-11-18 14:00:00',
-                    'updated_at' => '2025-11-18 14:00:00',
-                ],
-                [
-                    'id' => 5,
-                    'appraisal_id' => 1,
-                    'criterion' => 'Teamwork',
-                    'score' => 8,
-                    'weight' => 20,
-                    'notes' => 'Collaborates well with team members.',
-                    'created_at' => '2025-11-18 14:00:00',
-                    'updated_at' => '2025-11-18 14:00:00',
-                ],
-            ],
+            'created_at' => $appraisal->created_at?->toDateTimeString(),
+            'updated_at' => $appraisal->updated_at?->toDateTimeString(),
+            'scores' => $appraisal->scores->map(fn($s) => [
+                'id' => $s->id,
+                'criterion' => $s->criteria?->name,
+                'score' => (float) $s->score,
+                'weight' => $s->criteria?->weight,
+                'notes' => $s->comments,
+            ])->values(),
         ];
 
-        // Mock employee data
-        $employee = [
-            'id' => 1,
-            'employee_number' => 'EMP-2023-001',
-            'first_name' => 'Juan',
-            'last_name' => 'dela Cruz',
-            'full_name' => 'Juan dela Cruz',
-            'department_id' => 1,
-            'department_name' => 'Engineering',
-            'position_id' => 1,
-            'position_name' => 'Software Engineer',
-            'email' => 'juan.delacruz@company.com',
-            'phone' => '09123456789',
-            'date_employed' => '2020-03-15',
-            'status' => 'active',
+        // Format employee data for frontend
+        $employeeData = [
+            'id' => $appraisal->employee->id,
+            'employee_number' => $appraisal->employee->employee_number,
+            'first_name' => $appraisal->employee->profile?->first_name,
+            'last_name' => $appraisal->employee->profile?->last_name,
+            'full_name' => ($appraisal->employee->profile?->first_name ?? '') . ' ' . ($appraisal->employee->profile?->last_name ?? ''),
+            'department_name' => $appraisal->employee->department?->name,
+            'position_name' => $appraisal->employee->position?->title,
+            'date_employed' => $appraisal->employee->date_hired?->format('Y-m-d'),
+            'status' => $appraisal->employee->status,
         ];
 
-        // Mock cycle data
-        $cycle = [
-            'id' => 1,
-            'name' => 'Annual Review 2025',
-            'start_date' => '2025-01-01',
-            'end_date' => '2025-12-31',
+        // Format cycle data for frontend
+        $cycleData = [
+            'id' => $appraisal->cycle->id,
+            'name' => $appraisal->cycle->name,
+            'start_date' => $appraisal->cycle->start_date->format('Y-m-d'),
+            'end_date' => $appraisal->cycle->end_date->format('Y-m-d'),
         ];
 
         return Inertia::render('HR/Appraisals/Show', [
-            'appraisal' => $appraisal,
-            'employee' => $employee,
-            'cycle' => $cycle,
+            'appraisal' => $appraisalData,
+            'employee' => $employeeData,
+            'cycle' => $cycleData,
         ]);
     }
 
@@ -187,14 +181,29 @@ class AppraisalController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'employee_id' => 'required|integer',
-            'cycle_id' => 'required|integer',
+            'employee_id' => 'required|integer|exists:employees,id',
+            'cycle_id' => 'required|integer|exists:appraisal_cycles,id',
         ]);
 
-        // In production, create appraisal record in database
-        return redirect()
-            ->route('hr.appraisals.index')
-            ->with('success', 'Appraisal created successfully');
+        // Check for duplicate appraisal
+        $exists = Appraisal::where('appraisal_cycle_id', $validated['cycle_id'])
+            ->where('employee_id', $validated['employee_id'])
+            ->exists();
+
+        if ($exists) {
+            return back()->withErrors(['employee_id' => 'Appraisal already exists for this employee in the selected cycle.']);
+        }
+
+        // Create new appraisal
+        Appraisal::create([
+            'appraisal_cycle_id' => $validated['cycle_id'],
+            'employee_id' => $validated['employee_id'],
+            'status' => 'draft',
+            'created_by' => auth()->id(),
+        ]);
+
+        return redirect()->route('hr.appraisals.index')
+            ->with('success', 'Appraisal created successfully.');
     }
 
     /**
@@ -202,15 +211,45 @@ class AppraisalController extends Controller
      */
     public function updateScores(Request $request, $id)
     {
+        $appraisal = Appraisal::findOrFail($id);
+
         $validated = $request->validate([
             'scores' => 'required|array|min:1',
-            'scores.*.criterion' => 'required|string|max:100',
-            'scores.*.score' => 'required|numeric|min:1|max:10',
-            'scores.*.notes' => 'nullable|string|max:500',
+            'scores.*.appraisal_criteria_id' => 'required|integer|exists:appraisal_criteria,id',
+            'scores.*.score' => 'required|numeric|min:0|max:10',
+            'scores.*.comments' => 'nullable|string|max:500',
         ]);
 
-        // In production, update appraisal_scores records
-        return back()->with('success', 'Appraisal scores updated successfully');
+        // Use transaction to ensure atomicity
+        DB::transaction(function () use ($appraisal, $validated) {
+            // Upsert each score
+            foreach ($validated['scores'] as $scoreData) {
+                AppraisalScore::updateOrCreate(
+                    [
+                        'appraisal_id' => $appraisal->id,
+                        'appraisal_criteria_id' => $scoreData['appraisal_criteria_id'],
+                    ],
+                    [
+                        'score' => $scoreData['score'],
+                        'comments' => $scoreData['comments'] ?? null,
+                    ]
+                );
+            }
+
+            // Recalculate overall score as weighted average
+            $scores = $appraisal->scores()->with('criteria:id,weight')->get();
+            $totalWeight = $scores->sum('criteria.weight');
+            $weightedSum = $scores->sum(fn($s) => $s->score * ($s->criteria?->weight ?? 0));
+            $overall = $totalWeight > 0 ? round($weightedSum / $totalWeight, 2) : null;
+
+            // Update appraisal with calculated overall score
+            $appraisal->update([
+                'overall_score' => $overall,
+                'updated_by' => auth()->id(),
+            ]);
+        });
+
+        return back()->with('success', 'Scores updated successfully.');
     }
 
     /**
@@ -218,13 +257,32 @@ class AppraisalController extends Controller
      */
     public function updateStatus(Request $request, $id)
     {
+        $appraisal = Appraisal::findOrFail($id);
+
         $validated = $request->validate([
             'status' => 'required|in:draft,in_progress,completed,acknowledged',
             'notes' => 'nullable|string|max:500',
         ]);
 
-        // In production, update appraisal status
-        return back()->with('success', 'Appraisal status updated successfully');
+        // Build the update array
+        $updates = [
+            'status' => $validated['status'],
+            'updated_by' => auth()->id(),
+        ];
+
+        // Set timestamps based on status transitions
+        if ($validated['status'] === 'completed') {
+            $updates['submitted_at'] = now();
+        }
+
+        if ($validated['status'] === 'acknowledged') {
+            $updates['acknowledged_at'] = now();
+        }
+
+        // Update the appraisal
+        $appraisal->update($updates);
+
+        return back()->with('success', 'Appraisal status updated.');
     }
 
     /**
@@ -232,17 +290,44 @@ class AppraisalController extends Controller
      */
     public function submitFeedback(Request $request, $id)
     {
+        $appraisal = Appraisal::findOrFail($id);
+
         $validated = $request->validate([
-            'overall_score' => 'required|numeric|min:1|max:10',
+            'overall_score' => 'required|numeric|min:0|max:10',
             'feedback' => 'required|string|min:10|max:1000',
             'scores' => 'required|array|min:1',
-            'scores.*.criterion' => 'required|string',
-            'scores.*.score' => 'required|numeric|min:1|max:10',
+            'scores.*.appraisal_criteria_id' => 'required|integer|exists:appraisal_criteria,id',
+            'scores.*.score' => 'required|numeric|min:0|max:10',
             'scores.*.notes' => 'nullable|string|max:500',
         ]);
 
-        // In production, save feedback and update appraisal
-        return back()->with('success', 'Appraisal feedback submitted successfully');
+        // Use transaction to ensure atomicity
+        DB::transaction(function () use ($appraisal, $validated) {
+            // Upsert each score
+            foreach ($validated['scores'] as $scoreData) {
+                AppraisalScore::updateOrCreate(
+                    [
+                        'appraisal_id' => $appraisal->id,
+                        'appraisal_criteria_id' => $scoreData['appraisal_criteria_id'],
+                    ],
+                    [
+                        'score' => $scoreData['score'],
+                        'comments' => $scoreData['notes'] ?? null,
+                    ]
+                );
+            }
+
+            // Update appraisal with overall score, feedback, and status
+            $appraisal->update([
+                'overall_score' => $validated['overall_score'],
+                'feedback' => $validated['feedback'],
+                'status' => 'completed',
+                'submitted_at' => now(),
+                'updated_by' => auth()->id(),
+            ]);
+        });
+
+        return back()->with('success', 'Appraisal feedback submitted successfully.');
     }
 
     /**

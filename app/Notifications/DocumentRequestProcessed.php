@@ -12,11 +12,9 @@ class DocumentRequestProcessed extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(
-        private DocumentRequest $documentRequest,
-        private string $status,
-        private ?string $filePath = null
-    ) {}
+    public function __construct(private DocumentRequest $documentRequest, private string $status, private ?string $filePath = null)
+    {
+    }
 
     public function via($notifiable): array
     {
@@ -26,24 +24,24 @@ class DocumentRequestProcessed extends Notification implements ShouldQueue
     public function toMail($notifiable): MailMessage
     {
         $documentType = $this->formatDocumentType($this->documentRequest->document_type);
-        
+
         if ($this->status === 'approved') {
             return (new MailMessage)
                 ->subject("Document Request Approved - {$documentType}")
                 ->greeting("Hello {$notifiable->name},")
                 ->line("Your document request for **{$documentType}** has been approved.")
-                ->line("You can now download the document from your employee portal.")
+                ->line('You can now download the document from your employee portal.')
                 ->action('View My Documents', url('/employee/documents'))
                 ->line('Thank you for using our system!');
-        } else {
-            return (new MailMessage)
-                ->subject("Document Request Update - {$documentType}")
-                ->greeting("Hello {$notifiable->name},")
-                ->line("Your document request for **{$documentType}** could not be processed.")
-                ->line("**Reason:** {$this->documentRequest->rejection_reason}")
-                ->line('Please contact HR if you have questions or need to submit a new request.')
-                ->action('Contact HR', url('/employee/support'));
         }
+
+        return (new MailMessage)
+            ->subject("Document Request Update - {$documentType}")
+            ->greeting("Hello {$notifiable->name},")
+            ->line("Your document request for **{$documentType}** could not be processed.")
+            ->line("**Reason:** {$this->documentRequest->rejection_reason}")
+            ->line('Please contact HR if you have questions or need to submit a new request.')
+            ->action('Contact HR', url('/employee/support'));
     }
 
     public function toArray($notifiable): array
@@ -60,7 +58,7 @@ class DocumentRequestProcessed extends Notification implements ShouldQueue
 
     private function formatDocumentType(string $type): string
     {
-        return match($type) {
+        return match ($type) {
             'certificate_of_employment' => 'Certificate of Employment',
             'payslip' => 'Payslip',
             'bir_form_2316' => 'BIR Form 2316',

@@ -4,7 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Payslip;
 
 class Employee extends Model
 {
@@ -151,6 +153,20 @@ class Employee extends Model
         return $this->hasMany(RfidCardMapping::class);
     }
 
+    /**
+     * Get daily attendance summaries for this employee.
+     * 
+     * Returns aggregated daily attendance records with time tracking,
+     * leave status, and business rule flags (late, absent, overtime).
+     * 
+     * Phase 1 Task 1.1: Real attendance data integration
+     */
+    public function dailyAttendanceSummaries(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\DailyAttendanceSummary::class)
+            ->orderBy('attendance_date', 'desc');
+    }
+
     // ========== Payroll Module Relationships ==========
 
     /**
@@ -167,6 +183,14 @@ class Employee extends Model
     public function payrollHistory()
     {
         return $this->hasMany(EmployeePayrollInfo::class);
+    }
+
+    /**
+     * Get all payslips for this employee.
+     */
+    public function payslips(): HasMany
+    {
+        return $this->hasMany(Payslip::class)->orderBy('period_start', 'desc');
     }
 
     /**

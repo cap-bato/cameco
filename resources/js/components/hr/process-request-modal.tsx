@@ -59,22 +59,27 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
 
         try {
             const formData = new FormData();
-            formData.append('action', action);
-            
-            if (action === 'generate' && templateId) {
-                formData.append('template_id', templateId);
-            } else if (action === 'upload' && file) {
-                formData.append('file', file);
-            } else if (action === 'reject' && rejectionReason) {
+
+            // Populate form data based on action
+            if (action === 'generate') {
+                if (templateId) formData.append('template_id', templateId);
+            } else if (action === 'upload') {
+                if (file) formData.append('file', file);
+            } else if (action === 'reject') {
                 formData.append('rejection_reason', rejectionReason);
             }
-            
+
             if (notes) formData.append('notes', notes);
             formData.append('send_email', sendEmail ? '1' : '0');
 
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
-            const response = await fetch(`/hr/documents/requests/${request.id}/process`, {
+            // Determine endpoint: use dedicated approve/reject routes
+            const url = action === 'reject'
+                ? `/hr/documents/requests/${request.id}/reject`
+                : `/hr/documents/requests/${request.id}/approve`;
+
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -85,14 +90,13 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const text = await response.text().catch(() => '');
+                throw new Error(`HTTP error! status: ${response.status} ${text}`);
             }
-
-            const result = await response.json();
 
             toast({
                 title: 'Success',
-                description: `Request ${action === 'reject' ? 'rejected' : 'processed'} successfully`,
+                description: action === 'reject' ? 'Request rejected' : 'Request approved and document generated',
             });
 
             // Refresh the requests list

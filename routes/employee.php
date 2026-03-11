@@ -20,13 +20,6 @@ Route::middleware(['auth', 'verified', EnsureEmployee::class])
             ->middleware('permission:employee.dashboard.view')
             ->name('dashboard');
 
-        // Notifications
-        Route::get('/notifications', [\App\Http\Controllers\Employee\NotificationController::class, 'index'])
-            ->name('notifications.index');
-
-        Route::post('/notifications/{notification}/read', [\App\Http\Controllers\Employee\NotificationController::class, 'markAsRead'])
-            ->name('notifications.read');
-
         // ============================================================
         // PERSONAL INFORMATION (Self-Service)
         // ============================================================
@@ -66,6 +59,18 @@ Route::middleware(['auth', 'verified', EnsureEmployee::class])
                 ->middleware('permission:employee.payslips.view')
                 ->name('index');
             
+            // View annual summary (total gross, deductions, net pay by year)
+            // NOTE: Must be BEFORE /{id} route to avoid shadowing by dynamic ID parameter
+            Route::get('/annual-summary/{year}', [\App\Http\Controllers\Employee\PayslipController::class, 'annualSummary'])
+                ->middleware('permission:employee.payslips.view')
+                ->name('annual-summary');
+            
+            // Download BIR 2316 tax certification (total income and tax withheld by year)
+            // NOTE: Must be BEFORE /{id} route to avoid shadowing by dynamic ID parameter
+            Route::get('/bir-2316/download', [\App\Http\Controllers\Employee\PayslipController::class, 'downloadBIR2316'])
+                ->middleware('permission:employee.payslips.download')
+                ->name('bir-2316');
+            
             // View specific payslip details (salary breakdown, deductions, net pay)
             Route::get('/{id}', [\App\Http\Controllers\Employee\PayslipController::class, 'show'])
                 ->middleware('permission:employee.payslips.view')
@@ -75,11 +80,6 @@ Route::middleware(['auth', 'verified', EnsureEmployee::class])
             Route::get('/{id}/download', [\App\Http\Controllers\Employee\PayslipController::class, 'download'])
                 ->middleware('permission:employee.payslips.download')
                 ->name('download');
-            
-            // View annual summary (total gross, deductions, net pay by year)
-            Route::get('/annual-summary/{year}', [\App\Http\Controllers\Employee\PayslipController::class, 'annualSummary'])
-                ->middleware('permission:employee.payslips.view')
-                ->name('annual-summary');
         });
 
         // ============================================================
@@ -130,6 +130,16 @@ Route::middleware(['auth', 'verified', EnsureEmployee::class])
             Route::post('/{id}/mark-read', [\App\Http\Controllers\Employee\NotificationController::class, 'markRead'])
                 ->middleware('permission:employee.notifications.manage')
                 ->name('mark-read');
+            
+            // Mark all notifications as read
+            Route::post('/mark-all-read', [\App\Http\Controllers\Employee\NotificationController::class, 'markAllRead'])
+                ->middleware('permission:employee.notifications.manage')
+                ->name('mark-all-read');
+            
+            // Delete all notifications (must be before /{id} route)
+            Route::delete('/delete-all', [\App\Http\Controllers\Employee\NotificationController::class, 'deleteAllRead'])
+                ->middleware('permission:employee.notifications.manage')
+                ->name('delete-all');
             
             // Delete notification
             Route::delete('/{id}', [\App\Http\Controllers\Employee\NotificationController::class, 'destroy'])

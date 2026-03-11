@@ -12,7 +12,7 @@ import {
     Filter,
     Clock,
     User,
-    AlertCircle
+   // AlertCircle
 } from 'lucide-react';
 
 interface AuditLog {
@@ -33,7 +33,6 @@ interface AuditLog {
 }
 
 interface EmployeeHistoryTabProps {
-    employeeId: number;
     auditLogs?: AuditLog[];
 }
 
@@ -149,7 +148,7 @@ const mockAuditLogs: AuditLog[] = [
     },
 ];
 
-export function EmployeeHistoryTab({ employeeId, auditLogs = mockAuditLogs }: EmployeeHistoryTabProps) {
+export function EmployeeHistoryTab({ auditLogs = mockAuditLogs }: EmployeeHistoryTabProps) {
     const [selectedFilter, setSelectedFilter] = useState<string>('all');
 
     const actionFilters = [
@@ -343,8 +342,7 @@ export function EmployeeHistoryTab({ employeeId, auditLogs = mockAuditLogs }: Em
                 </div>
             )}
 
-            {/* Development Notice */}
-            <Card className="p-6 bg-blue-50 border-blue-200">
+            {/* Development Notice             <Card className="p-6 bg-blue-50 border-blue-200">
                 <div className="flex items-start gap-3">
                     <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
                     <div>
@@ -361,7 +359,8 @@ export function EmployeeHistoryTab({ employeeId, auditLogs = mockAuditLogs }: Em
                         </p>
                     </div>
                 </div>
-            </Card>
+            </Card>*/}
+
         </div>
     );
 }

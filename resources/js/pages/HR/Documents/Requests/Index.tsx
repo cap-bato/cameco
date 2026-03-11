@@ -283,6 +283,65 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
         fetchRequests();
     };
 
+    const handleBulkApprove = async (sendEmail = true) => {
+        if (selectedRequests.length === 0) return;
+        if (!confirm(`Approve ${selectedRequests.length} request(s)?`)) return;
+
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const resp = await fetch('/hr/documents/requests/bulk-approve', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': csrfToken,
+                },
+                body: JSON.stringify({ request_ids: selectedRequests, send_email: sendEmail }),
+            });
+
+            if (!resp.ok) throw new Error('Bulk approve failed');
+            toast({ title: 'Success', description: 'Bulk approve completed' });
+            setSelectedRequests([]);
+            fetchRequests();
+        } catch (error) {
+            console.error(error);
+            toast({ title: 'Error', description: 'Bulk approve failed', variant: 'destructive' });
+        }
+    };
+
+    const handleBulkReject = async () => {
+        if (selectedRequests.length === 0) return;
+        const reason = prompt('Provide a rejection reason for selected requests:');
+        if (!reason || reason.trim().length < 10) {
+            toast({ title: 'Cancelled', description: 'Rejection reason is required (min 10 chars)', variant: 'default' });
+            return;
+        }
+        if (!confirm(`Reject ${selectedRequests.length} request(s)?`)) return;
+
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const resp = await fetch('/hr/documents/requests/bulk-reject', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': csrfToken,
+                },
+                body: JSON.stringify({ request_ids: selectedRequests, rejection_reason: reason, send_email: true }),
+            });
+
+            if (!resp.ok) throw new Error('Bulk reject failed');
+            toast({ title: 'Success', description: 'Bulk reject completed' });
+            setSelectedRequests([]);
+            fetchRequests();
+        } catch (error) {
+            console.error(error);
+            toast({ title: 'Error', description: 'Bulk reject failed', variant: 'destructive' });
+        }
+    };
+
     const handleDownloadDocument = async (request: DocumentRequest) => {
         if (!request.generated_document_path) {
             toast({
@@ -513,11 +572,11 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                                     {selectedRequests.length} request(s) selected
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Button size="sm" variant="outline">
-                                        Assign to Me
+                                    <Button size="sm" variant="outline" onClick={() => handleBulkApprove(true)}>
+                                        Approve Selected
                                     </Button>
-                                    <Button size="sm" variant="outline">
-                                        Mark as Processing
+                                    <Button size="sm" variant="destructive" onClick={handleBulkReject}>
+                                        Reject Selected
                                     </Button>
                                     <Button size="sm" variant="outline">
                                         Export Selected

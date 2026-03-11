@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,8 @@ import {
     ChevronRight,
 } from 'lucide-react';
 import { useState } from 'react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, subMonths, addMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { route } from 'ziggy-js';
 
 // ============================================================================
 // Type Definitions
@@ -151,17 +152,31 @@ export default function AttendanceIndex({
 
     // Handle month navigation
     const handlePreviousMonth = () => {
-        const newDate = new Date(currentMonth);
-        newDate.setMonth(newDate.getMonth() - 1);
-        setCurrentMonth(newDate);
-        // TODO: Trigger Inertia visit to load data for previous month
+        const newMonth = subMonths(currentMonth, 1);
+        setCurrentMonth(newMonth);
+        router.get(
+            route('employee.attendance.index'),
+            {
+                view: filters.view,
+                start_date: format(startOfMonth(newMonth), 'yyyy-MM-dd'),
+                end_date: format(endOfMonth(newMonth), 'yyyy-MM-dd'),
+            },
+            { preserveState: true, preserveScroll: true }
+        );
     };
 
     const handleNextMonth = () => {
-        const newDate = new Date(currentMonth);
-        newDate.setMonth(newDate.getMonth() + 1);
-        setCurrentMonth(newDate);
-        // TODO: Trigger Inertia visit to load data for next month
+        const newMonth = addMonths(currentMonth, 1);
+        setCurrentMonth(newMonth);
+        router.get(
+            route('employee.attendance.index'),
+            {
+                view: filters.view,
+                start_date: format(startOfMonth(newMonth), 'yyyy-MM-dd'),
+                end_date: format(endOfMonth(newMonth), 'yyyy-MM-dd'),
+            },
+            { preserveState: true, preserveScroll: true }
+        );
     };
 
     return (

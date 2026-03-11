@@ -53,7 +53,7 @@ class PayrollPermissionsSeeder extends Seeder
             'payroll.employees.update-tax' => 'Update employee tax information',
             'payroll.employees.update-bank' => 'Update employee bank information',
 
-            // Allowances & Deductions
+            // Allowances & Deductions (legacy separate permissions)
             'payroll.allowances.view' => 'View allowances',
             'payroll.allowances.create' => 'Create allowances',
             'payroll.allowances.edit' => 'Edit allowances',
@@ -62,6 +62,11 @@ class PayrollPermissionsSeeder extends Seeder
             'payroll.deductions.create' => 'Create deductions',
             'payroll.deductions.edit' => 'Edit deductions',
             'payroll.deductions.delete' => 'Delete deductions',
+
+            // Allowances & Deductions (consolidated permissions)
+            'payroll.allowances-deductions.view' => 'View allowances and deductions',
+            'payroll.allowances-deductions.manage' => 'Manage allowances and deductions (create/edit/delete)',
+
             'payroll.adjustments.view' => 'View adjustments',
             'payroll.adjustments.create' => 'Create adjustments',
             'payroll.adjustments.approve' => 'Approve adjustments',
@@ -116,6 +121,7 @@ class PayrollPermissionsSeeder extends Seeder
             // Loans & Advances
             'payroll.loans.view' => 'View loans',
             'payroll.loans.create' => 'Create loans',
+            'payroll.loans.update' => 'Update loans',
             'payroll.loans.edit' => 'Edit loans',
             'payroll.loans.delete' => 'Delete loans',
             'payroll.loans.process' => 'Process loan deductions',

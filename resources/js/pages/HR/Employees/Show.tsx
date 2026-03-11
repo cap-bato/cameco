@@ -684,7 +684,7 @@ export default function ShowEmployee({ employee }: ShowEmployeeProps) {
                     </TabsContent>
 
                     <TabsContent value="history" className="mt-6">
-                        <EmployeeHistoryTab employeeId={employee.id} />
+                        <EmployeeHistoryTab employeeId={employee.id} /> {/* This tab will show the employee's history of changes, including status changes, position changes, etc. */}
                     </TabsContent>
                 </Tabs>
 

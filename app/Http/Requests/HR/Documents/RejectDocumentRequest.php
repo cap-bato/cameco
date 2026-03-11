@@ -11,8 +11,7 @@ class RejectDocumentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        // Authorization handled by middleware (hr.documents.reject permission)
-        return true;
+        return $this->user()?->can('hr.documents.requests.reject') ?? false;
     }
 
     /**
@@ -21,7 +20,9 @@ class RejectDocumentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'rejection_reason' => ['required', 'string', 'max:500'],
+            'rejection_reason' => ['required', 'string', 'min:10', 'max:500'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'send_email' => ['boolean'],
         ];
     }
 
@@ -31,8 +32,8 @@ class RejectDocumentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'rejection_reason.required' => 'Please provide a reason for rejecting this document.',
-            'rejection_reason.max' => 'Rejection reason must not exceed 500 characters.',
+            'rejection_reason.required' => 'Please provide a reason for rejection.',
+            'rejection_reason.min' => 'Rejection reason must be at least 10 characters.',
         ];
     }
 }
