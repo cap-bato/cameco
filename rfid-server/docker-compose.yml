@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  # FastAPI RFID Server
+  rfid-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rfid-server
+    ports:
+      - "8000:8000"   # API server
+      - "9000:9000"   # TCP device listener
+      - "9001:9001"   # UDP device listener
+    environment:
+      # Database Configuration
+      - DATABASE_URL=postgresql+asyncpg://rfid_user:rfid_password@postgres:5432/rfid_db
+      
+      # Server Configuration
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      
+      # Device Listener Configuration
+      - TCP_LISTENER_ENABLED=true
+      - TCP_LISTENER_HOST=0.0.0.0
+      - TCP_LISTENER_PORT=9000
+      - UDP_LISTENER_ENABLED=true
+      - UDP_LISTENER_HOST=0.0.0.0
+      - UDP_LISTENER_PORT=9001
+      - UDP_SEND_ACKNOWLEDGMENTS=true
+      
+      # Security Configuration
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRE_MINUTES=1440
+      
+      # CORS Configuration
+      - CORS_ORIGINS=["http://localhost:3000", "https://your-frontend.com"]
+      
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - rfid-network
+
+  # PostgreSQL Database (if not using shared Cameco database)
+  postgres:
+    image: postgres:15-alpine
+    container_name: rfid-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=rfid_db
+      - POSTGRES_USER=rfid_user
+      - POSTGRES_PASSWORD=rfid_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rfid_user -d rfid_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rfid-network
+
+  # Redis for Caching (Optional - for future enhancements)
+  redis:
+    image: redis:7-alpine
+    container_name: rfid-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - rfid-network
+
+  # Nginx Reverse Proxy (Optional - for production)
+  nginx:
+    image: nginx:alpine
+    container_name: rfid-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - rfid-server
+    restart: unless-stopped
+    networks:
+      - rfid-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  rfid-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
