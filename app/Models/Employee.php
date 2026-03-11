@@ -4,7 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Payslip;
 
 class Employee extends Model
 {
@@ -181,6 +183,14 @@ class Employee extends Model
     public function payrollHistory()
     {
         return $this->hasMany(EmployeePayrollInfo::class);
+    }
+
+    /**
+     * Get all payslips for this employee.
+     */
+    public function payslips(): HasMany
+    {
+        return $this->hasMany(Payslip::class)->orderBy('period_start', 'desc');
     }
 
     /**

@@ -8,6 +8,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property ?\Carbon\Carbon $loan_date
+ * @property ?\Carbon\Carbon $first_deduction_date
+ * @property ?\Carbon\Carbon $last_deduction_date
+ * @property ?\Carbon\Carbon $completion_date
+ * @property \Carbon\Carbon  $created_at
+ * @property \Carbon\Carbon  $updated_at
+ */
 class EmployeeLoan extends Model
 {
     use HasFactory, SoftDeletes;
@@ -279,12 +287,12 @@ class EmployeeLoan extends Model
         $this->installments_paid++;
         $this->total_paid += $amountDeducted;
         $this->remaining_balance -= $amountDeducted;
-        $this->last_deduction_date = now()->toDateString();
+        $this->last_deduction_date = now();
 
         // Mark as completed if all installments paid
         if ($this->installments_paid >= $this->number_of_installments) {
             $this->status = 'completed';
-            $this->completion_date = now()->toDateString();
+            $this->completion_date = now();
             $this->completion_reason = 'All installments completed';
         }
 
@@ -323,7 +331,7 @@ class EmployeeLoan extends Model
     public function markAsCompleted(string $reason = 'Manual completion'): void
     {
         $this->status = 'completed';
-        $this->completion_date = now()->toDateString();
+        $this->completion_date = now();
         $this->completion_reason = $reason;
         $this->save();
     }

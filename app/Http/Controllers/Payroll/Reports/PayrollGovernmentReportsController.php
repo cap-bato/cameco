@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Payroll\Reports;
 
 use App\Http\Controllers\Controller;
+use App\Models\GovernmentReport;
+use App\Models\GovernmentRemittance;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
@@ -11,309 +13,370 @@ class PayrollGovernmentReportsController extends Controller
 {
     public function index(Request $request)
     {
-        $reportsSummary = $this->getReportsSummary();
-        $sssReports = $this->getSSSReports();
-        $philhealthReports = $this->getPhilHealthReports();
-        $pagibigReports = $this->getPagIbigReports();
-        $birReports = $this->getBIRReports();
-        $upcomingDeadlines = $this->getUpcomingDeadlines();
-        $complianceStatus = $this->getComplianceStatus();
+        $reportsSummary = [
+            'total_reports_generated' => GovernmentReport::count(),
+            'total_reports_submitted'  => GovernmentReport::where('status', 'submitted')->count(),
+            'reports_pending_submission' => GovernmentReport::whereIn('status', ['draft', 'ready'])->count(),
+            'total_contributions' => (float) (GovernmentRemittance::sum('total_amount') ?? 0),
+            'next_deadline' => GovernmentRemittance::whereIn('status', ['pending', 'ready'])
+                ->where('due_date', '>=', now())
+                ->orderBy('due_date')
+                ->value('due_date'),
+            'overdue_reports' => GovernmentRemittance::where(function ($q) {
+                $q->where('status', 'overdue')
+                  ->orWhere(fn ($q2) => $q2->where('is_late', true)->whereNotIn('status', ['paid', 'submitted']));
+            })->count(),
+        ];
+
+        $sssReports = GovernmentReport::byAgency('sss')
+            ->with(['payrollPeriod', 'governmentRemittance'])
+            ->latest()
+            ->limit(6)
+            ->get()
+            ->map(fn ($r) => $this->mapSSSReportCard($r))
+            ->values()
+            ->all();
+
+        $philhealthReports = GovernmentReport::byAgency('philhealth')
+            ->with(['payrollPeriod', 'governmentRemittance'])
+            ->latest()
+            ->limit(6)
+            ->get()
+            ->map(fn ($r) => $this->mapPhilHealthReportCard($r))
+            ->values()
+            ->all();
+
+        $pagibigReports = GovernmentReport::byAgency('pagibig')
+            ->with(['payrollPeriod', 'governmentRemittance'])
+            ->latest()
+            ->limit(6)
+            ->get()
+            ->map(fn ($r) => $this->mapPagIbigReportCard($r))
+            ->values()
+            ->all();
+
+        $birReports = GovernmentReport::byAgency('bir')
+            ->with(['payrollPeriod', 'governmentRemittance'])
+            ->latest()
+            ->limit(6)
+            ->get()
+            ->map(fn ($r) => $this->mapBIRReportCard($r))
+            ->values()
+            ->all();
+
+        $upcomingDeadlines = GovernmentRemittance::where('due_date', '>=', now())
+            ->whereNotIn('status', ['paid'])
+            ->with('payrollPeriod')
+            ->orderBy('due_date')
+            ->limit(5)
+            ->get()
+            ->map(fn ($rem) => $this->mapDeadline($rem))
+            ->values()
+            ->all();
+
+        $complianceStatus = $this->buildComplianceStatus();
 
         return Inertia::render('Payroll/Reports/Government/Index', [
-            'reports_summary' => $reportsSummary,
-            'sss_reports' => $sssReports,
-            'philhealth_reports' => $philhealthReports,
-            'pagibig_reports' => $pagibigReports,
-            'bir_reports' => $birReports,
-            'upcoming_deadlines' => $upcomingDeadlines,
-            'compliance_status' => $complianceStatus,
+            'reports_summary'     => $reportsSummary,
+            'sss_reports'         => $sssReports,
+            'philhealth_reports'  => $philhealthReports,
+            'pagibig_reports'     => $pagibigReports,
+            'bir_reports'         => $birReports,
+            'upcoming_deadlines'  => $upcomingDeadlines,
+            'compliance_status'   => $complianceStatus,
         ]);
     }
 
-    private function getReportsSummary()
+
+    private function mapSSSReportCard($r): array
     {
+        $period = $r->payrollPeriod;
+        $remittance = $r->governmentRemittance;
+        $dueDate = $remittance?->due_date?->toDateString()
+            ?? ($period ? Carbon::parse($period->end_date)->addDays(10)->toDateString() : now()->addDays(10)->toDateString());
+        $isOverdue = Carbon::parse($dueDate)->isPast() && ! in_array($r->status, ['submitted', 'accepted']);
+
         return [
-            'total_reports_generated' => 12,
-            'total_reports_submitted' => 9,
-            'reports_pending_submission' => 3,
-            'total_contributions' => 250000.50,
-            'next_deadline' => '2025-12-10',
-            'overdue_reports' => 0,
+            'id'               => $r->id,
+            'report_type'      => $this->mapSSSReportType($r->report_type ?? 'r3'),
+            'period_id'        => $r->payroll_period_id ?? 0,
+            'period_name'      => $period?->name ?? $r->report_period ?? 'N/A',
+            'month'            => $period ? Carbon::parse($period->start_date)->format('F') : 'N/A',
+            'year'             => $period ? (int) Carbon::parse($period->start_date)->format('Y') : now()->year,
+            'total_employees'  => (int) ($r->total_employees ?? 0),
+            'total_compensation' => (float) ($r->total_compensation ?? 0),
+            'employee_share'   => (float) ($r->total_employee_share ?? 0),
+            'employer_share'   => (float) ($r->total_employer_share ?? 0),
+            'ec_share'         => (float) ($remittance?->ec_share ?? 0),
+            'total_contribution' => (float) ($r->total_amount ?? 0),
+            'status'           => $r->status ?? 'draft',
+            'status_label'     => $this->mapStatusLabel($r->status ?? 'draft'),
+            'status_color'     => $this->mapStatusColor($r->status ?? 'draft'),
+            'submission_date'  => $r->submitted_at?->toDateString(),
+            'due_date'         => $dueDate,
+            'is_overdue'       => $isOverdue,
+            'file_name'        => $r->file_name,
+            'file_path'        => $r->file_path,
+            'action_required'  => in_array($r->status, ['draft', 'ready']),
+            'error_message'    => $r->rejection_reason,
         ];
     }
 
-    private function getSSSReports()
+    private function mapPhilHealthReportCard($r): array
     {
-        $reports = [];
-        for ($i = 0; $i < 3; $i++) {
-            $date = now()->subMonths($i);
-            $status = $i === 0 ? 'draft' : ($i === 1 ? 'submitted' : 'accepted');
-            $submissionDate = $status !== 'draft' ? $date->addDays(5)->format('Y-m-d') : null;
-            
-            $reports[] = [
-                'id' => 1 + $i,
-                'report_type' => 'R3',
-                'period_id' => 1 + $i,
-                'period_name' => $date->format('F Y'),
-                'month' => $date->format('F'),
-                'year' => $date->year,
-                'total_employees' => 45,
-                'total_compensation' => 425000.00,
-                'employee_share' => 18500.50,
-                'employer_share' => 22500.75,
-                'ec_share' => 15000.25,
-                'total_contribution' => 56001.50,
-                'status' => $status,
-                'status_label' => ucfirst($status),
-                'status_color' => $status === 'submitted' ? 'green' : ($status === 'draft' ? 'blue' : 'green'),
-                'submission_date' => $submissionDate,
-                'due_date' => $date->endOfMonth()->format('Y-m-d'),
-                'is_overdue' => false,
-                'file_name' => $status !== 'draft' ? "SSS_R3_" . $date->format('mY') . ".txt" : null,
-                'file_path' => null,
-                'action_required' => $status === 'draft',
-                'error_message' => null,
-            ];
-        }
-        return $reports;
-    }
+        $period = $r->payrollPeriod;
+        $remittance = $r->governmentRemittance;
+        $dueDate = $remittance?->due_date?->toDateString()
+            ?? ($period ? Carbon::parse($period->end_date)->addDays(15)->toDateString() : now()->addDays(15)->toDateString());
+        $isOverdue = Carbon::parse($dueDate)->isPast() && ! in_array($r->status, ['submitted', 'accepted']);
 
-    private function getPhilHealthReports()
-    {
-        $reports = [];
-        for ($i = 0; $i < 3; $i++) {
-            $date = now()->subMonths($i);
-            $status = $i === 0 ? 'ready' : ($i === 1 ? 'submitted' : 'accepted');
-            
-            $reports[] = [
-                'id' => 4 + $i,
-                'report_type' => 'RF1',
-                'period_id' => 1 + $i,
-                'period_name' => $date->format('F Y'),
-                'month' => $date->format('F'),
-                'year' => $date->year,
-                'total_employees' => 45,
-                'total_compensation' => 425000.00,
-                'employee_share' => 4250.00,
-                'employer_share' => 4250.00,
-                'total_contribution' => 8500.00,
-                'status' => $status,
-                'status_label' => ucfirst(str_replace('_', ' ', $status)),
-                'status_color' => $status === 'submitted' ? 'green' : ($status === 'draft' ? 'blue' : 'yellow'),
-                'submission_date' => $status !== 'draft' && $status !== 'ready' ? $date->addDays(3)->format('Y-m-d') : null,
-                'due_date' => $date->endOfMonth()->addDays(15)->format('Y-m-d'),
-                'is_overdue' => false,
-                'file_name' => null,
-                'file_path' => null,
-                'action_required' => $status === 'draft' || $status === 'ready',
-                'error_message' => null,
-            ];
-        }
-        return $reports;
-    }
-
-    private function getPagIbigReports()
-    {
-        $reports = [];
-        for ($i = 0; $i < 3; $i++) {
-            $date = now()->subMonths($i);
-            $status = $i === 0 ? 'draft' : ($i === 1 ? 'ready' : 'submitted');
-            
-            $reports[] = [
-                'id' => 7 + $i,
-                'report_type' => 'MCRF',
-                'period_id' => 1 + $i,
-                'period_name' => $date->format('F Y'),
-                'month' => $date->format('F'),
-                'year' => $date->year,
-                'total_employees' => 45,
-                'total_compensation' => 425000.00,
-                'employee_share' => 2500.00,
-                'employer_share' => 2500.00,
-                'total_contribution' => 5000.00,
-                'status' => $status,
-                'status_label' => ucfirst(str_replace('_', ' ', $status)),
-                'status_color' => $status === 'submitted' ? 'green' : ($status === 'draft' ? 'blue' : 'yellow'),
-                'submission_date' => $status === 'submitted' ? $date->addDays(7)->format('Y-m-d') : null,
-                'due_date' => $date->endOfMonth()->addDays(10)->format('Y-m-d'),
-                'is_overdue' => false,
-                'file_name' => null,
-                'file_path' => null,
-                'action_required' => $status === 'draft',
-                'error_message' => null,
-            ];
-        }
-        return $reports;
-    }
-
-    private function getBIRReports()
-    {
-        $reports = [];
-        for ($i = 0; $i < 3; $i++) {
-            $date = now()->subMonths($i);
-            $status = $i === 0 ? 'ready' : 'submitted';
-            
-            $reports[] = [
-                'id' => 10 + $i,
-                'report_type' => '1601C',
-                'period_id' => 1 + $i,
-                'period_name' => $date->format('F Y'),
-                'month' => $date->format('F'),
-                'year' => $date->year,
-                'total_employees' => 45,
-                'total_compensation' => 425000.00,
-                'total_tax_withheld' => 28500.00,
-                'status' => $status,
-                'status_label' => ucfirst(str_replace('_', ' ', $status)),
-                'status_color' => $status === 'submitted' ? 'green' : 'yellow',
-                'submission_date' => $status === 'submitted' ? $date->addDays(5)->format('Y-m-d') : null,
-                'due_date' => $date->endOfMonth()->addDays(20)->format('Y-m-d'),
-                'is_overdue' => false,
-                'file_name' => null,
-                'file_path' => null,
-                'action_required' => $status === 'draft',
-                'error_message' => null,
-            ];
-        }
-
-        $currentYear = now()->year;
-        $reports[] = [
-            'id' => 13,
-            'report_type' => '2316',
-            'period_id' => 99,
-            'period_name' => "Annual " . $currentYear,
-            'month' => 'December',
-            'year' => $currentYear,
-            'total_employees' => 45,
-            'total_compensation' => 5100000.00,
-            'total_tax_withheld' => 342000.00,
-            'status' => 'draft',
-            'status_label' => 'Draft',
-            'status_color' => 'blue',
-            'submission_date' => null,
-            'due_date' => now()->addDays(45)->format('Y-m-d'),
-            'is_overdue' => false,
-            'file_name' => null,
-            'file_path' => null,
-            'action_required' => true,
-            'error_message' => null,
-        ];
-
-        return $reports;
-    }
-
-    private function getUpcomingDeadlines()
-    {
-        $deadlines = [];
-        $now = now();
-
-        $deadlines[] = [
-            'id' => 1,
-            'report_type' => 'SSS R3',
-            'agency' => 'SSS',
-            'agency_label' => 'Social Security System',
-            'due_date' => $now->copy()->addMonth()->day(10)->format('Y-m-d'),
-            'days_until_due' => $now->copy()->addMonth()->day(10)->diffInDays($now),
-            'is_overdue' => false,
-            'related_period_id' => 1,
-            'related_period_name' => $now->format('F Y'),
-            'action_url' => '/payroll/government/sss',
-        ];
-
-        $deadlines[] = [
-            'id' => 2,
-            'report_type' => 'PhilHealth RF1',
-            'agency' => 'PhilHealth',
-            'agency_label' => 'Philippine Health Insurance Corporation',
-            'due_date' => $now->copy()->addMonth()->day(15)->format('Y-m-d'),
-            'days_until_due' => $now->copy()->addMonth()->day(15)->diffInDays($now),
-            'is_overdue' => false,
-            'related_period_id' => 1,
-            'related_period_name' => $now->format('F Y'),
-            'action_url' => '/payroll/government/philhealth',
-        ];
-
-        $deadlines[] = [
-            'id' => 3,
-            'report_type' => 'Pag-IBIG MCRF',
-            'agency' => 'Pag-IBIG',
-            'agency_label' => 'Pag-IBIG Fund',
-            'due_date' => $now->copy()->addMonth()->day(10)->format('Y-m-d'),
-            'days_until_due' => $now->copy()->addMonth()->day(10)->diffInDays($now),
-            'is_overdue' => false,
-            'related_period_id' => 1,
-            'related_period_name' => $now->format('F Y'),
-            'action_url' => '/payroll/government/pagibig',
-        ];
-
-        $deadlines[] = [
-            'id' => 4,
-            'report_type' => 'BIR 1601C',
-            'agency' => 'BIR',
-            'agency_label' => 'Bureau of Internal Revenue',
-            'due_date' => $now->copy()->addMonth()->day(20)->format('Y-m-d'),
-            'days_until_due' => $now->copy()->addMonth()->day(20)->diffInDays($now),
-            'is_overdue' => false,
-            'related_period_id' => 1,
-            'related_period_name' => $now->format('F Y'),
-            'action_url' => '/payroll/government/bir',
-        ];
-
-        return $deadlines;
-    }
-
-    private function getComplianceStatus()
-    {
         return [
-            'total_required_reports' => 12,
-            'total_submitted_reports' => 9,
-            'submission_percentage' => 75,
-            'submission_status' => 'on_track',
-            'submission_status_label' => 'On Track',
-            'last_submission_date' => now()->subDays(5)->format('Y-m-d'),
-            'next_due_date' => now()->addDays(8)->format('Y-m-d'),
-            'agencies' => [
-                'sss' => [
-                    'agency' => 'Social Security System',
-                    'total_reports_required' => 3,
-                    'total_reports_submitted' => 2,
-                    'submission_percentage' => 67,
-                    'compliance_status' => 'at_risk',
-                    'compliance_status_label' => 'At Risk',
-                    'last_submission_date' => now()->subDays(10)->format('Y-m-d'),
-                    'next_due_date' => now()->addDays(8)->format('Y-m-d'),
-                ],
-                'philhealth' => [
-                    'agency' => 'Philippine Health Insurance Corporation',
-                    'total_reports_required' => 3,
-                    'total_reports_submitted' => 3,
-                    'submission_percentage' => 100,
-                    'compliance_status' => 'compliant',
-                    'compliance_status_label' => 'Compliant',
-                    'last_submission_date' => now()->subDays(3)->format('Y-m-d'),
-                    'next_due_date' => now()->addDays(15)->format('Y-m-d'),
-                ],
-                'pagibig' => [
-                    'agency' => 'Pag-IBIG Fund',
-                    'total_reports_required' => 3,
-                    'total_reports_submitted' => 2,
-                    'submission_percentage' => 67,
-                    'compliance_status' => 'at_risk',
-                    'compliance_status_label' => 'At Risk',
-                    'last_submission_date' => now()->subDays(7)->format('Y-m-d'),
-                    'next_due_date' => now()->addDays(10)->format('Y-m-d'),
-                ],
-                'bir' => [
-                    'agency' => 'Bureau of Internal Revenue',
-                    'total_reports_required' => 3,
-                    'total_reports_submitted' => 2,
-                    'submission_percentage' => 67,
-                    'compliance_status' => 'at_risk',
-                    'compliance_status_label' => 'At Risk',
-                    'last_submission_date' => now()->subDays(8)->format('Y-m-d'),
-                    'next_due_date' => now()->addDays(20)->format('Y-m-d'),
-                ],
-            ],
+            'id'               => $r->id,
+            'report_type'      => strtoupper($r->report_type ?? 'RF1'),
+            'period_id'        => $r->payroll_period_id ?? 0,
+            'period_name'      => $period?->name ?? $r->report_period ?? 'N/A',
+            'month'            => $period ? Carbon::parse($period->start_date)->format('F') : 'N/A',
+            'year'             => $period ? (int) Carbon::parse($period->start_date)->format('Y') : now()->year,
+            'total_employees'  => (int) ($r->total_employees ?? 0),
+            'total_compensation' => (float) ($r->total_compensation ?? 0),
+            'employee_share'   => (float) ($r->total_employee_share ?? 0),
+            'employer_share'   => (float) ($r->total_employer_share ?? 0),
+            'total_contribution' => (float) ($r->total_amount ?? 0),
+            'status'           => $r->status ?? 'draft',
+            'status_label'     => $this->mapStatusLabel($r->status ?? 'draft'),
+            'status_color'     => $this->mapStatusColor($r->status ?? 'draft'),
+            'submission_date'  => $r->submitted_at?->toDateString(),
+            'due_date'         => $dueDate,
+            'is_overdue'       => $isOverdue,
+            'file_name'        => $r->file_name,
+            'file_path'        => $r->file_path,
+            'action_required'  => in_array($r->status, ['draft', 'ready']),
+            'error_message'    => $r->rejection_reason,
         ];
+    }
+
+    private function mapPagIbigReportCard($r): array
+    {
+        $period = $r->payrollPeriod;
+        $remittance = $r->governmentRemittance;
+        $dueDate = $remittance?->due_date?->toDateString()
+            ?? ($period ? Carbon::parse($period->end_date)->addDays(10)->toDateString() : now()->addDays(10)->toDateString());
+        $isOverdue = Carbon::parse($dueDate)->isPast() && ! in_array($r->status, ['submitted', 'accepted']);
+
+        return [
+            'id'               => $r->id,
+            'report_type'      => strtoupper($r->report_type ?? 'MCRF'),
+            'period_id'        => $r->payroll_period_id ?? 0,
+            'period_name'      => $period?->name ?? $r->report_period ?? 'N/A',
+            'month'            => $period ? Carbon::parse($period->start_date)->format('F') : 'N/A',
+            'year'             => $period ? (int) Carbon::parse($period->start_date)->format('Y') : now()->year,
+            'total_employees'  => (int) ($r->total_employees ?? 0),
+            'total_compensation' => (float) ($r->total_compensation ?? 0),
+            'employee_share'   => (float) ($r->total_employee_share ?? 0),
+            'employer_share'   => (float) ($r->total_employer_share ?? 0),
+            'total_contribution' => (float) ($r->total_amount ?? 0),
+            'status'           => $r->status ?? 'draft',
+            'status_label'     => $this->mapStatusLabel($r->status ?? 'draft'),
+            'status_color'     => $this->mapStatusColor($r->status ?? 'draft'),
+            'submission_date'  => $r->submitted_at?->toDateString(),
+            'due_date'         => $dueDate,
+            'is_overdue'       => $isOverdue,
+            'file_name'        => $r->file_name,
+            'file_path'        => $r->file_path,
+            'action_required'  => in_array($r->status, ['draft', 'ready']),
+            'error_message'    => $r->rejection_reason,
+        ];
+    }
+
+    private function mapBIRReportCard($r): array
+    {
+        $period = $r->payrollPeriod;
+        $remittance = $r->governmentRemittance;
+        $dueDate = $remittance?->due_date?->toDateString()
+            ?? ($period ? Carbon::parse($period->end_date)->addDays(20)->toDateString() : now()->addDays(20)->toDateString());
+        $isOverdue = Carbon::parse($dueDate)->isPast() && ! in_array($r->status, ['submitted', 'accepted']);
+
+        return [
+            'id'               => $r->id,
+            'report_type'      => $this->mapBIRReportType($r->report_type ?? '1601c'),
+            'period_id'        => $r->payroll_period_id ?? 0,
+            'period_name'      => $period?->name ?? $r->report_period ?? 'N/A',
+            'month'            => $period ? Carbon::parse($period->start_date)->format('F') : 'N/A',
+            'year'             => $period ? (int) Carbon::parse($period->start_date)->format('Y') : now()->year,
+            'total_employees'  => (int) ($r->total_employees ?? 0),
+            'total_compensation' => (float) ($r->total_compensation ?? 0),
+            'total_tax_withheld' => (float) ($r->total_tax_withheld ?? 0),
+            'status'           => $r->status ?? 'draft',
+            'status_label'     => $this->mapStatusLabel($r->status ?? 'draft'),
+            'status_color'     => $this->mapStatusColor($r->status ?? 'draft'),
+            'submission_date'  => $r->submitted_at?->toDateString(),
+            'due_date'         => $dueDate,
+            'is_overdue'       => $isOverdue,
+            'file_name'        => $r->file_name,
+            'file_path'        => $r->file_path,
+            'action_required'  => in_array($r->status, ['draft', 'ready']),
+            'error_message'    => $r->rejection_reason,
+        ];
+    }
+
+    private function mapDeadline($rem): array
+    {
+        $dueDate = $rem->due_date?->toDateString() ?? now()->toDateString();
+        $daysUntilDue = (int) abs(now()->diffInDays(Carbon::parse($dueDate), false));
+        $isOverdue = Carbon::parse($dueDate)->isPast();
+
+        $agencyMap = [
+            'sss'        => ['label' => 'Social Security System',                    'report_type' => 'SSS R3',        'key' => 'SSS',       'url' => '/payroll/government/sss'],
+            'philhealth' => ['label' => 'Philippine Health Insurance Corporation',   'report_type' => 'PhilHealth RF1', 'key' => 'PhilHealth', 'url' => '/payroll/government/philhealth'],
+            'pagibig'    => ['label' => 'Pag-IBIG Fund',                             'report_type' => 'Pag-IBIG MCRF', 'key' => 'Pag-IBIG',   'url' => '/payroll/government/pagibig'],
+            'bir'        => ['label' => 'Bureau of Internal Revenue',                'report_type' => 'BIR 1601C',     'key' => 'BIR',        'url' => '/payroll/government/bir'],
+        ];
+
+        $agency = strtolower($rem->agency ?? '');
+        $info = $agencyMap[$agency] ?? [
+            'label' => $rem->agency ?? 'Unknown',
+            'report_type' => $rem->remittance_type ?? 'Report',
+            'key' => strtoupper($agency),
+            'url' => '/payroll/government',
+        ];
+
+        return [
+            'id'                  => $rem->id,
+            'report_type'         => $info['report_type'],
+            'agency'              => $info['key'],
+            'agency_label'        => $info['label'],
+            'due_date'            => $dueDate,
+            'days_until_due'      => $daysUntilDue,
+            'is_overdue'          => $isOverdue,
+            'related_period_id'   => $rem->payroll_period_id ?? 0,
+            'related_period_name' => $rem->payrollPeriod?->name ?? ($rem->remittance_month ?? 'N/A'),
+            'action_url'          => $info['url'],
+        ];
+    }
+
+    private function buildComplianceStatus(): array
+    {
+        $agencyConfig = [
+            'sss'        => 'Social Security System',
+            'philhealth' => 'Philippine Health Insurance Corporation',
+            'pagibig'    => 'Pag-IBIG Fund',
+            'bir'        => 'Bureau of Internal Revenue',
+        ];
+
+        $agencyDetails = [];
+        $totalRequired  = 0;
+        $totalSubmitted = 0;
+        $latestSubmission = null;
+        $earliestDue = null;
+
+        foreach ($agencyConfig as $agency => $agencyName) {
+            $required  = GovernmentReport::byAgency($agency)->count();
+            $submitted = GovernmentReport::byAgency($agency)->where('status', 'submitted')->count();
+            $pct = $required > 0 ? (int) round(($submitted / $required) * 100) : 0;
+
+            $lastSubmittedAt = GovernmentReport::byAgency($agency)
+                ->where('status', 'submitted')
+                ->max('submitted_at');
+
+            $nextDueDate = GovernmentRemittance::where('agency', $agency)
+                ->whereIn('status', ['pending', 'ready'])
+                ->where('due_date', '>=', now())
+                ->min('due_date');
+
+            if ($lastSubmittedAt && (! $latestSubmission || $lastSubmittedAt > $latestSubmission)) {
+                $latestSubmission = $lastSubmittedAt;
+            }
+            if ($nextDueDate && (! $earliestDue || $nextDueDate < $earliestDue)) {
+                $earliestDue = $nextDueDate;
+            }
+
+            $complianceStatus = match (true) {
+                $pct >= 90 => 'compliant',
+                $pct >= 50 => 'at_risk',
+                default    => 'non_compliant',
+            };
+
+            $agencyDetails[$agency] = [
+                'agency'                  => $agencyName,
+                'total_reports_required'  => $required,
+                'total_reports_submitted' => $submitted,
+                'submission_percentage'   => $pct,
+                'compliance_status'       => $complianceStatus,
+                'compliance_status_label' => match ($complianceStatus) {
+                    'compliant'      => 'Compliant',
+                    'at_risk'        => 'At Risk',
+                    default          => 'Non-Compliant',
+                },
+                'last_submission_date' => $lastSubmittedAt ? Carbon::parse($lastSubmittedAt)->toDateString() : null,
+                'next_due_date'        => $nextDueDate ? Carbon::parse($nextDueDate)->toDateString() : null,
+            ];
+
+            $totalRequired  += $required;
+            $totalSubmitted += $submitted;
+        }
+
+        $overallPct = $totalRequired > 0 ? (int) round(($totalSubmitted / $totalRequired) * 100) : 0;
+        $overallStatus = match (true) {
+            $overallPct >= 90 => 'on_track',
+            $overallPct >= 50 => 'at_risk',
+            default           => 'non_compliant',
+        };
+
+        return [
+            'total_required_reports'  => $totalRequired,
+            'total_submitted_reports' => $totalSubmitted,
+            'submission_percentage'   => $overallPct,
+            'submission_status'       => $overallStatus,
+            'submission_status_label' => match ($overallStatus) {
+                'on_track' => 'On Track',
+                'at_risk'  => 'At Risk',
+                default    => 'Non-Compliant',
+            },
+            'last_submission_date' => $latestSubmission ? Carbon::parse($latestSubmission)->toDateString() : null,
+            'next_due_date'        => $earliestDue ? Carbon::parse($earliestDue)->toDateString() : null,
+            'agencies'             => $agencyDetails,
+        ];
+    }
+
+    private function mapSSSReportType(string $type): string
+    {
+        return match (strtolower($type)) {
+            'monthly' => 'Monthly',
+            default   => 'R3',
+        };
+    }
+
+    private function mapBIRReportType(string $type): string
+    {
+        return match (strtolower($type)) {
+            'alphalist' => 'Alphalist',
+            '2316'      => '2316',
+            default     => strtoupper($type),
+        };
+    }
+
+    private function mapStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'draft'     => 'Draft',
+            'ready'     => 'Ready',
+            'submitted' => 'Submitted',
+            'accepted'  => 'Accepted',
+            'rejected'  => 'Rejected',
+            default     => ucfirst($status),
+        };
+    }
+
+    private function mapStatusColor(string $status): string
+    {
+        return match ($status) {
+            'draft'              => 'blue',
+            'ready'              => 'yellow',
+            'submitted',
+            'accepted'           => 'green',
+            'rejected'           => 'red',
+            default              => 'blue',
+        };
     }
 }
+

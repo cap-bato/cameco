@@ -67,6 +67,17 @@ export function BudgetVariance({
         variance: item.variance,
     }));
 
+    if (varianceData.length === 0 && forecastProjections.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 py-16 text-center">
+                <p className="text-lg font-semibold text-gray-500">No Budget & Forecast Data Available</p>
+                <p className="mt-1 text-sm text-gray-400">
+                    Budget variance and forecast data will appear once payroll calculations exist for this period.
+                </p>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             {/* Budget vs Actual - Department Overview */}

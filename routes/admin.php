@@ -159,6 +159,7 @@ Route::middleware(['auth', 'verified', EnsureOfficeAdmin::class])
         // LEAVE POLICIES (4. Leave Policies Configuration)
         // ============================================================
         Route::prefix('leave-policies')->name('leave-policies.')->group(function () {
+            // ── Fixed routes FIRST ──────────────────────────────────────
             // List all leave policies
             Route::get('/', [\App\Http\Controllers\Admin\LeavePolicyController::class, 'index'])
                 ->middleware('permission:admin.leave-policies.view')
@@ -169,6 +170,16 @@ Route::middleware(['auth', 'verified', EnsureOfficeAdmin::class])
                 ->middleware('permission:admin.leave-policies.create')
                 ->name('store');
             
+            // Approval rules configuration — MUST come BEFORE /{leavePolicy} parameterized routes
+            Route::get('/approval-rules', [\App\Http\Controllers\Admin\LeavePolicyController::class, 'configureApprovalRules'])
+                ->middleware('permission:admin.leave-policies.view')
+                ->name('approval-rules');
+            
+            Route::put('/approval-rules', [\App\Http\Controllers\Admin\LeavePolicyController::class, 'updateApprovalRules'])
+                ->middleware('permission:admin.leave-policies.edit')
+                ->name('approval-rules.update');
+            
+            // ── Parameterized routes AFTER ──────────────────────────────
             // Update leave policy
             Route::put('/{leavePolicy}', [\App\Http\Controllers\Admin\LeavePolicyController::class, 'update'])
                 ->middleware('permission:admin.leave-policies.edit')
@@ -178,15 +189,6 @@ Route::middleware(['auth', 'verified', EnsureOfficeAdmin::class])
             Route::delete('/{leavePolicy}', [\App\Http\Controllers\Admin\LeavePolicyController::class, 'destroy'])
                 ->middleware('permission:admin.leave-policies.delete')
                 ->name('destroy');
-            
-            // Approval rules configuration
-            Route::get('/approval-rules', [\App\Http\Controllers\Admin\LeavePolicyController::class, 'configureApprovalRules'])
-                ->middleware('permission:admin.leave-policies.view')
-                ->name('approval-rules');
-            
-            Route::put('/approval-rules', [\App\Http\Controllers\Admin\LeavePolicyController::class, 'updateApprovalRules'])
-                ->middleware('permission:admin.leave-policies.edit')
-                ->name('approval-rules.update');
         });
 
         // ============================================================
@@ -236,6 +238,11 @@ Route::middleware(['auth', 'verified', EnsureOfficeAdmin::class])
             Route::put('/allowances', [\App\Http\Controllers\Admin\PayrollRulesController::class, 'updateAllowances'])
                 ->middleware('permission:admin.payroll-rules.edit')
                 ->name('allowances.update');
+            
+            // Update standard deductions
+            Route::put('/deductions', [\App\Http\Controllers\Admin\PayrollRulesController::class, 'updateDeductions'])
+                ->middleware('permission:admin.payroll-rules.edit')
+                ->name('deductions.update');
             
             // Update government rates (SSS, PhilHealth, Pag-IBIG)
             Route::put('/government-rates', [\App\Http\Controllers\Admin\PayrollRulesController::class, 'updateGovernmentRates'])

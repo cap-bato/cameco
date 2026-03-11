@@ -167,7 +167,9 @@ class LeaveController extends Controller
             }
 
             if ($leaveType) {
-                $query->where('leave_policy_id', $leaveType);
+                $query->whereHas('leavePolicy', function ($q) use ($leaveType) {
+                    $q->where('code', $leaveType);  // Filter by code string
+                });
             }
 
             $requests = $query->orderBy('start_date', 'desc')
@@ -176,19 +178,23 @@ class LeaveController extends Controller
                     return [
                         'id' => $request->id,
                         'leave_type' => $request->leavePolicy->name ?? 'Unknown',
-                        'leave_code' => $request->leavePolicy->code ?? 'N/A',
+                        'leave_type_code' => $request->leavePolicy->code ?? 'N/A',
                         'color' => $request->leavePolicy->color ?? '#64748b',
                         'start_date' => $request->start_date->format('Y-m-d'),
                         'end_date' => $request->end_date->format('Y-m-d'),
-                        'days_requested' => $request->days_requested,
+                        'total_days' => $request->days_requested,
                         'reason' => $request->reason,
                         'status' => $request->status,
-                        'submitted_at' => $request->submitted_at?->format('Y-m-d H:i:s'),
+                        'created_at' => $request->submitted_at?->format('Y-m-d H:i:s'),
                         'approved_at' => $request->supervisor_approved_at?->format('Y-m-d H:i:s') ?? $request->hr_processed_at?->format('Y-m-d H:i:s'),
+                        'rejected_at' => $request->status === 'rejected'
+                            ? ($request->hr_processed_at?->format('Y-m-d H:i:s'))
+                            : null,
                         'approver_name' => $request->supervisor?->profile?->full_name ?? 'HR Staff',
-                        'approver_comments' => $request->supervisor_comments ?? $request->hr_notes,
+                        'approver_role' => $request->supervisor ? 'Supervisor' : 'HR Staff',
+                        'rejection_reason' => $request->hr_notes ?? $request->supervisor_comments,
                         'cancelled_at' => $request->cancelled_at?->format('Y-m-d H:i:s'),
-                        'cancellation_reason' => $request->cancellation_reason,
+                        'has_documents' => $request->document_path !== null,
                     ];
                 });
 
@@ -215,6 +221,7 @@ class LeaveController extends Controller
                     'id' => $employee->id,
                     'employee_number' => $employee->employee_number,
                     'full_name' => $employee->profile->full_name ?? 'N/A',
+                    'department' => $employee->department->name ?? 'N/A',
                 ],
                 'requests' => $requests,
                 'leaveTypes' => $leaveTypes,
@@ -289,9 +296,10 @@ class LeaveController extends Controller
                     'name' => $policy->name,
                     'code' => $policy->code,
                     'color' => $policy->color ?? '#64748b',
-                    'available' => $balance['available'] ?? 0,
+                    'available_balance' => $balance['available'] ?? 0,
                     'pending' => $balance['pending'] ?? 0,
                     'requires_document' => $policy->requires_document ?? false,
+                    'description' => '',
                     'min_advance_notice_days' => $policy->min_advance_notice_days ?? 3,
                     'max_consecutive_days' => $policy->max_consecutive_days ?? 30,
                 ];
@@ -308,9 +316,9 @@ class LeaveController extends Controller
                     'employee_number' => $employee->employee_number,
                     'full_name' => $employee->profile->full_name ?? 'N/A',
                     'department_id' => $employee->department_id,
-                    'department_name' => $employee->department->name ?? 'N/A',
+                    'department' => $employee->department->name ?? 'N/A',
                 ],
-                'leavePolicies' => $leavePoliciesWithBalances,
+                'leaveTypes' => $leavePoliciesWithBalances,
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to load leave request form', [
@@ -324,8 +332,9 @@ class LeaveController extends Controller
                     'id' => $employee->id,
                     'employee_number' => $employee->employee_number,
                     'full_name' => $employee->profile->full_name ?? 'N/A',
+                    'department' => $employee->department->name ?? 'N/A',
                 ],
-                'leavePolicies' => [],
+                'leaveTypes' => [],
                 'error' => 'Failed to load leave request form. Please try again or contact HR Staff if the issue persists.',
             ]);
         }

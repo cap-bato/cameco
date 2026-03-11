@@ -29,6 +29,14 @@ interface PayrollRulesData {
         thirteenth_month_enabled: boolean;
         performance_bonus_enabled: boolean;
     };
+    standard_deductions: {
+        late_deduction_type: string;
+        late_deduction_amount: number;
+        undertime_deduction_type: string;
+        undertime_deduction_amount: number;
+        absence_deduction_per_day: number;
+        lwop_deduction_rate: number;
+    };
     government_rates: {
         // SSS
         sss_employee_rate: number;
@@ -289,12 +297,12 @@ export default function PayrollRulesIndex({ payrollRules }: PayrollRulesIndexPro
                     <TabsContent value="deductions">
                         <StandardDeductionsForm
                             initialData={{
-                                late_deduction_type: 'per_minute',
-                                late_deduction_amount: 5.0,
-                                undertime_deduction_type: 'proportional',
-                                undertime_deduction_amount: 0,
-                                absence_deduction_per_day: 1.0,
-                                lwop_deduction_rate: 1.0,
+                                late_deduction_type: payrollRules.standard_deductions.late_deduction_type,
+                                late_deduction_amount: payrollRules.standard_deductions.late_deduction_amount,
+                                undertime_deduction_type: payrollRules.standard_deductions.undertime_deduction_type,
+                                undertime_deduction_amount: payrollRules.standard_deductions.undertime_deduction_amount,
+                                absence_deduction_per_day: payrollRules.standard_deductions.absence_deduction_per_day,
+                                lwop_deduction_rate: payrollRules.standard_deductions.lwop_deduction_rate,
                             }}
                             onSubmit={handleDeductionsSubmit}
                         />

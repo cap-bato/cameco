@@ -66,11 +66,14 @@ export function EmployeeCostAnalysisComponent({
 
     // Calculate statistics
     const totalCost = employees.reduce((sum, emp) => sum + emp.cost_to_company, 0);
-    const avgCostPerEmployee = totalCost / employees.length;
-    const costStdDev = Math.sqrt(
-        employees.reduce((sum, emp) => sum + Math.pow(emp.cost_to_company - avgCostPerEmployee, 2), 0) /
-            employees.length
-    );
+    const avgCostPerEmployee = employees.length > 0 ? totalCost / employees.length : 0;
+    const costStdDev = employees.length > 0
+        ? Math.sqrt(
+              employees.reduce((sum, emp) => sum + Math.pow(emp.cost_to_company - avgCostPerEmployee, 2), 0) /
+                  employees.length
+          )
+        : 0;
+    const maxCost = employees.length > 0 ? Math.max(...employees.map((e) => e.cost_to_company)) : 0;
 
     // Department averages
     const deptStats = employees.reduce((acc: DeptStatsRecord, emp) => {
@@ -117,6 +120,17 @@ export function EmployeeCostAnalysisComponent({
         return acc;
     }, {});
 
+    if (employees.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 py-16 text-center">
+                <p className="text-lg font-semibold text-gray-500">No Employee Data Available</p>
+                <p className="mt-1 text-sm text-gray-400">
+                    Employee cost analysis will appear once payroll calculations exist for this period.
+                </p>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             {/* Summary Cards */}
@@ -157,7 +171,7 @@ export function EmployeeCostAnalysisComponent({
                     </CardHeader>
                     <CardContent>
                         <p className="text-2xl font-bold text-gray-900">
-                            {formatCurrency(Math.max(...employees.map((e) => e.cost_to_company)))}
+                            {formatCurrency(maxCost)}
                         </p>
                         <p className="mt-1 text-xs text-gray-500">Peak employee cost</p>
                     </CardContent>

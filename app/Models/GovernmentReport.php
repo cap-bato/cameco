@@ -7,6 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property ?\Carbon\Carbon $submitted_at
+ * @property ?\Carbon\Carbon $validated_at
+ * @property \Carbon\Carbon  $created_at
+ * @property \Carbon\Carbon  $updated_at
+ */
 class GovernmentReport extends Model
 {
     use HasFactory, SoftDeletes;
