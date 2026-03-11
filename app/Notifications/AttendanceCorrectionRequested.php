@@ -60,7 +60,7 @@ class AttendanceCorrectionRequested extends Notification implements ShouldQueue
             ->line('')
             ->line('**Request Details:**')
             ->line("- **Employee:** {$this->employee->profile->full_name} ({$this->employee->employee_number})")
-            ->line("- **Department:** {$this->employee->department->name}")
+            ->line("- **Department:** " . ($this->employee->department?->name ?? 'N/A'))
             ->line("- **Attendance Date:** {$attendanceDate}")
             ->line("- **Issue Type:** {$issueType}")
             ->line("- **Reason:** {$this->validated['reason']}")
