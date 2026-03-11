@@ -248,7 +248,7 @@ export default function CreateRequest({
 
         try {
             const formData = new FormData();
-            formData.append('leave_type_id', selectedLeaveType);
+            formData.append('leave_policy_id', selectedLeaveType);
             formData.append('start_date', startDate);
             formData.append('end_date', endDate);
             formData.append('reason', reason);

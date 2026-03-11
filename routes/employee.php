@@ -20,13 +20,6 @@ Route::middleware(['auth', 'verified', EnsureEmployee::class])
             ->middleware('permission:employee.dashboard.view')
             ->name('dashboard');
 
-        // Notifications
-        Route::get('/notifications', [\App\Http\Controllers\Employee\NotificationController::class, 'index'])
-            ->name('notifications.index');
-
-        Route::post('/notifications/{notification}/read', [\App\Http\Controllers\Employee\NotificationController::class, 'markAsRead'])
-            ->name('notifications.read');
-
         // ============================================================
         // PERSONAL INFORMATION (Self-Service)
         // ============================================================
@@ -130,6 +123,16 @@ Route::middleware(['auth', 'verified', EnsureEmployee::class])
             Route::post('/{id}/mark-read', [\App\Http\Controllers\Employee\NotificationController::class, 'markRead'])
                 ->middleware('permission:employee.notifications.manage')
                 ->name('mark-read');
+            
+            // Mark all notifications as read
+            Route::post('/mark-all-read', [\App\Http\Controllers\Employee\NotificationController::class, 'markAllRead'])
+                ->middleware('permission:employee.notifications.manage')
+                ->name('mark-all-read');
+            
+            // Delete all notifications (must be before /{id} route)
+            Route::delete('/delete-all', [\App\Http\Controllers\Employee\NotificationController::class, 'deleteAllRead'])
+                ->middleware('permission:employee.notifications.manage')
+                ->name('delete-all');
             
             // Delete notification
             Route::delete('/{id}', [\App\Http\Controllers\Employee\NotificationController::class, 'destroy'])

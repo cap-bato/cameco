@@ -54,37 +54,36 @@ class NotificationController extends Controller
                 $query->whereNotNull('read_at');
             }
 
-            // Get notifications with pagination
-            $notifications = $query->orderBy('created_at', 'desc')
-                ->paginate(20)
-                ->through(function ($notification) {
+            // Get notifications as array (not paginator)
+            $notificationItems = $query->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($notification) {
                     return [
                         'id' => $notification->id,
                         'type' => $this->getNotificationType($notification->type),
-                        'type_label' => $this->getTypeLabel($notification->type),
-                        'icon' => $this->getNotificationIcon($notification->type),
-                        'color' => $this->getNotificationColor($notification->type),
                         'title' => $notification->data['title'] ?? 'Notification',
                         'message' => $notification->data['message'] ?? '',
-                        'action_url' => $notification->data['action_url'] ?? null,
-                        'action_label' => $notification->data['action_label'] ?? null,
-                        'is_read' => $notification->read_at !== null,
-                        'read_at' => $notification->read_at?->format('Y-m-d H:i:s'),
-                        'created_at' => $notification->created_at->format('Y-m-d H:i:s'),
-                        'time_ago' => $notification->created_at->diffForHumans(),
+                        'timestamp' => $notification->created_at->toIso8601String(),
+                        'read' => $notification->read_at !== null,
                     ];
-                });
+                })
+                ->values()
+                ->toArray();
 
-            // Get unread count for badge
-            $unreadCount = $user->unreadNotifications()->count();
-
-            // Get notification counts by type
-            $typeCounts = [
-                'all' => $user->notifications()->count(),
-                'leave' => $user->notifications()->where('type', 'like', '%Leave%')->count(),
-                'payroll' => $user->notifications()->where('type', 'like', '%Payroll%')->orWhere('type', 'like', '%Payslip%')->count(),
-                'attendance' => $user->notifications()->where('type', 'like', '%Attendance%')->count(),
-                'system' => $user->notifications()->where('type', 'like', '%System%')->count(),
+            // Build unified stats object
+            $allNotifications = $user->notifications();
+            $stats = [
+                'total' => $allNotifications->count(),
+                'unread' => $user->unreadNotifications()->count(),
+                'leave' => $allNotifications->where('type', 'like', '%Leave%')->count(),
+                'payroll' => $allNotifications
+                    ->where(function ($q) {
+                        $q->where('type', 'like', '%Payroll%')
+                            ->orWhere('type', 'like', '%Payslip%');
+                    })
+                    ->count(),
+                'attendance' => $allNotifications->where('type', 'like', '%Attendance%')->count(),
+                'system' => $allNotifications->where('type', 'like', '%System%')->count(),
             ];
 
             Log::info('Employee notifications viewed', [
@@ -98,10 +97,10 @@ class NotificationController extends Controller
                     'id' => $employee->id,
                     'employee_number' => $employee->employee_number,
                     'full_name' => $employee->profile->full_name ?? 'N/A',
+                    'department' => $employee->department->name ?? 'N/A',
                 ],
-                'notifications' => $notifications,
-                'unreadCount' => $unreadCount,
-                'typeCounts' => $typeCounts,
+                'notifications' => $notificationItems,
+                'stats' => $stats,
                 'filters' => [
                     'type' => $type ?? 'all',
                     'status' => $status ?? 'all',
@@ -119,11 +118,12 @@ class NotificationController extends Controller
                     'id' => $employee->id,
                     'employee_number' => $employee->employee_number,
                     'full_name' => $employee->profile->full_name ?? 'N/A',
+                    'department' => $employee->department->name ?? 'N/A',
                 ],
                 'notifications' => [],
-                'unreadCount' => 0,
-                'typeCounts' => [
-                    'all' => 0,
+                'stats' => [
+                    'total' => 0,
+                    'unread' => 0,
                     'leave' => 0,
                     'payroll' => 0,
                     'attendance' => 0,
