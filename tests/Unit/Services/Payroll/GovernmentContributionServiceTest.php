@@ -331,6 +331,7 @@ class GovernmentContributionServiceTest extends TestCase
     public function test_get_remittances_returns_empty_when_none_exist(): void
     {
         $result = $this->service->getRemittances('sss');
+        $this->assertCount(0, $result);
     }
 
     public function test_get_remittances_returns_correct_shape(): void
