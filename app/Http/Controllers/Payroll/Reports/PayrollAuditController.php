@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Payroll\Reports;
 
 use App\Http\Controllers\Controller;
+use App\Models\PayrollApprovalHistory;
+use App\Models\PayrollCalculationLog;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
@@ -11,187 +14,397 @@ class PayrollAuditController extends Controller
 {
     public function index(Request $request)
     {
-        $auditLogs = $this->getAuditLogs();
-        $changeHistory = $this->getChangeHistory();
+        $filters = $this->parseFilters($request);
 
         return Inertia::render('Payroll/Reports/Audit', [
-            'auditLogs' => $auditLogs,
-            'changeHistory' => $changeHistory,
-            'filters' => [
-                'action' => [],
-                'entity_type' => [],
-                'user_id' => [],
-                'date_range' => null,
-                'search' => '',
+            'auditLogs'     => $this->getAuditLogs($filters),
+            'changeHistory' => $this->getChangeHistory($filters),
+            'filters'       => [
+                'action'      => $filters['action'],
+                'entity_type' => $filters['entity_type'],
+                'user_id'     => $filters['user_id'],
+                'date_range'  => $filters['date_range'],
+                'search'      => $filters['search'],
             ],
         ]);
     }
 
-    private function getAuditLogs()
+    /**
+     * @param array{action: string[], entity_type: string[], user_id: int[], date_range: array{from: string, to: string}|null, search: string} $filters
+     */
+    private function getAuditLogs(array $filters): array
     {
-        $logs = [];
-        $now = Carbon::now();
-        $actions = [
-            ['action' => 'created', 'label' => 'Created', 'color' => 'green'],
-            ['action' => 'calculated', 'label' => 'Calculated', 'color' => 'blue'],
-            ['action' => 'adjusted', 'label' => 'Adjusted', 'color' => 'yellow'],
-            ['action' => 'approved', 'label' => 'Approved', 'color' => 'green'],
-            ['action' => 'rejected', 'label' => 'Rejected', 'color' => 'red'],
-            ['action' => 'finalized', 'label' => 'Finalized', 'color' => 'purple'],
-        ];
+        $actions     = $filters['action'];
+        $entityTypes = $filters['entity_type'];
+        $userIds     = $filters['user_id'];
+        $dateRange   = $filters['date_range'];
+        $search      = $filters['search'];
 
-        $entityTypes = ['PayrollPeriod', 'PayrollCalculation', 'PayrollAdjustment', 'SalaryComponent', 'EmployeePayrollInfo'];
+        $approvalActions = !empty($actions) ? $this->getApprovalActionsFromFilter($actions) : [];
+        $calcLogTypes    = !empty($actions) ? $this->getCalcLogTypesFromFilter($actions) : [];
 
-        $users = [
-            ['id' => 1, 'name' => 'Maria Santos', 'email' => 'maria.santos@cathay.ph'],
-            ['id' => 2, 'name' => 'Juan Dela Cruz', 'email' => 'juan.cruz@cathay.ph'],
-            ['id' => 3, 'name' => 'Jennifer Reyes', 'email' => 'jennifer.reyes@cathay.ph'],
-            ['id' => 4, 'name' => 'Robert Tan', 'email' => 'robert.tan@cathay.ph'],
-        ];
+        $fetchApprovals = empty($entityTypes) || in_array('PayrollPeriod', $entityTypes);
+        $fetchCalcLogs  = empty($entityTypes) || in_array('PayrollCalculation', $entityTypes);
 
-        $entityNames = [
-            'November 2025 - 1st Half',
-            'November 2025 - 2nd Half',
-            'October 2025 - 1st Half',
-            'October 2025 - 2nd Half',
-            'Calculation Run #1',
-            'Calculation Run #2',
-            'Adjustment - Salary Increase',
-            'Adjustment - Bonus',
-        ];
+        if (!empty($actions)) {
+            if (empty($approvalActions)) {
+                $fetchApprovals = false;
+            }
+            if (empty($calcLogTypes)) {
+                $fetchCalcLogs = false;
+            }
+        }
 
-        $changesSummaries = [
-            'Status: draft to calculating',
-            'Total Gross Pay: 4,200,000 to 4,350,000',
-            'Approved By: null to Maria Santos',
-            'Basic Salary: 25,000 to 26,500',
-            'Allowances: 3,500 to 4,000',
-            'Employee Count: 85 to 86',
-            'Total Deductions: 850,000 to 875,000',
-            'Net Pay: 3,350,000 to 3,475,000',
-        ];
+        // --- Fetch filtered records ---
+        if ($fetchApprovals) {
+            $q = PayrollApprovalHistory::with('payrollPeriod')->orderByDesc('created_at')->limit(30);
+            if (!empty($approvalActions)) {
+                $q->whereIn('action', $approvalActions);
+            }
+            if (!empty($userIds)) {
+                $q->whereIn('user_id', $userIds);
+            }
+            if ($dateRange !== null) {
+                $q->where('created_at', '>=', Carbon::parse($dateRange['from'])->startOfDay())
+                  ->where('created_at', '<=', Carbon::parse($dateRange['to'])->endOfDay());
+            }
+            if ($search !== '') {
+                $s = $search;
+                $q->where(function ($q2) use ($s) {
+                    $q2->where('user_name', 'like', "%{$s}%")
+                       ->orWhereHas('payrollPeriod', fn ($pq) => $pq->where('period_name', 'like', "%{$s}%"));
+                });
+            }
+            $approvals = $q->get();
+        } else {
+            $approvals = collect();
+        }
 
-        // Generate 50 mock audit logs
-        for ($i = 1; $i <= 50; $i++) {
-            $actionData = $actions[array_rand($actions)];
-            $entityType = $entityTypes[array_rand($entityTypes)];
-            $user = $users[array_rand($users)];
-            $daysAgo = rand(0, 30);
-            $hoursAgo = rand(0, 23);
-            $minutesAgo = rand(0, 59);
-            
-            $timestamp = $now->copy()->subDays($daysAgo)->subHours($hoursAgo)->subMinutes($minutesAgo);
-            $entityId = rand(1, 100);
+        if ($fetchCalcLogs) {
+            $q = PayrollCalculationLog::with('payrollPeriod')->orderByDesc('created_at')->limit(30);
+            if (!empty($calcLogTypes)) {
+                $q->whereIn('log_type', $calcLogTypes);
+            }
+            if (!empty($userIds)) {
+                $q->where('actor_type', 'user')->whereIn('actor_id', $userIds);
+            }
+            if ($dateRange !== null) {
+                $q->where('created_at', '>=', Carbon::parse($dateRange['from'])->startOfDay())
+                  ->where('created_at', '<=', Carbon::parse($dateRange['to'])->endOfDay());
+            }
+            if ($search !== '') {
+                $s = $search;
+                $q->where(function ($q2) use ($s) {
+                    $q2->where('message', 'like', "%{$s}%")
+                       ->orWhere('actor_name', 'like', "%{$s}%")
+                       ->orWhereHas('payrollPeriod', fn ($pq) => $pq->where('period_name', 'like', "%{$s}%"));
+                });
+            }
+            $calcLogs = $q->get();
+        } else {
+            $calcLogs = collect();
+        }
 
-            $hasChanges = rand(0, 1) === 1;
+        // --- Bulk-load user emails ---
+        $approvalUserIds = $approvals->pluck('user_id')->filter()->unique();
+        $calcUserIds     = $calcLogs->where('actor_type', 'user')->pluck('actor_id')->filter()->unique();
+        $allUserIds      = $approvalUserIds->merge($calcUserIds)->unique();
+        $userEmails      = $allUserIds->isNotEmpty()
+            ? User::whereIn('id', $allUserIds)->pluck('email', 'id')
+            : collect();
 
-            $logs[] = [
-                'id' => $i,
-                'action' => $actionData['action'],
-                'action_label' => $actionData['label'],
-                'action_color' => $actionData['color'],
-                'entity_type' => $entityType,
-                'entity_id' => $entityId,
-                'entity_name' => $entityNames[array_rand($entityNames)],
-                'user_id' => $user['id'],
-                'user_name' => $user['name'],
-                'user_email' => $user['email'],
-                'timestamp' => $timestamp->toIso8601String(),
-                'formatted_date' => $timestamp->format('F j, Y'),
-                'formatted_time' => $timestamp->format('g:i A'),
-                'relative_time' => $this->getRelativeTime($timestamp),
-                'changes_summary' => $hasChanges ? $changesSummaries[array_rand($changesSummaries)] : null,
-                'old_values' => $hasChanges ? $this->generateOldValues($actionData['action']) : null,
-                'new_values' => $hasChanges ? $this->generateNewValues($actionData['action']) : null,
-                'ip_address' => $this->generateIpAddress(),
-                'has_changes' => $hasChanges,
+        // --- Build raw entries ---
+        $raw = [];
+
+        foreach ($approvals as $approval) {
+            $action = $this->mapApprovalAction($approval->action);
+            $ts     = $approval->created_at;
+            $raw[]  = [
+                '_ts'             => (string) $ts->toIso8601String(),
+                'action'          => $action,
+                'action_label'    => $this->getActionLabel($action),
+                'action_color'    => $this->getActionColor($action),
+                'entity_type'     => 'PayrollPeriod',
+                'entity_id'       => $approval->payroll_period_id,
+                'entity_name'     => $approval->payrollPeriod?->period_name ?? "Period #{$approval->payroll_period_id}",
+                'user_id'         => $approval->user_id,
+                'user_name'       => $approval->user_name,
+                'user_email'      => $userEmails->get($approval->user_id, ''),
+                'timestamp'       => $ts->toIso8601String(),
+                'formatted_date'  => $ts->format('F j, Y'),
+                'formatted_time'  => $ts->format('g:i A'),
+                'relative_time'   => $this->getRelativeTime($ts),
+                'changes_summary' => "Status: {$approval->status_from} → {$approval->status_to}",
+                'old_values'      => ['status' => $approval->status_from],
+                'new_values'      => ['status' => $approval->status_to],
+                'ip_address'      => null,
+                'has_changes'     => true,
             ];
         }
 
-        // Sort by timestamp descending (most recent first)
-        usort($logs, function ($a, $b) {
-            return strtotime($b['timestamp']) - strtotime($a['timestamp']);
-        });
+        foreach ($calcLogs as $log) {
+            $action     = $this->mapLogTypeToAction($log->log_type);
+            $actorId    = ($log->actor_type === 'user' && $log->actor_id) ? (int) $log->actor_id : 0;
+            $ts         = $log->created_at;
+            $metadata   = $log->metadata ?? [];
+            $hasChanges = !empty($metadata['old_values']) || !empty($metadata['new_values']);
+
+            $raw[] = [
+                '_ts'             => (string) $ts->toIso8601String(),
+                'action'          => $action,
+                'action_label'    => $this->getActionLabel($action),
+                'action_color'    => $this->getActionColor($action),
+                'entity_type'     => 'PayrollCalculation',
+                'entity_id'       => $log->payroll_period_id,
+                'entity_name'     => $log->payrollPeriod?->period_name ?? "Period #{$log->payroll_period_id}",
+                'user_id'         => $actorId,
+                'user_name'       => $log->actor_name ?? 'System',
+                'user_email'      => $actorId > 0 ? $userEmails->get($actorId, '') : '',
+                'timestamp'       => $ts->toIso8601String(),
+                'formatted_date'  => $ts->format('F j, Y'),
+                'formatted_time'  => $ts->format('g:i A'),
+                'relative_time'   => $this->getRelativeTime($ts),
+                'changes_summary' => $log->message,
+                'old_values'      => $hasChanges ? ($metadata['old_values'] ?? null) : null,
+                'new_values'      => $hasChanges ? ($metadata['new_values'] ?? null) : null,
+                'ip_address'      => $log->ip_address,
+                'has_changes'     => $hasChanges,
+            ];
+        }
+
+        // --- Sort, cap, assign sequential IDs ---
+        usort($raw, fn ($a, $b) => strcmp($b['_ts'], $a['_ts']));
+
+        $logs = [];
+        foreach (array_slice($raw, 0, 50) as $i => $entry) {
+            unset($entry['_ts']);
+            $entry['id'] = $i + 1;
+            $logs[] = $entry;
+        }
 
         return $logs;
     }
 
-    private function getChangeHistory()
+    /**
+     * @param array{action: string[], entity_type: string[], user_id: int[], date_range: array{from: string, to: string}|null, search: string} $filters
+     */
+    private function getChangeHistory(array $filters): array
     {
-        $changes = [];
-        $now = Carbon::now();
+        $actions     = $filters['action'];
+        $entityTypes = $filters['entity_type'];
+        $userIds     = $filters['user_id'];
+        $dateRange   = $filters['date_range'];
+        $search      = $filters['search'];
 
-        $fieldDefinitions = [
-            ['name' => 'status', 'label' => 'Status', 'type' => 'string', 'values' => ['draft', 'calculating', 'calculated', 'reviewing', 'approved']],
-            ['name' => 'total_gross_pay', 'label' => 'Total Gross Pay', 'type' => 'currency', 'values' => [4200000, 4250000, 4350000, 4150000]],
-            ['name' => 'total_deductions', 'label' => 'Total Deductions', 'type' => 'currency', 'values' => [850000, 875000, 900000, 825000]],
-            ['name' => 'total_net_pay', 'label' => 'Total Net Pay', 'type' => 'currency', 'values' => [3350000, 3375000, 3450000, 3325000]],
-            ['name' => 'employee_count', 'label' => 'Employee Count', 'type' => 'number', 'values' => [85, 86, 84, 87]],
-            ['name' => 'basic_salary', 'label' => 'Basic Salary', 'type' => 'currency', 'values' => [25000, 26500, 27000, 24500]],
-            ['name' => 'allowances', 'label' => 'Allowances', 'type' => 'currency', 'values' => [3500, 4000, 3750, 3250]],
-            ['name' => 'overtime', 'label' => 'Overtime', 'type' => 'currency', 'values' => [150000, 175000, 200000, 125000]],
-            ['name' => 'approved_at', 'label' => 'Approved At', 'type' => 'date', 'values' => ['2025-11-15', '2025-11-18', '2025-11-20', null]],
-            ['name' => 'approved_by', 'label' => 'Approved By', 'type' => 'string', 'values' => ['Maria Santos', 'Juan Dela Cruz', 'Jennifer Reyes', null]],
-        ];
-
-        $users = [
-            ['id' => 1, 'name' => 'Maria Santos'],
-            ['id' => 2, 'name' => 'Juan Dela Cruz'],
-            ['id' => 3, 'name' => 'Jennifer Reyes'],
-            ['id' => 4, 'name' => 'Robert Tan'],
-        ];
-
-        $logId = 1;
-        $changeId = 1;
-
-        // Generate 100 mock change history records
-        for ($i = 0; $i < 100; $i++) {
-            $fieldDef = $fieldDefinitions[array_rand($fieldDefinitions)];
-            $user = $users[array_rand($users)];
-            $daysAgo = rand(0, 30);
-            $hoursAgo = rand(0, 23);
-            
-            $timestamp = $now->copy()->subDays($daysAgo)->subHours($hoursAgo);
-            
-            $values = $fieldDef['values'];
-            $oldValue = $values[array_rand($values)];
-            $newValue = $values[array_rand($values)];
-
-            // Ensure old and new are different
-            while ($oldValue === $newValue && count(array_unique($values)) > 1) {
-                $newValue = $values[array_rand($values)];
-            }
-
-            $changes[] = [
-                'id' => $changeId++,
-                'log_id' => $logId++,
-                'entity_type' => 'PayrollPeriod',
-                'entity_id' => rand(1, 20),
-                'field_name' => $fieldDef['name'],
-                'field_label' => $fieldDef['label'],
-                'old_value' => $oldValue,
-                'new_value' => $newValue,
-                'formatted_old_value' => $this->formatValue($oldValue, $fieldDef['type']),
-                'formatted_new_value' => $this->formatValue($newValue, $fieldDef['type']),
-                'value_type' => $fieldDef['type'],
-                'user_id' => $user['id'],
-                'user_name' => $user['name'],
-                'timestamp' => $timestamp->toIso8601String(),
-                'formatted_timestamp' => $timestamp->format('F j, Y g:i A'),
-            ];
+        // All change history comes from PayrollApprovalHistory (entity_type = PayrollPeriod)
+        if (!empty($entityTypes) && !in_array('PayrollPeriod', $entityTypes)) {
+            return [];
         }
 
-        // Sort by timestamp descending
-        usort($changes, function ($a, $b) {
-            return strtotime($b['timestamp']) - strtotime($a['timestamp']);
-        });
+        $approvalActions = !empty($actions) ? $this->getApprovalActionsFromFilter($actions) : [];
+        if (!empty($actions) && empty($approvalActions)) {
+            return [];
+        }
+
+        $q = PayrollApprovalHistory::with('payrollPeriod')->orderByDesc('created_at')->limit(100);
+
+        if (!empty($approvalActions)) {
+            $q->whereIn('action', $approvalActions);
+        }
+        if (!empty($userIds)) {
+            $q->whereIn('user_id', $userIds);
+        }
+        if ($dateRange !== null) {
+            $q->where('created_at', '>=', Carbon::parse($dateRange['from'])->startOfDay())
+              ->where('created_at', '<=', Carbon::parse($dateRange['to'])->endOfDay());
+        }
+        if ($search !== '') {
+            $s = $search;
+            $q->where(function ($q2) use ($s) {
+                $q2->where('user_name', 'like', "%{$s}%")
+                   ->orWhereHas('payrollPeriod', fn ($pq) => $pq->where('period_name', 'like', "%{$s}%"));
+            });
+        }
+
+        $approvals = $q->get();
+
+        if ($approvals->isEmpty()) {
+            return [];
+        }
+
+        $changes = [];
+        foreach ($approvals as $idx => $approval) {
+            $ts = $approval->created_at;
+            $changes[] = [
+                'id'                  => $idx + 1,
+                'log_id'              => $approval->id,
+                'entity_type'         => 'PayrollPeriod',
+                'entity_id'           => $approval->payroll_period_id,
+                'field_name'          => 'status',
+                'field_label'         => 'Status',
+                'old_value'           => $approval->status_from,
+                'new_value'           => $approval->status_to,
+                'formatted_old_value' => ucwords(str_replace('_', ' ', $approval->status_from)),
+                'formatted_new_value' => ucwords(str_replace('_', ' ', $approval->status_to)),
+                'value_type'          => 'string',
+                'user_id'             => $approval->user_id,
+                'user_name'           => $approval->user_name,
+                'timestamp'           => $ts->toIso8601String(),
+                'formatted_timestamp' => $ts->format('F j, Y g:i A'),
+            ];
+        }
 
         return $changes;
     }
 
-    private function getRelativeTime($timestamp)
+    /**
+     * @return array{action: string[], entity_type: string[], user_id: int[], date_range: array{from: string, to: string}|null, search: string}
+     */
+    private function parseFilters(Request $request): array
     {
-        $now = Carbon::now();
+        /** @var string|array<string>|null $rawAction */
+        $rawAction = $request->query('action');
+        /** @var string|array<string>|null $rawEntityType */
+        $rawEntityType = $request->query('entity_type');
+        /** @var string|array<string>|null $rawUserId */
+        $rawUserId = $request->query('user_id');
+        /** @var string|array<string, string>|null $rawDateRange */
+        $rawDateRange = $request->query('date_range');
+        $search = trim((string) $request->query('search', ''));
+
+        $actions = is_array($rawAction)
+            ? array_values(array_filter($rawAction, 'is_string'))
+            : ($rawAction !== null && $rawAction !== '' ? [$rawAction] : []);
+
+        $entityTypes = is_array($rawEntityType)
+            ? array_values(array_filter($rawEntityType, 'is_string'))
+            : ($rawEntityType !== null && $rawEntityType !== '' ? [$rawEntityType] : []);
+
+        $userIds = is_array($rawUserId)
+            ? array_map('intval', array_values(array_filter($rawUserId)))
+            : ($rawUserId !== null && $rawUserId !== '' ? [(int) $rawUserId] : []);
+
+        $dateRange = is_array($rawDateRange)
+            && isset($rawDateRange['from'], $rawDateRange['to'])
+            && $rawDateRange['from'] !== ''
+            && $rawDateRange['to'] !== ''
+            ? ['from' => (string) $rawDateRange['from'], 'to' => (string) $rawDateRange['to']]
+            : null;
+
+        return [
+            'action'      => $actions,
+            'entity_type' => $entityTypes,
+            'user_id'     => $userIds,
+            'date_range'  => $dateRange,
+            'search'      => $search,
+        ];
+    }
+
+    /**
+     * Map display action values back to PayrollApprovalHistory.action enum values.
+     *
+     * @param  string[] $actions
+     * @return string[]
+     */
+    private function getApprovalActionsFromFilter(array $actions): array
+    {
+        $map = [
+            'created'   => ['submit'],
+            'approved'  => ['approve'],
+            'rejected'  => ['reject'],
+            'finalized' => ['lock', 'unlock'],
+        ];
+
+        $result = [];
+        foreach ($actions as $action) {
+            foreach ($map[$action] ?? [] as $v) {
+                $result[] = $v;
+            }
+        }
+        return array_values(array_unique($result));
+    }
+
+    /**
+     * Map display action values back to PayrollCalculationLog.log_type enum values.
+     *
+     * @param  string[] $actions
+     * @return string[]
+     */
+    private function getCalcLogTypesFromFilter(array $actions): array
+    {
+        $map = [
+            'calculated' => ['calculation_started', 'calculation_completed', 'recalculation', 'data_fetched'],
+            'adjusted'   => ['calculation_failed', 'exception_detected', 'adjustment_applied'],
+            'approved'   => ['approval'],
+            'rejected'   => ['rejection'],
+            'finalized'  => ['lock', 'unlock'],
+        ];
+
+        $result = [];
+        foreach ($actions as $action) {
+            foreach ($map[$action] ?? [] as $v) {
+                $result[] = $v;
+            }
+        }
+        return array_values(array_unique($result));
+    }
+
+    private function mapApprovalAction(string $action): string
+    {
+        return match ($action) {
+            'submit'  => 'created',
+            'approve' => 'approved',
+            'reject'  => 'rejected',
+            'lock'    => 'finalized',
+            'unlock'  => 'finalized',
+            default   => 'created',
+        };
+    }
+
+    private function mapLogTypeToAction(string $logType): string
+    {
+        return match ($logType) {
+            'calculation_started', 'calculation_completed',
+            'recalculation', 'data_fetched' => 'calculated',
+            'calculation_failed', 'exception_detected' => 'adjusted',
+            'adjustment_applied' => 'adjusted',
+            'approval' => 'approved',
+            'rejection' => 'rejected',
+            'lock'    => 'finalized',
+            'unlock'  => 'finalized',
+            default   => 'calculated',
+        };
+    }
+
+    private function getActionLabel(string $action): string
+    {
+        return match ($action) {
+            'created'    => 'Created',
+            'calculated' => 'Calculated',
+            'adjusted'   => 'Adjusted',
+            'approved'   => 'Approved',
+            'rejected'   => 'Rejected',
+            'finalized'  => 'Finalized',
+            default      => ucfirst($action),
+        };
+    }
+
+    private function getActionColor(string $action): string
+    {
+        return match ($action) {
+            'created'    => 'green',
+            'calculated' => 'blue',
+            'adjusted'   => 'yellow',
+            'approved'   => 'green',
+            'rejected'   => 'red',
+            'finalized'  => 'purple',
+            default      => 'blue',
+        };
+    }
+
+    private function getRelativeTime(Carbon $timestamp): string
+    {
+        $now  = Carbon::now();
         $diff = $now->diffInSeconds($timestamp);
 
         if ($diff < 60) {
@@ -205,57 +418,6 @@ class PayrollAuditController extends Controller
         } else {
             $days = $now->diffInDays($timestamp);
             return $days === 1 ? 'yesterday' : "{$days} days ago";
-        }
-    }
-
-    private function generateOldValues($action)
-    {
-        $oldValuesTemplates = [
-            'created' => ['created_at' => null, 'created_by' => null],
-            'calculated' => ['status' => 'draft', 'total_gross_pay' => 4200000],
-            'adjusted' => ['total_gross_pay' => 4200000, 'total_deductions' => 850000],
-            'approved' => ['status' => 'reviewing', 'approved_by' => null],
-            'rejected' => ['status' => 'reviewing', 'approved_by' => null],
-            'finalized' => ['status' => 'approved', 'finalized_at' => null],
-        ];
-
-        return $oldValuesTemplates[$action] ?? [];
-    }
-
-    private function generateNewValues($action)
-    {
-        $newValuesTemplates = [
-            'created' => ['created_at' => now()->toDateTimeString(), 'created_by' => 'Maria Santos'],
-            'calculated' => ['status' => 'calculated', 'total_gross_pay' => 4350000],
-            'adjusted' => ['total_gross_pay' => 4350000, 'total_deductions' => 875000],
-            'approved' => ['status' => 'approved', 'approved_by' => 'Juan Dela Cruz'],
-            'rejected' => ['status' => 'draft', 'approved_by' => null],
-            'finalized' => ['status' => 'finalized', 'finalized_at' => now()->toDateTimeString()],
-        ];
-
-        return $newValuesTemplates[$action] ?? [];
-    }
-
-    private function generateIpAddress()
-    {
-        return implode('.', [rand(192, 223), rand(0, 255), rand(0, 255), rand(1, 254)]);
-    }
-
-    private function formatValue($value, $type)
-    {
-        if ($value === null) {
-            return 'N/A';
-        }
-
-        switch ($type) {
-            case 'currency':
-                return 'PHP ' . number_format($value, 0);
-            case 'date':
-                return Carbon::parse($value)->format('F j, Y');
-            case 'number':
-                return number_format($value);
-            default:
-                return (string) $value;
         }
     }
 }

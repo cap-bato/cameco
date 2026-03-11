@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import type { LaborCostAnalyticsPageProps } from '@/types/payroll-pages';
 import { CostTrendCharts } from '@/components/payroll/cost-trend-charts';
 import { BudgetVariance } from '@/components/payroll/budget-variance';
@@ -29,8 +29,16 @@ export default function LaborCostAnalytics({
     budget_variance_data,
     forecast_projections,
     analytics_summary,
+    selected_period,
+    available_periods,
 }: LaborCostAnalyticsPageProps) {
     const [activeTab, setActiveTab] = useState<'overview' | 'cost_trends' | 'budget' | 'employees'>('overview');
+
+    const hasData = analytics_summary.total_employees > 0;
+
+    const handlePeriodChange = (period: string) => {
+        router.get('/payroll/reports/analytics', { period }, { preserveState: false });
+    };
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('en-PH', {
@@ -54,6 +62,15 @@ export default function LaborCostAnalytics({
                         </p>
                     </div>
                     <div className="flex gap-2">
+                        <select
+                            value={selected_period}
+                            onChange={(e) => handlePeriodChange(e.target.value)}
+                            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        >
+                            {available_periods.map((p) => (
+                                <option key={p} value={p}>{p}</option>
+                            ))}
+                        </select>
                         <Button variant="outline" size="sm">
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Refresh
@@ -66,6 +83,12 @@ export default function LaborCostAnalytics({
                 </div>
 
                 {/* Summary Cards */}
+                {!hasData ? (
+                    <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
+                        <p className="text-lg font-semibold text-gray-500">No Payroll Data for {selected_period}</p>
+                        <p className="mt-1 text-sm text-gray-400">Select a different period or run payroll calculations to see analytics.</p>
+                    </div>
+                ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                     <div className="rounded-lg border border-gray-200 bg-white p-4">
                         <p className="text-sm font-medium text-gray-600">Total Labor Cost</p>
@@ -106,9 +129,10 @@ export default function LaborCostAnalytics({
                         </p>
                         <p className="mt-1 text-xs text-gray-500">Year-over-year change</p>
                     </div>
-                </div>
+                )}
 
                 {/* Top Insights */}
+                {hasData && (
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
                     <h3 className="font-semibold text-blue-900">Key Insights</h3>
                     <ul className="mt-2 space-y-2 text-sm text-blue-800">
@@ -126,6 +150,7 @@ export default function LaborCostAnalytics({
                         </li>
                     </ul>
                 </div>
+                )}
 
                 {/* Tabs */}
                 <div className="flex gap-2 border-b border-gray-200">

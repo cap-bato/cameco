@@ -8,6 +8,15 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property ?\Carbon\Carbon $period_start
+ * @property ?\Carbon\Carbon $period_end
+ * @property ?\Carbon\Carbon $due_date
+ * @property ?\Carbon\Carbon $submission_date
+ * @property ?\Carbon\Carbon $payment_date
+ * @property \Carbon\Carbon  $created_at
+ * @property \Carbon\Carbon  $updated_at
+ */
 class GovernmentRemittance extends Model
 {
     use HasFactory, SoftDeletes;

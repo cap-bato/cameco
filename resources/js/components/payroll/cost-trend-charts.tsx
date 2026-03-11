@@ -34,6 +34,17 @@ export function CostTrendCharts({
         }).format(value);
     };
 
+    if (monthlyTrends.length === 0 && departmentComparisons.length === 0 && componentBreakdown.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 py-16 text-center">
+                <p className="text-lg font-semibold text-gray-500">No Analytics Data Available</p>
+                <p className="mt-1 text-sm text-gray-400">
+                    Cost trend charts will appear once payroll calculations exist for this period.
+                </p>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             {/* Monthly Labor Cost Trends */}
