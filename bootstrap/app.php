@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsureOfficeAdmin;
 use App\Http\Middleware\EnsureSuperadmin;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ValidateTimekeepingApiKey;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -24,11 +25,20 @@ return Application::configure(basePath: dirname(__DIR__))
             __DIR__.'/../routes/employee.php',
             __DIR__.'/../routes/settings.php',
         ],
+        then: function () {
+            Route::middleware('web')
+                ->group(base_path('routes/api.php'));
+        },
         commands: __DIR__.'/../routes/console.php',
         health: '/up'
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+
+        // RFID gate PC endpoints are called by the Python client with no browser session
+        $middleware->validateCsrfTokens(except: [
+            'rfid/*',
+        ]);
 
         $middleware->web(append: [
             HandleAppearance::class,
@@ -44,6 +54,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'employee' => EnsureEmployee::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'timekeeping.api' => ValidateTimekeepingApiKey::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

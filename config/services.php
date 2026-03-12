@@ -35,4 +35,6 @@ return [
         ],
     ],
 
+    'timekeeping_api_key' => env('TIMEKEEPING_API_KEY'),
+
 ];

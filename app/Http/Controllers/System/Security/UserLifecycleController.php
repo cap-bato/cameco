@@ -92,6 +92,47 @@ class UserLifecycleController extends Controller
 	}
 
 	/**
+	 * Create a new user account.
+	 */
+	public function store(Request $request)
+	{
+		$validated = $request->validate([
+			'name'                  => ['required', 'string', 'max:255'],
+			'email'                 => ['required', 'email', 'max:255', 'unique:users,email'],
+			'password'              => ['required', 'string', 'min:8', 'confirmed'],
+			'roles'                 => ['sometimes', 'array'],
+			'roles.*'               => ['integer', 'exists:roles,id'],
+		]);
+
+		try {
+			$user = User::create([
+				'name'      => $validated['name'],
+				'email'     => $validated['email'],
+				'password'  => Hash::make($validated['password']),
+				'is_active' => true,
+			]);
+
+			if (!empty($validated['roles'])) {
+				$roleNames = Role::whereIn('id', $validated['roles'])->pluck('name');
+				$user->assignRole($roleNames);
+			}
+
+			$this->logSecurityAudit('user.created', [
+				'user_id'    => $user->id,
+				'user_email' => $user->email,
+				'roles'      => $validated['roles'] ?? [],
+			]);
+
+			return redirect('/system/users')
+				->with('success', "User '{$user->email}' created successfully.");
+		} catch (\Exception $e) {
+			return redirect()->back()
+				->withErrors(['error' => 'Failed to create user: ' . $e->getMessage()])
+				->withInput();
+		}
+	}
+
+	/**
 	 * Show user details and history.
 	 */
 	public function show(User $user)

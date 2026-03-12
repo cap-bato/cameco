@@ -8,7 +8,7 @@ import {
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { Link, usePage } from '@inertiajs/react';
-import { Activity, HardDrive, Database, Shield, FileBox, Calendar, Lock, Users, Building2, BarChart3, Briefcase, AlertCircle, Download, Server } from 'lucide-react';
+import { Activity, HardDrive, Database, Shield, Calendar, Lock, Users, Building2, BarChart3, Briefcase, AlertCircle, Cpu } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 export function NavSystemAdmin() {
@@ -19,11 +19,6 @@ export function NavSystemAdmin() {
             title: 'System Health',
             icon: Activity,
             href: '/system/health',
-        },
-        {
-            title: 'SLA Monitoring',
-            icon: Server,
-            href: '/system/sla',
         },
         {
             title: 'Storage',
@@ -46,19 +41,14 @@ export function NavSystemAdmin() {
             href: '/system/logs/errors',
         },
         {
-            title: 'Patches',
-            icon: FileBox,
-            href: '/system/patches',
-        },
-        {
             title: 'Cron Jobs',
             icon: Calendar,
             href: '/system/cron',
         },
         {
-            title: 'Updates',
-            icon: Download,
-            href: '/system/updates',
+            title: 'Timekeeping Devices',
+            icon: Cpu,
+            href: '/system/timekeeping/devices',
         },
     ];
 
@@ -72,16 +62,6 @@ export function NavSystemAdmin() {
             title: 'Roles & Permissions',
             icon: Lock,
             href: '/system/security/roles',
-        },
-        {
-            title: 'Security Policies',
-            icon: Shield,
-            href: '/system/security/policies',
-        },
-        {
-            title: 'IP Allowlist/Blocklist',
-            icon: Lock,
-            href: '/system/security/ip-rules',
         },
     ];
 
@@ -114,20 +94,10 @@ export function NavSystemAdmin() {
             icon: Shield,
             href: '/system/reports/security',
         },
-        {
-            title: 'Payroll Reports',
-            icon: Briefcase,
-            href: '/system/reports/payroll',
-        },
-        {
-            title: 'Compliance Reports',
-            icon: FileBox,
-            href: '/system/reports/compliance',
-        },
     ];
 
-    const isSystemAdminActive = page.url.startsWith('/system/') && !page.url.startsWith('/system/users') && !page.url.startsWith('/system/security/roles') && !page.url.startsWith('/system/security/policies') && !page.url.startsWith('/system/security/ip-rules') && !page.url.startsWith('/system/organization/') && !page.url.startsWith('/system/reports/');
-    const isSecurityAccessActive = page.url.startsWith('/system/users') || page.url.startsWith('/system/security/roles') || page.url.startsWith('/system/security/policies') || page.url.startsWith('/system/security/ip-rules');
+    const isSystemAdminActive = page.url.startsWith('/system/') && !page.url.startsWith('/system/users') && !page.url.startsWith('/system/security/roles') && !page.url.startsWith('/system/organization/') && !page.url.startsWith('/system/reports/');
+    const isSecurityAccessActive = page.url.startsWith('/system/users') || page.url.startsWith('/system/security/roles');
     const isOrganizationActive = page.url.startsWith('/system/organization/');
     const isReportingActive = page.url.startsWith('/system/reports/');
 

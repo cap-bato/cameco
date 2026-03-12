@@ -35,6 +35,7 @@ use \App\Http\Controllers\System\UpdateController;
 use \App\Http\Controllers\System\SystemAdministration\CronController;
 use \App\Http\Controllers\System\SLAController;
 use \App\Http\Controllers\System\SystemAdministration\VendorContractController;
+use \App\Http\Controllers\System\Timekeeping\DeviceManagementController;
 
 
 Route::middleware(['auth', 'superadmin'])->group(function () {
@@ -105,6 +106,7 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
     // Security & Access - User Lifecycle
     Route::prefix('system/users')->group(function () {
         Route::get('/', [UserLifecycleController::class, 'index'])->name('system.users');
+        Route::post('/', [UserLifecycleController::class, 'store'])->name('system.users.store');
         Route::get('/{user}', [UserLifecycleController::class, 'show'])->name('system.users.show');
         Route::put('/{user}', [UserLifecycleController::class, 'update'])->name('system.users.update');
         Route::post('/{user}/password-reset', [UserLifecycleController::class, 'sendPasswordReset'])->name('system.users.password-reset');
@@ -199,5 +201,15 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/', [VendorContractController::class, 'index'])->name('system.vendor-contract');
         Route::get('/show', [VendorContractController::class, 'show'])->name('system.vendor-contract.show');
         Route::post('/cache/clear', [VendorContractController::class, 'clearCache'])->name('system.vendor-contract.cache.clear');
+    });
+
+    // Timekeeping Device Management (RFID)
+    Route::prefix('system/timekeeping/devices')->group(function () {
+        Route::get('/', [DeviceManagementController::class, 'index'])->name('system.timekeeping.devices.index');
+        Route::post('/', [DeviceManagementController::class, 'store'])->name('system.timekeeping.devices.store');
+        Route::patch('/{device}', [DeviceManagementController::class, 'update'])->name('system.timekeeping.devices.update');
+        Route::delete('/{device}', [DeviceManagementController::class, 'destroy'])->name('system.timekeeping.devices.destroy');
+        Route::post('/{device}/generate-key', [DeviceManagementController::class, 'generateKey'])->name('system.timekeeping.devices.generate-key');
+        Route::post('/{device}/revoke-key', [DeviceManagementController::class, 'revokeKey'])->name('system.timekeeping.devices.revoke-key');
     });
 });

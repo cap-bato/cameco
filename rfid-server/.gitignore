@@ -1,0 +1,17 @@
+# Secrets — never commit
+.env
+
+# Local SQLite tap buffer — contains raw card UIDs, never commit
+buffer.db
+*.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Windows service / NSSM logs — keep the directory, ignore contents
+logs/*.log
+
+# Python virtual environment
+.venv/
