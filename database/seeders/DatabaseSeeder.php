@@ -177,6 +177,16 @@ class DatabaseSeeder extends Seeder
             $this->call(\Database\Seeders\EmployeeSeeder::class);
         }
 
+        // Assign Filipino names and mock photos to seeded employees
+        if (class_exists(\Database\Seeders\EmployeeFilipinoProfileSeeder::class)) {
+            $this->call(\Database\Seeders\EmployeeFilipinoProfileSeeder::class);
+        }
+
+        // Assign real physical RFID card UIDs to the first 10 employees (those with photos)
+        if (class_exists(\Database\Seeders\RfidCardMappingSeeder::class)) {
+            $this->call(\Database\Seeders\RfidCardMappingSeeder::class);
+        }
+
         // Seed Employee Accounts (must run after employees)
         if (class_exists(\Database\Seeders\EmployeeAccountSeeder::class)) {
             $this->call(\Database\Seeders\EmployeeAccountSeeder::class);
