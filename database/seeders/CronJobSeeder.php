@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use App\Models\ScheduledJob;
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Carbon\Carbon;
 
 class CronJobSeeder extends Seeder
 {
@@ -24,125 +23,105 @@ class CronJobSeeder extends Seeder
         }
 
         $jobs = [
+            // --- Timekeeping / RFID ---
             [
-                'name' => 'Database Backup',
-                'description' => 'Create a full database backup and store it securely. Critical for disaster recovery.',
-                'command' => 'backup:run --only-db',
-                'cron_expression' => '0 2 * * *', // Daily at 2 AM
+                'name' => 'Process RFID Ledger',
+                'description' => 'Process unprocessed RFID ledger entries and convert them into attendance events.',
+                'command' => 'app:process-rfid-ledger',
+                'cron_expression' => '* * * * *', // Every minute
                 'is_enabled' => true,
-                'run_count' => 45,
-                'success_count' => 44,
-                'failure_count' => 1,
-                'last_run_at' => Carbon::now()->subDay()->setHour(2)->setMinute(0),
-                'last_exit_code' => 0,
-            ],
-            [
-                'name' => 'Clean Old Logs',
-                'description' => 'Remove log files older than 30 days to free up disk space.',
-                'command' => 'log:clean --days=30',
-                'cron_expression' => '0 3 * * 0', // Weekly on Sunday at 3 AM
-                'is_enabled' => true,
-                'run_count' => 12,
-                'success_count' => 12,
+                'run_count' => 0,
+                'success_count' => 0,
                 'failure_count' => 0,
-                'last_run_at' => Carbon::now()->subWeek()->setHour(3)->setMinute(0),
-                'last_exit_code' => 0,
+                'last_run_at' => null,
+                'last_exit_code' => null,
             ],
             [
-                'name' => 'Send Daily Email Reports',
-                'description' => 'Send automated daily summary reports to department heads.',
-                'command' => 'reports:send-daily',
-                'cron_expression' => '0 6 * * *', // Daily at 6 AM
+                'name' => 'Check RFID Device Health',
+                'description' => 'Mark RFID devices as offline when their heartbeat has not been received within the expected window.',
+                'command' => 'timekeeping:check-device-health',
+                'cron_expression' => '*/2 * * * *', // Every 2 minutes
                 'is_enabled' => true,
-                'run_count' => 60,
-                'success_count' => 58,
-                'failure_count' => 2,
-                'last_run_at' => Carbon::now()->subDay()->setHour(6)->setMinute(0),
-                'last_exit_code' => 0,
+                'run_count' => 0,
+                'success_count' => 0,
+                'failure_count' => 0,
+                'last_run_at' => null,
+                'last_exit_code' => null,
             ],
             [
-                'name' => 'Queue Worker Health Check',
-                'description' => 'Monitor queue workers and restart if needed. Ensures background jobs are processing.',
-                'command' => 'queue:monitor',
+                'name' => 'Cleanup Deduplication Cache',
+                'description' => 'Prune expired entries from the RFID scan deduplication cache to keep the table lean.',
+                'command' => 'timekeeping:cleanup-deduplication-cache',
                 'cron_expression' => '*/5 * * * *', // Every 5 minutes
                 'is_enabled' => true,
-                'run_count' => 2880,
-                'success_count' => 2875,
-                'failure_count' => 5,
-                'last_run_at' => Carbon::now()->subMinutes(5),
-                'last_exit_code' => 0,
+                'run_count' => 0,
+                'success_count' => 0,
+                'failure_count' => 0,
+                'last_run_at' => null,
+                'last_exit_code' => null,
             ],
             [
-                'name' => 'Clear Application Cache',
-                'description' => 'Clear application cache to ensure fresh data. Runs daily at midnight.',
-                'command' => 'cache:clear',
-                'cron_expression' => '0 0 * * *', // Daily at midnight
+                'name' => 'Generate Daily Attendance Summaries',
+                'description' => 'Aggregate raw attendance events into daily summaries for all employees at the end of each day.',
+                'command' => 'timekeeping:generate-daily-summaries',
+                'cron_expression' => '59 23 * * *', // Daily at 23:59
                 'is_enabled' => true,
-                'run_count' => 30,
-                'success_count' => 30,
+                'run_count' => 0,
+                'success_count' => 0,
                 'failure_count' => 0,
-                'last_run_at' => Carbon::now()->subDay()->setHour(0)->setMinute(0),
-                'last_exit_code' => 0,
+                'last_run_at' => null,
+                'last_exit_code' => null,
             ],
+            // --- Leave Management ---
             [
-                'name' => 'Optimize Database Tables',
-                'description' => 'Optimize and analyze database tables for better performance.',
-                'command' => 'db:optimize',
-                'cron_expression' => '0 4 * * 0', // Weekly on Sunday at 4 AM
-                'is_enabled' => false, // Disabled for manual execution only
-                'run_count' => 5,
-                'success_count' => 5,
-                'failure_count' => 0,
-                'last_run_at' => Carbon::now()->subWeeks(2)->setHour(4)->setMinute(0),
-                'last_exit_code' => 0,
-            ],
-            [
-                'name' => 'Generate Monthly Reports',
-                'description' => 'Generate comprehensive monthly reports for all departments.',
-                'command' => 'reports:monthly',
-                'cron_expression' => '0 5 1 * *', // First day of month at 5 AM
+                'name' => 'Process Monthly Leave Accrual',
+                'description' => 'Credit monthly leave entitlements to employee balances on the first day of each month.',
+                'command' => 'leave:process-monthly-accrual',
+                'cron_expression' => '1 0 1 * *', // 1st of month at 00:01
                 'is_enabled' => true,
-                'run_count' => 3,
-                'success_count' => 3,
+                'run_count' => 0,
+                'success_count' => 0,
                 'failure_count' => 0,
-                'last_run_at' => Carbon::now()->subMonth()->startOfMonth()->setHour(5)->setMinute(0),
-                'last_exit_code' => 0,
+                'last_run_at' => null,
+                'last_exit_code' => null,
             ],
             [
-                'name' => 'Clean Temporary Files',
-                'description' => 'Remove temporary files and expired uploads from storage.',
-                'command' => 'storage:clean-temp',
-                'cron_expression' => '0 1 * * *', // Daily at 1 AM
+                'name' => 'Process Year-End Leave Carryover',
+                'description' => 'Roll over unused leave balances to the next year on December 31st per company policy.',
+                'command' => 'leave:process-year-end-carryover',
+                'cron_expression' => '0 23 31 12 *', // Dec 31 at 23:00
                 'is_enabled' => true,
-                'run_count' => 30,
-                'success_count' => 30,
+                'run_count' => 0,
+                'success_count' => 0,
                 'failure_count' => 0,
-                'last_run_at' => Carbon::now()->subDay()->setHour(1)->setMinute(0),
-                'last_exit_code' => 0,
+                'last_run_at' => null,
+                'last_exit_code' => null,
             ],
+            // --- Document Management ---
             [
-                'name' => 'Send Reminder Notifications',
-                'description' => 'Send reminder notifications for pending approvals and tasks.',
-                'command' => 'notifications:send-reminders',
+                'name' => 'Send Document Expiry Reminders',
+                'description' => 'Email HR and employees about documents expiring within 30, 7, and 1 day(s).',
+                'command' => 'documents:send-expiry-reminders',
+                'cron_expression' => '0 8 * * *', // Daily at 8 AM
+                'is_enabled' => true,
+                'run_count' => 0,
+                'success_count' => 0,
+                'failure_count' => 0,
+                'last_run_at' => null,
+                'last_exit_code' => null,
+            ],
+            // --- Offboarding ---
+            [
+                'name' => 'Offboarding Reminders',
+                'description' => 'Send weekday reminders to HR officers for employees with pending offboarding tasks.',
+                'command' => 'offboarding:reminders',
                 'cron_expression' => '0 9 * * 1-5', // Weekdays at 9 AM
-                'is_enabled' => false, // Disabled temporarily
-                'run_count' => 10,
-                'success_count' => 9,
-                'failure_count' => 1,
-                'last_run_at' => Carbon::now()->subWeek()->setHour(9)->setMinute(0),
-                'last_exit_code' => 1,
-            ],
-            [
-                'name' => 'Update Security Patches',
-                'description' => 'Check for and download available security patches.',
-                'command' => 'security:check-patches',
-                'cron_expression' => '0 */6 * * *', // Every 6 hours
                 'is_enabled' => true,
-                'run_count' => 120,
-                'success_count' => 118,
-                'failure_count' => 2,
-                'last_run_at' => Carbon::now()->subHours(6),
-                'last_exit_code' => 0,
+                'run_count' => 0,
+                'success_count' => 0,
+                'failure_count' => 0,
+                'last_run_at' => null,
+                'last_exit_code' => null,
             ],
         ];
 
