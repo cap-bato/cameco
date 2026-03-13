@@ -333,20 +333,15 @@ class DocumentController extends Controller
         }
 
         try {
-            // Log download action
-            \DB::table('activity_logs')->insert([
-                'subject_type' => 'App\Models\EmployeeDocument',
-                'subject_id' => $documentId,
-                'causer_type' => 'App\Models\User',
-                'causer_id' => $user->id,
-                'event' => 'downloaded',
-                'properties' => json_encode([
+            // Best-effort audit logging; do not block the actual file download.
+            $this->recordDownloadAudit(
+                'App\\Models\\EmployeeDocument',
+                (int) $documentId,
+                [
                     'document_type' => $document->document_type,
                     'employee_id' => $employee->id,
-                ]),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+                ]
+            );
 
             // Download file
             return response()->download(
@@ -682,20 +677,15 @@ public function downloadFromRequest($requestId)
             return back()->with('error', 'Document file not found on server');
         }
 
-        // Log download
-        \DB::table('activity_logs')->insert([
-            'subject_type' => 'App\Models\DocumentRequest',
-            'subject_id' => $requestId,
-            'causer_type' => 'App\Models\User',
-            'causer_id' => $user->id,
-            'event' => 'downloaded',
-            'properties' => json_encode([
+        // Best-effort audit logging; do not block the actual file download.
+        $this->recordDownloadAudit(
+            'App\\Models\\DocumentRequest',
+            (int) $requestId,
+            [
                 'document_type' => $request->document_type,
                 'employee_id' => $employee->id,
-            ]),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+            ]
+        );
 
         // Download file
         $filename = $this->formatDocumentType($request->document_type);
@@ -737,5 +727,34 @@ private function resolveStoredFilePath(?string $relativePath): ?string
     }
 
     return null;
+}
+
+/**
+ * Record download events without interrupting the user flow.
+ */
+private function recordDownloadAudit(string $subjectType, int $subjectId, array $properties): void
+{
+    try {
+        if (!\Schema::hasTable('activity_logs')) {
+            return;
+        }
+
+        \DB::table('activity_logs')->insert([
+            'subject_type' => $subjectType,
+            'subject_id' => $subjectId,
+            'causer_type' => 'App\\Models\\User',
+            'causer_id' => Auth::id(),
+            'event' => 'downloaded',
+            'properties' => json_encode($properties),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    } catch (\Throwable $e) {
+        \Log::warning('Download audit log skipped', [
+            'subject_type' => $subjectType,
+            'subject_id' => $subjectId,
+            'error' => $e->getMessage(),
+        ]);
+    }
 }
 }
