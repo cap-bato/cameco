@@ -227,7 +227,7 @@ class DocumentController extends Controller
         $validated = $request->validate([
             'document_type' => 'required|string|in:certificate_of_employment,payslip,bir_form_2316,government_compliance',
             'purpose' => 'nullable|string|max:500',
-            'period' => 'nullable|string', // For payslip: month-year format (e.g., "01-2024")
+            'period' => 'nullable|string|required_if:document_type,payslip|max:7', // For payslip: YYYY-MM
         ]);
 
         $user = Auth::user();
@@ -238,15 +238,20 @@ class DocumentController extends Controller
         }
 
         try {
+            $notes = null;
+            if (!empty($validated['period'])) {
+                $notes = 'Requested period: ' . $validated['period'];
+            }
+
             // Create document request
-            $documentRequest = \DB::table('document_requests')->insert([
+            \DB::table('document_requests')->insert([
                 'employee_id' => $employee->id,
                 'document_type' => $validated['document_type'],
                 'purpose' => $validated['purpose'] ?? null,
-                'period' => $validated['period'] ?? null,
                 'status' => 'pending',
-                'requested_by' => $user->id,
+                'request_source' => 'employee_portal',
                 'requested_at' => now(),
+                'notes' => $notes,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

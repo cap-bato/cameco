@@ -10,9 +10,18 @@ class UpdateLeaveRequestRequest extends FormRequest
     {
         $user = $this->user();
 
-        // Only HR Manager should be allowed to approve/reject via this request
-        if ($user && method_exists($user, 'hasRole')) {
-            return $user->hasRole('HR Manager');
+        if (!$user) {
+            return false;
+        }
+
+        // Primary authorization path: permission-based.
+        if (method_exists($user, 'can') && $user->can('hr.leave-requests.approve')) {
+            return true;
+        }
+
+        // Fallback for role-based setups where permission sync may lag.
+        if (method_exists($user, 'hasAnyRole')) {
+            return $user->hasAnyRole(['HR Staff', 'HR Manager', 'Office Admin']);
         }
 
         return false;
