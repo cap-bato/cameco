@@ -42,8 +42,8 @@ class CleanupDeduplicationCacheCommand extends Command
 
         // Require explicit confirmation unless --force is provided or not running in a real
         // CLI context (e.g. called via Artisan::call() from a web request or cron runner).
-        if (! $this->option('force') && app()->runningInConsole()) {
-            $this->warn('This command will soft-delete (mark as deleted) expired deduplication entries from the attendance_events table.');
+        if (! $this->option('force') && app()->runningInConsole() && $this->input->isInteractive()) {
+            $this->warn('This command will permanently delete expired deduplication entries from the attendance_events table.');
             if (! $this->confirm('Do you wish to continue?', false)) {
                 $this->comment('Cleanup cancelled by user.');
                 return Command::SUCCESS;
@@ -51,16 +51,16 @@ class CleanupDeduplicationCacheCommand extends Command
         }
 
         try {
-            // Soft-delete entries older than 1 hour (well past the 15-second window)
+            // Delete deduplicated entries older than 1 hour (well past the 15-second window)
             $expirationThreshold = Carbon::now()->subHour();
 
             $deletedCount = DB::table('attendance_events')
                 ->where('is_deduplicated', true)
                 ->where('created_at', '<', $expirationThreshold)
-                ->update(['deleted_at' => Carbon::now()]);
+                ->delete();
 
             if ($deletedCount > 0) {
-                $this->info("✓ Soft-deleted {$deletedCount} expired deduplication entries");
+                $this->info("Deleted {$deletedCount} expired deduplication entries");
             } else {
                 $this->comment('No expired entries found to clean up');
             }

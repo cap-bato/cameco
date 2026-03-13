@@ -4,7 +4,6 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Stringable;
-use App\Jobs\Timekeeping\ProcessRfidLedgerJob;
 use App\Services\System\SystemCronService;
 
 function recordScheduledCommandResult(string $command, int $exitCode, string $output = ''): void
@@ -17,16 +16,16 @@ function recordScheduledCommandResult(string $command, int $exitCode, string $ou
  * 
  * RFID Ledger Polling: Runs every 1 minute to process new attendance events
  */
-Schedule::job(new ProcessRfidLedgerJob())
+Schedule::command('app:process-rfid-ledger')
     ->everyMinute()
     ->name('process-rfid-ledger')
     ->withoutOverlapping() // Prevent concurrent runs
     ->onOneServer() // Run on only one server in a multi-server setup
-    ->onSuccess(function () {
-        recordScheduledCommandResult('app:process-rfid-ledger', 0);
+    ->onSuccess(function (Stringable $output) {
+        recordScheduledCommandResult('app:process-rfid-ledger', 0, (string) $output);
     })
-    ->onFailure(function () {
-        recordScheduledCommandResult('app:process-rfid-ledger', 1);
+    ->onFailure(function (Stringable $output) {
+        recordScheduledCommandResult('app:process-rfid-ledger', 1, (string) $output);
     });
 
 /**
@@ -108,6 +107,37 @@ Schedule::command('leave:process-year-end-carryover')
     })
     ->onFailure(function (Stringable $output) {
         recordScheduledCommandResult('leave:process-year-end-carryover', 1, (string) $output);
+    });
+
+/**
+ * Send document expiry reminders (daily at 8:00 AM)
+ */
+Schedule::command('documents:send-expiry-reminders')
+    ->dailyAt('08:00')
+    ->name('documents-send-expiry-reminders')
+    ->timezone('Asia/Manila')
+    ->withoutOverlapping()
+    ->onSuccess(function (Stringable $output) {
+        recordScheduledCommandResult('documents:send-expiry-reminders', 0, (string) $output);
+    })
+    ->onFailure(function (Stringable $output) {
+        recordScheduledCommandResult('documents:send-expiry-reminders', 1, (string) $output);
+    });
+
+/**
+ * Run offboarding reminders (weekdays at 9:00 AM)
+ */
+Schedule::command('offboarding:reminders')
+    ->weekdays()
+    ->dailyAt('09:00')
+    ->name('offboarding-reminders')
+    ->timezone('Asia/Manila')
+    ->withoutOverlapping()
+    ->onSuccess(function (Stringable $output) {
+        recordScheduledCommandResult('offboarding:reminders', 0, (string) $output);
+    })
+    ->onFailure(function (Stringable $output) {
+        recordScheduledCommandResult('offboarding:reminders', 1, (string) $output);
     });
 
 Artisan::command('inspire', function () {

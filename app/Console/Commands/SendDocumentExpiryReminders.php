@@ -16,7 +16,7 @@ class SendDocumentExpiryReminders extends Command
     protected $signature = 'documents:send-expiry-reminders
                             {--dry-run : Run without sending actual emails}
                             {--days=30 : Number of days to check for expiring documents}
-                            {--verbose : Show detailed output}';
+                            {--detailed : Show detailed output}';
 
     /**
      * The description of the console command.
@@ -52,7 +52,7 @@ class SendDocumentExpiryReminders extends Command
     {
         $isDryRun = $this->option('dry-run');
         $daysThreshold = (int) $this->option('days');
-        $isVerbose = $this->option('verbose');
+        $isVerbose = (bool) $this->option('detailed');
 
         $this->info('🔍 Starting Document Expiry Reminder Command');
         if ($isDryRun) {

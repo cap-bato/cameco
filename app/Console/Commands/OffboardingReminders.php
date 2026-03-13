@@ -24,7 +24,7 @@ class OffboardingReminders extends Command
      */
     protected $signature = 'offboarding:reminders
                            {--job= : Execute a specific job (overdue-clearance, pending-interviews, approaching-lwd, weekly-report, asset-return)}
-                           {--verbose : Display detailed output}';
+                           {--detailed : Display detailed output}';
 
     /**
      * The console command description.
@@ -39,7 +39,7 @@ class OffboardingReminders extends Command
     public function handle(): int
     {
         $job = $this->option('job');
-        $verbose = $this->option('verbose');
+        $verbose = (bool) $this->option('detailed');
 
         if ($job) {
             // Execute specific job
