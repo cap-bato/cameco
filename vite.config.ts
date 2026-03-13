@@ -27,6 +27,11 @@ export default defineConfig({
         tailwindcss(),
         wayfinder({
             formVariants: true,
+            // Only regenerate routes when actual route definition files change.
+            // Excluding app/Http/**/*.php prevents unnecessary regeneration (and
+            // the resulting transient "Failed to resolve @/routes" HMR errors)
+            // every time a controller is saved during development.
+            watch: ['routes/**/*.php'],
         }),
     ],
     esbuild: {

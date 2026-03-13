@@ -266,6 +266,11 @@ class CronRepository implements CronRepositoryInterface
             throw new \Exception("Scheduled job with ID {$id} not found.");
         }
 
+        // Strip ANSI escape codes and characters outside Latin-1 (WIN1252) before
+        // storing, so the output can be saved regardless of the PostgreSQL client encoding.
+        $output = preg_replace('/\x1B\[[0-9;]*[mGKHFJSTsulABCDEF]/', '', $output ?? '');
+        $output = preg_replace('/[^\x00-\xFF]/', '', $output);
+
         // Increment run count
         $job->incrementRunCount();
 
