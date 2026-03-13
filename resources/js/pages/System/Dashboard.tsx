@@ -2,7 +2,6 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { SystemHealthWidgets, CronJobsCard } from '@/components/system/system-health-widgets';
-import SLAWidgets from '@/components/system/sla-widgets';
 import { ModuleGrid } from '@/components/module-grid';
 import { ModuleCategory } from '@/types/modules';
 
@@ -90,35 +89,6 @@ interface CronMetrics {
     status: 'healthy' | 'warning' | 'critical' | 'unavailable';
 }
 
-interface SLAMetrics {
-    uptime: {
-        current_uptime_hours: number;
-        uptime_percentage: number;
-        last_downtime: string | null;
-        total_downtime_hours_this_month: number;
-    };
-    incidents: {
-        open_critical: number;
-        open_major: number;
-        open_minor: number;
-        avg_response_time_critical: string;
-        avg_resolution_time_critical: string;
-        incidents_this_month: number;
-    };
-    patches: {
-        current_version: string;
-        latest_patch_date: string;
-        pending_patches: number;
-        next_scheduled_patch: string;
-    };
-    support: {
-        status: 'available' | 'offline';
-        hours: string;
-        days_until_support_end: number;
-        support_end_date: string;
-    };
-}
-
 interface SystemDashboardProps {
     counts: {
         users: number;
@@ -132,7 +102,6 @@ interface SystemDashboardProps {
     welcomeText: string;
     systemHealth: SystemHealthData | null;
     cronMetrics: CronMetrics | null;
-    slaMetrics: SLAMetrics | null;
     moduleCategories?: Array<{
         id: string;
         title: string;
@@ -166,7 +135,6 @@ export default function Dashboard({
     welcomeText,
     systemHealth,
     cronMetrics,
-    slaMetrics,
     moduleCategories = [],
 }: SystemDashboardProps) {
     return (
@@ -196,14 +164,6 @@ export default function Dashboard({
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                             <CronJobsCard cronMetrics={cronMetrics} />
                         </div>
-                    </div>
-                )}
-
-                {/* SLA Monitoring - Remote vendor metrics */}
-                {slaMetrics && (
-                    <div className="space-y-4">
-                        <h2 className="text-lg font-semibold">Service Level Monitoring</h2>
-                        <SLAWidgets sla={slaMetrics} />
                     </div>
                 )}
 

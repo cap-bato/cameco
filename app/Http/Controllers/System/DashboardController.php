@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\System\SystemHealthService;
 use App\Services\System\SystemCronService;
-use App\Services\System\SuperadminSLAService;
 use App\Services\System\User\UserOnboardingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,8 +16,7 @@ class DashboardController extends Controller
 {
 	public function __construct(
 		protected SystemHealthService $healthService,
-		protected SystemCronService $cronService,
-		protected SuperadminSLAService $slaService
+		protected SystemCronService $cronService
 	) {}
 
 	/**
@@ -347,14 +345,6 @@ class DashboardController extends Controller
 			$cronMetrics = null;
 		}
 
-		// Get SLA metrics
-		$slaMetrics = null;
-		try {
-			$slaMetrics = $this->slaService->getDashboardMetrics();
-		} catch (\Exception $e) {
-			$slaMetrics = null;
-		}
-
 		$data = [
 			'counts' => $counts,
 			'company' => [
@@ -368,7 +358,6 @@ class DashboardController extends Controller
 			'welcomeText' => 'Welcome to the Superadmin dashboard — manage platform settings and users from here.',
 			'systemHealth' => $systemHealth,
 			'cronMetrics' => $cronMetrics,
-			'slaMetrics' => $slaMetrics,
 			'moduleCategories' => $this->getModuleCategories(),
 		];
 

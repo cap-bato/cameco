@@ -47,6 +47,8 @@ type ActivityByType = {
 
 interface Props {
   activity_summary: {
+    total_users: number;
+    active_accounts: number;
     total_events: number;
     unique_users: number;
     successful_logins: number;
@@ -154,12 +156,14 @@ export default function UsageAnalytics({
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                Unique Users
+                Active Accounts
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{activity_summary.unique_users}</div>
-              <p className="text-xs text-muted-foreground mt-1">Active users</p>
+              <div className="text-3xl font-bold">{activity_summary.active_accounts}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {activity_summary.unique_users} users had activity in selected period
+              </p>
             </CardContent>
           </Card>
 

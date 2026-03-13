@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Employee;
 
 use App\Http\Controllers\Controller;
+use App\Models\AttendanceEvent;
+use App\Models\DailyAttendanceSummary;
 use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
+use App\Models\RfidCardMapping;
+use App\Models\RfidLedger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -62,14 +66,8 @@ class DashboardController extends Controller
                     ];
                 });
 
-            // 2. Get Today's Attendance (placeholder - awaiting Timekeeping module integration)
-            // TODO: Replace with actual attendance data from Timekeeping module
-            $todayAttendance = [
-                'time_in' => null, // e.g., '08:15 AM'
-                'time_out' => null, // e.g., '05:30 PM'
-                'hours_worked' => 0, // e.g., 9.25
-                'status' => 'Not clocked in', // 'Present', 'Late', 'Absent', 'Not clocked in'
-            ];
+            // 2. Get Today's Attendance from timekeeping data (summary, then live events fallback)
+            $todayAttendance = $this->getTodayAttendance($employee->id);
 
             // 3. Count Pending Leave Requests
             $pendingRequestsCount = LeaveRequest::where('employee_id', $employee->id)
@@ -124,6 +122,150 @@ class DashboardController extends Controller
                 'error' => 'Unable to load some dashboard data. Please refresh or contact HR if the issue persists.',
             ]);
         }
+    }
+
+    /**
+     * Resolve today's attendance using the latest available source.
+     *
+     * Priority:
+     * 1) DailyAttendanceSummary for today (if already generated/updated)
+     * 2) Raw AttendanceEvent taps for today (real-time fallback)
+     *
+     * @param int $employeeId
+     * @return array
+     */
+    private function getTodayAttendance(int $employeeId): array
+    {
+        $today = now()->toDateString();
+
+        $summary = DailyAttendanceSummary::where('employee_id', $employeeId)
+            ->whereDate('attendance_date', $today)
+            ->first();
+
+        $liveAttendance = $this->getLiveTodayAttendance($employeeId, $today);
+
+        if ($liveAttendance['status'] !== 'Not clocked in') {
+            return $liveAttendance;
+        }
+
+        if ($summary) {
+            $status = 'Not clocked in';
+
+            if ($summary->is_on_leave) {
+                $status = 'On leave';
+            } elseif ($summary->is_present && $summary->is_late) {
+                $status = 'Late';
+            } elseif ($summary->is_present) {
+                $status = 'Present';
+            }
+
+            return [
+                'time_in' => $summary->time_in?->format('h:i A'),
+                'time_out' => $summary->time_out?->format('h:i A'),
+                'hours_worked' => $summary->total_hours_worked,
+                'status' => $status,
+            ];
+        }
+
+        return $liveAttendance;
+    }
+
+    /**
+     * Build today's attendance from live records first so fresh RFID taps show immediately.
+     *
+     * @param int $employeeId
+     * @param string $today
+     * @return array
+     */
+    private function getLiveTodayAttendance(int $employeeId, string $today): array
+    {
+        // Fallback for same-day RFID taps before summaries are generated or refreshed
+        $events = AttendanceEvent::where('employee_id', $employeeId)
+            ->whereDate('event_date', $today)
+            ->orderBy('event_time')
+            ->get();
+
+        $timeInEvent = $events->first(function (AttendanceEvent $event) {
+            return in_array($event->event_type, ['time_in', 'IN'], true);
+        });
+
+        $timeOutEvent = $events->filter(function (AttendanceEvent $event) {
+            return in_array($event->event_type, ['time_out', 'OUT'], true);
+        })->sortByDesc('event_time')->first();
+
+        $tapEvents = $events->filter(function (AttendanceEvent $event) {
+            return in_array($event->event_type, ['tap', 'TAP'], true);
+        })->values();
+
+        // Devices that only emit "tap" are treated as alternating IN/OUT events.
+        if (!$timeInEvent && $tapEvents->isNotEmpty()) {
+            $timeInEvent = $tapEvents->first();
+            if ($tapEvents->count() % 2 === 0) {
+                $timeOutEvent = $tapEvents->last();
+            }
+        }
+
+        if (!$timeInEvent) {
+            // Last fallback: read today's raw ledger taps for active badge mappings,
+            // so dashboard reflects scans even before the processor creates AttendanceEvent rows.
+            $cardUids = RfidCardMapping::where('employee_id', $employeeId)
+                ->where('is_active', true)
+                ->pluck('card_uid');
+
+            if ($cardUids->isEmpty()) {
+                return [
+                    'time_in' => null,
+                    'time_out' => null,
+                    'hours_worked' => null,
+                    'status' => 'Not clocked in',
+                ];
+            }
+
+            $ledgerTaps = RfidLedger::whereIn('employee_rfid', $cardUids)
+                ->whereDate('scan_timestamp', $today)
+                ->whereIn('event_type', ['tap', 'time_in', 'time_out'])
+                ->orderBy('scan_timestamp')
+                ->get();
+
+            if ($ledgerTaps->isEmpty()) {
+                return [
+                    'time_in' => null,
+                    'time_out' => null,
+                    'hours_worked' => null,
+                    'status' => 'Not clocked in',
+                ];
+            }
+
+            $firstTap = $ledgerTaps->first();
+            $lastTap = $ledgerTaps->last();
+            $hasEvenTaps = ($ledgerTaps->count() % 2 === 0);
+
+            $hoursWorked = null;
+            if ($hasEvenTaps) {
+                $workedMinutes = max(0, $firstTap->scan_timestamp->diffInMinutes($lastTap->scan_timestamp));
+                $hoursWorked = round($workedMinutes / 60, 2);
+            }
+
+            return [
+                'time_in' => $firstTap->scan_timestamp->format('h:i A'),
+                'time_out' => $hasEvenTaps ? $lastTap->scan_timestamp->format('h:i A') : null,
+                'hours_worked' => $hoursWorked,
+                'status' => $hasEvenTaps ? 'Clocked out' : 'Clocked in',
+            ];
+        }
+
+        $hoursWorked = null;
+        if ($timeOutEvent) {
+            $workedMinutes = max(0, $timeInEvent->event_time->diffInMinutes($timeOutEvent->event_time));
+            $hoursWorked = round($workedMinutes / 60, 2);
+        }
+
+        return [
+            'time_in' => $timeInEvent->event_time->format('h:i A'),
+            'time_out' => $timeOutEvent?->event_time?->format('h:i A'),
+            'hours_worked' => $hoursWorked,
+            'status' => $timeOutEvent ? 'Clocked out' : 'Clocked in',
+        ];
     }
 
     /**

@@ -258,6 +258,8 @@ class AnalyticsService
         $from = $from ?? now()->subMonths(1);
         $to = $to ?? now();
 
+        $totalUsers = User::count();
+        $activeAccounts = User::where('is_active', true)->count();
         $totalEvents = SecurityAuditLog::whereBetween('created_at', [$from, $to])->count();
         $uniqueUsers = SecurityAuditLog::whereBetween('created_at', [$from, $to])
             ->distinct('user_id')
@@ -270,6 +272,8 @@ class AnalyticsService
             ->count();
 
         return [
+            'total_users' => $totalUsers,
+            'active_accounts' => $activeAccounts,
             'total_events' => $totalEvents,
             'unique_users' => $uniqueUsers,
             'successful_logins' => $loginAttempts,
