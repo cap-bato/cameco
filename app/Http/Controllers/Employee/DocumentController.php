@@ -153,6 +153,26 @@ class DocumentController extends Controller
             ->where('status', 'pending')
             ->count();
 
+        // Get latest pending requests for inline visibility on documents page
+        $pendingRequestItems = \DB::table('document_requests')
+            ->where('employee_id', $employee->id)
+            ->where('status', 'pending')
+            ->orderBy('requested_at', 'desc')
+            ->limit(5)
+            ->get()
+            ->map(function ($request) {
+                return [
+                    'id' => $request->id,
+                    'document_type' => $this->formatDocumentType($request->document_type),
+                    'requested_at' => $request->requested_at
+                        ? \Carbon\Carbon::parse($request->requested_at)->format('M d, Y h:i A')
+                        : null,
+                    'purpose' => $request->purpose,
+                    'status' => $request->status,
+                ];
+            })
+            ->toArray();
+
         return Inertia::render('Employee/Documents/Index', [
             'employee' => [
                 'id' => $employee->id,
@@ -163,6 +183,7 @@ class DocumentController extends Controller
             'categories' => $categories,
             'selectedCategory' => $category,
             'pendingRequests' => $pendingRequests,
+            'pendingRequestItems' => $pendingRequestItems,
             'totalDocuments' => count($documents),
         ]);
     }

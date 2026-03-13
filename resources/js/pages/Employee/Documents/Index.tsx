@@ -51,6 +51,13 @@ interface IndexPageProps {
     categories: Record<string, string>;
     selectedCategory: string | null;
     pendingRequests: number;
+    pendingRequestItems: Array<{
+        id: number;
+        document_type: string;
+        requested_at: string | null;
+        purpose: string | null;
+        status: string;
+    }>;
     totalDocuments: number;
 }
 
@@ -63,6 +70,7 @@ export default function DocumentsIndex({
     categories,
     selectedCategory,
     pendingRequests,
+    pendingRequestItems,
     totalDocuments,
 }: IndexPageProps) {
     const { toast } = useToast();
@@ -194,6 +202,54 @@ export default function DocumentsIndex({
                 </div>
 
                 {/* Alerts */}
+                {pendingRequests > 0 && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-lg">Pending Document Requests</CardTitle>
+                            <CardDescription>
+                                You currently have {pendingRequests} pending request{pendingRequests > 1 ? 's' : ''}.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {pendingRequestItems.length > 0 ? (
+                                    pendingRequestItems.map((request) => (
+                                        <div
+                                            key={request.id}
+                                            className="flex items-start justify-between rounded-md border p-3"
+                                        >
+                                            <div>
+                                                <p className="font-medium text-gray-900">{request.document_type}</p>
+                                                <p className="text-sm text-gray-600">
+                                                    Requested: {request.requested_at ?? 'N/A'}
+                                                </p>
+                                                {request.purpose && (
+                                                    <p className="text-sm text-gray-600">Purpose: {request.purpose}</p>
+                                                )}
+                                            </div>
+                                            <Badge variant="secondary" className="capitalize">
+                                                {request.status}
+                                            </Badge>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-sm text-gray-600">Pending requests found, but no details are available.</p>
+                                )}
+
+                                <div className="pt-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => (window.location.href = '/employee/documents/requests/history')}
+                                    >
+                                        View Full Request History
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
                 {documents.some((d) => d.days_remaining !== null && d.days_remaining < 0) && (
                     <Alert variant="destructive">
                         <AlertTriangle className="h-4 w-4" />
