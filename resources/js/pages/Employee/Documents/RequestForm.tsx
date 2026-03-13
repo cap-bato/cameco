@@ -66,7 +66,7 @@ export default function DocumentRequestForm({
         <AppLayout>
             <Head title="Request Document" />
 
-            <div className="space-y-6">
+            <div className="space-y-6 p-6">
                 {/* Header with Back Button */}
                 <div className="flex items-center gap-4">
                     <Button
