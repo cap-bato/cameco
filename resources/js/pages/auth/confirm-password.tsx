@@ -8,6 +8,8 @@ import { store } from '@/routes/password/confirm';
 import { Form, Head } from '@inertiajs/react';
 
 export default function ConfirmPassword() {
+    const confirmPasswordRoute = store();
+
     return (
         <AuthLayout
             title="Confirm your password"
@@ -15,7 +17,11 @@ export default function ConfirmPassword() {
         >
             <Head title="Confirm password" />
 
-            <Form {...store.form()} resetOnSuccess={['password']}>
+            <Form
+                action={confirmPasswordRoute.url}
+                method={confirmPasswordRoute.method}
+                resetOnSuccess={['password']}
+            >
                 {({ processing, errors }) => (
                     <div className="space-y-6">
                         <div className="grid gap-2">

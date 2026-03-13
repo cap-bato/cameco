@@ -14,6 +14,8 @@ interface ResetPasswordProps {
 }
 
 export default function ResetPassword({ token, email }: ResetPasswordProps) {
+    const resetPasswordRoute = update();
+
     return (
         <AuthLayout
             title="Reset password"
@@ -22,7 +24,8 @@ export default function ResetPassword({ token, email }: ResetPasswordProps) {
             <Head title="Reset password" />
 
             <Form
-                {...update.form()}
+                action={resetPasswordRoute.url}
+                method={resetPasswordRoute.method}
                 transform={(data) => ({ ...data, token, email })}
                 resetOnSuccess={['password', 'password_confirmation']}
             >
