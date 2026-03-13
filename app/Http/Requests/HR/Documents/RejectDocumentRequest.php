@@ -11,7 +11,16 @@ class RejectDocumentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->can('hr.documents.requests.reject') ?? false;
+        $user = $this->user();
+        if (!$user) {
+            return false;
+        }
+
+        if ($user->can('hr.documents.reject') || $user->can('hr.documents.upload')) {
+            return true;
+        }
+
+        return $user->hasAnyRole(['HR Manager', 'HR Staff', 'Superadmin']);
     }
 
     /**

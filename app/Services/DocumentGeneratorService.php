@@ -63,7 +63,7 @@ class DocumentGeneratorService
     {
         $employee = $request->employee;
 
-        $period = $request->period;
+        $period = $request->period ?? $this->extractPayslipPeriodFromNotes($request->notes);
         if (empty($period)) {
             throw new \InvalidArgumentException('Payslip period is required');
         }
@@ -90,6 +90,22 @@ class DocumentGeneratorService
         Storage::put($path, $pdf->output());
 
         return $path;
+    }
+
+    /**
+     * Extract MM-YYYY period from notes such as "Period: 01-2024".
+     */
+    private function extractPayslipPeriodFromNotes(?string $notes): ?string
+    {
+        if (!$notes) {
+            return null;
+        }
+
+        if (preg_match('/Period:\s*(\d{2}-\d{4})/i', $notes, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
     }
 
     /**

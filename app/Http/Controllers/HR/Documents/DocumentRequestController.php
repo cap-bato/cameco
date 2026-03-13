@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\HR\Documents\ApproveDocumentRequest;
 use App\Http\Requests\HR\Documents\RejectDocumentRequest;
 use App\Models\DocumentRequest;
+use App\Models\DocumentTemplate;
 use App\Notifications\DocumentRequestProcessed;
 use App\Services\DocumentGeneratorService;
 use App\Traits\LogsSecurityAudits;
@@ -24,13 +25,17 @@ class DocumentRequestController extends Controller
      */
     public function index(Request $request)
     {
-        // Build base query joining employee profile info for search and display
-        $query = DocumentRequest::with(['employee.profile', 'processedBy'])
-            ->select('document_requests.*')
-            ->join('employees', 'employees.id', '=', 'document_requests.employee_id')
-            ->join('employee_profiles', 'employee_profiles.employee_id', '=', 'employees.id')
-            ->leftJoin('users', 'users.id', '=', 'document_requests.processed_by')
-            ->orderByRaw("FIELD(document_requests.status, 'pending', 'processing', 'completed', 'rejected')")
+        // Build base query using model relationships to stay schema/database compatible.
+        $query = DocumentRequest::query()
+            ->with(['employee.profile', 'employee.department', 'processedBy'])
+            ->orderByRaw("CASE
+                WHEN document_requests.status = 'pending' THEN 1
+                WHEN document_requests.status = 'processing' THEN 2
+                WHEN document_requests.status = 'processed' THEN 3
+                WHEN document_requests.status = 'completed' THEN 3
+                WHEN document_requests.status = 'rejected' THEN 4
+                ELSE 5
+            END")
             ->orderBy('requested_at', 'desc');
 
         // Filters
@@ -53,19 +58,22 @@ class DocumentRequestController extends Controller
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('employees.employee_number', 'like', "%{$search}%")
-                    ->orWhereRaw("CONCAT(employee_profiles.first_name, ' ', employee_profiles.last_name) LIKE ?", ["%{$search}%"]);
+                $q->whereHas('employee', function ($employeeQuery) use ($search) {
+                    $employeeQuery->where('employee_number', 'like', "%{$search}%");
+                })->orWhereHas('employee.profile', function ($profileQuery) use ($search) {
+                    $profileQuery->whereRaw("CONCAT(first_name, ' ', last_name) ILIKE ?", ["%{$search}%"]);
+                });
             });
         }
 
         // Fetch results and map to frontend format
-        $requests = $query->get()->map(function ($req) {
+        $requests = $query->get()->map(function (DocumentRequest $req) {
             return [
                 'id' => $req->id,
                 'employee_id' => $req->employee_id,
                 'employee_name' => $req->employee->profile->full_name ?? 'N/A',
                 'employee_number' => $req->employee->employee_number ?? null,
-                'department' => $req->employee->department_name ?? 'N/A',
+                'department' => $req->employee?->department?->name ?? 'N/A',
                 'document_type' => $this->formatDocumentType($req->document_type),
                 'purpose' => $req->purpose ?? 'Not specified',
                 'priority' => $this->calculatePriority($req),
@@ -92,6 +100,14 @@ class DocumentRequestController extends Controller
             'info',
             ['filters' => $request->only(['status', 'document_type', 'date_from', 'date_to', 'search'])]
         );
+
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json([
+                'data' => $requests->values(),
+                'meta' => $statistics,
+                'filters' => $request->only(['status', 'document_type', 'date_from', 'date_to', 'search']),
+            ]);
+        }
 
         return Inertia::render('HR/Documents/Requests/Index', [
             'requests' => $requests->values(),
@@ -144,6 +160,116 @@ class DocumentRequestController extends Controller
         }
 
         return 'normal';
+    }
+
+    /**
+     * Return detailed request data for the request details modal.
+     */
+    public function show(Request $request, int $id)
+    {
+        $documentRequest = DocumentRequest::with(['employee.profile', 'employee.department', 'processedBy'])
+            ->findOrFail($id);
+
+        $employeeId = $documentRequest->employee_id;
+
+        $history = DocumentRequest::query()
+            ->where('employee_id', $employeeId)
+            ->orderBy('requested_at', 'desc')
+            ->limit(10)
+            ->get()
+            ->map(function (DocumentRequest $item) {
+                return [
+                    'id' => $item->id,
+                    'document_type' => $this->formatDocumentType($item->document_type),
+                    'status' => $item->status,
+                    'requested_at' => $item->requested_at?->format('Y-m-d H:i:s'),
+                    'processed_by' => $item->processedBy?->name,
+                    'downloaded_at' => null,
+                ];
+            })
+            ->values();
+
+        $employeeRequests = DocumentRequest::query()->where('employee_id', $employeeId);
+        $totalRequests = (clone $employeeRequests)->count();
+        $processedCount = (clone $employeeRequests)->whereIn('status', ['processed', 'completed'])->count();
+        $avgMinutes = (int) round(
+            DocumentRequest::query()
+                ->where('employee_id', $employeeId)
+                ->whereNotNull('processed_at')
+                ->whereNotNull('requested_at')
+                ->selectRaw('AVG(EXTRACT(EPOCH FROM (processed_at - requested_at)) / 60) as avg_minutes')
+                ->value('avg_minutes') ?? 0
+        );
+
+        $mostRequestedType = (string) (DocumentRequest::query()
+            ->where('employee_id', $employeeId)
+            ->selectRaw('document_type, COUNT(*) as aggregate')
+            ->groupBy('document_type')
+            ->orderByDesc('aggregate')
+            ->value('document_type') ?? $documentRequest->document_type);
+
+        $statistics = [
+            'total_requests' => $totalRequests,
+            'most_requested_type' => $this->formatDocumentType($mostRequestedType),
+            'average_processing_time_minutes' => $avgMinutes,
+            'success_rate_percentage' => $totalRequests > 0
+                ? round(($processedCount / $totalRequests) * 100, 2)
+                : 0,
+        ];
+
+        $auditTrail = collect();
+        if (\Schema::hasTable('activity_logs')) {
+            $auditTrail = \DB::table('activity_logs')
+                ->where('subject_type', 'App\\Models\\DocumentRequest')
+                ->where('subject_id', $documentRequest->id)
+                ->orderByDesc('created_at')
+                ->limit(20)
+                ->get()
+                ->map(function ($log) {
+                    return [
+                        'id' => $log->id,
+                        'action' => $log->event ?? 'updated',
+                        'description' => $log->description ?? ucfirst((string) ($log->event ?? 'updated')),
+                        'timestamp' => $log->created_at,
+                        'user' => 'System',
+                        'event_type' => $log->event ?? 'updated',
+                    ];
+                })
+                ->values();
+        }
+
+        $data = [
+            'id' => $documentRequest->id,
+            'employee_id' => $documentRequest->employee_id,
+            'employee_name' => $documentRequest->employee?->profile?->full_name ?? 'N/A',
+            'employee_number' => $documentRequest->employee?->employee_number,
+            'department' => $documentRequest->employee?->department?->name ?? 'N/A',
+            'position' => $documentRequest->employee?->position?->title,
+            'email' => $documentRequest->employee?->profile?->email,
+            'phone' => $documentRequest->employee?->profile?->mobile,
+            'date_hired' => $documentRequest->employee?->date_hired?->format('Y-m-d'),
+            'employment_status' => $documentRequest->employee?->status,
+            'document_type' => $this->formatDocumentType($documentRequest->document_type),
+            'purpose' => $documentRequest->purpose ?? 'Not specified',
+            'priority' => $this->calculatePriority($documentRequest),
+            'status' => $documentRequest->status,
+            'requested_at' => $documentRequest->requested_at?->format('Y-m-d H:i:s'),
+            'processed_by' => $documentRequest->processedBy?->name,
+            'processed_at' => $documentRequest->processed_at?->format('Y-m-d H:i:s'),
+            'generated_document_path' => $documentRequest->file_path,
+            'rejection_reason' => $documentRequest->rejection_reason,
+        ];
+
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json([
+                'data' => $data,
+                'history' => $history,
+                'statistics' => $statistics,
+                'audit_trail' => $auditTrail,
+            ]);
+        }
+
+        return redirect()->route('hr.documents.requests.index');
     }
 
     /**
@@ -204,6 +330,26 @@ class DocumentRequestController extends Controller
                 return back()->with('error', 'This request has already been processed');
             }
 
+            $selectedTemplate = null;
+            if (!empty($validated['template_id'])) {
+                $selectedTemplate = DocumentTemplate::query()
+                    ->where('id', (int) $validated['template_id'])
+                    ->where('status', 'approved')
+                    ->first();
+
+                if (!$selectedTemplate) {
+                    return back()->with('error', 'Selected template is not available or not approved');
+                }
+            }
+
+            $processingNotes = trim((string) ($validated['notes'] ?? ''));
+            if ($selectedTemplate) {
+                $templateNote = "Template: {$selectedTemplate->name} (#{$selectedTemplate->id})";
+                $processingNotes = $processingNotes !== ''
+                    ? "{$processingNotes}\n{$templateNote}"
+                    : $templateNote;
+            }
+
             // Generate document
             $generator = new DocumentGeneratorService();
             $filePath = $generator->generate($documentRequest);
@@ -212,7 +358,7 @@ class DocumentRequestController extends Controller
             $documentRequest->process(
                 auth()->user(),
                 $filePath,
-                $validated['notes'] ?? null
+                $processingNotes !== '' ? $processingNotes : null
             );
 
             // Store document in employee_documents table for future access
@@ -248,6 +394,8 @@ class DocumentRequestController extends Controller
                     'employee_id' => $documentRequest->employee_id,
                     'document_type' => $documentRequest->document_type,
                     'file_path' => $filePath,
+                    'template_id' => $selectedTemplate?->id,
+                    'template_name' => $selectedTemplate?->name,
                 ]
             );
 

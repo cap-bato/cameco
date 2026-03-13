@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { router } from '@inertiajs/react';
 import {
     Dialog,
@@ -13,6 +13,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -43,15 +50,100 @@ interface ProcessRequestModalProps {
     request: DocumentRequest;
 }
 
+interface TemplateOption {
+    id: number;
+    name: string;
+    category?: string;
+    status?: string;
+}
+
 export function ProcessRequestModal({ open, onClose, request }: ProcessRequestModalProps) {
     const { toast } = useToast();
     const [action, setAction] = useState<'generate' | 'upload' | 'reject'>('generate');
     const [templateId, setTemplateId] = useState('');
+    const [templates, setTemplates] = useState<TemplateOption[]>([]);
+    const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [file, setFile] = useState<File | null>(null);
     const [rejectionReason, setRejectionReason] = useState('');
     const [notes, setNotes] = useState('');
     const [sendEmail, setSendEmail] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const documentTypeToTemplateCategory = useMemo<Record<string, string | null>>(() => ({
+        'Certificate of Employment': 'coe',
+        Payslip: null,
+        'BIR Form 2316': 'other',
+        'SSS/PhilHealth/Pag-IBIG Contribution': 'other',
+    }), []);
+
+    const filteredTemplates = useMemo(() => {
+        const templateCategory = documentTypeToTemplateCategory[request.document_type] ?? null;
+        if (!templateCategory) {
+            return templates;
+        }
+
+        const exactMatches = templates.filter((template) => template.category === templateCategory);
+        return exactMatches.length > 0 ? exactMatches : templates;
+    }, [documentTypeToTemplateCategory, request.document_type, templates]);
+
+    useEffect(() => {
+        if (!open || action !== 'generate') {
+            return;
+        }
+
+        let active = true;
+
+        const fetchTemplates = async () => {
+            setLoadingTemplates(true);
+            try {
+                const response = await fetch('/hr/documents/api/templates?status=approved', {
+                    method: 'GET',
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to load templates (${response.status})`);
+                }
+
+                const result = await response.json();
+                const rows: TemplateOption[] = Array.isArray(result?.data)
+                    ? result.data.map((template: any) => ({
+                          id: Number(template.id),
+                          name: String(template.name),
+                          category: template.category ? String(template.category) : undefined,
+                          status: template.status ? String(template.status) : undefined,
+                      }))
+                    : [];
+
+                if (active) {
+                    setTemplates(rows);
+                }
+            } catch (error) {
+                console.error('Failed to load templates:', error);
+                if (active) {
+                    setTemplates([]);
+                    toast({
+                        title: 'Template loading failed',
+                        description: 'Could not load templates. Please refresh and try again.',
+                        variant: 'destructive',
+                    });
+                }
+            } finally {
+                if (active) {
+                    setLoadingTemplates(false);
+                }
+            }
+        };
+
+        fetchTemplates();
+
+        return () => {
+            active = false;
+        };
+    }, [open, action, toast]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -62,7 +154,16 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
 
             // Populate form data based on action
             if (action === 'generate') {
-                if (templateId) formData.append('template_id', templateId);
+                if (!templateId) {
+                    toast({
+                        title: 'Template required',
+                        description: 'Please select a template before generating.',
+                        variant: 'destructive',
+                    });
+                    setIsSubmitting(false);
+                    return;
+                }
+                formData.append('template_id', templateId);
             } else if (action === 'upload') {
                 if (file) formData.append('file', file);
             } else if (action === 'reject') {
@@ -255,14 +356,32 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
                         <div className="space-y-4 mb-6">
                             <div>
                                 <Label htmlFor="template">Template</Label>
-                                <Input
-                                    id="template"
-                                    placeholder="Select template (implementation pending)"
+                                <Select
                                     value={templateId}
-                                    onChange={(e) => setTemplateId(e.target.value)}
-                                />
+                                    onValueChange={setTemplateId}
+                                    disabled={loadingTemplates}
+                                >
+                                    <SelectTrigger id="template">
+                                        <SelectValue
+                                            placeholder={
+                                                loadingTemplates
+                                                    ? 'Loading templates...'
+                                                    : filteredTemplates.length > 0
+                                                      ? 'Select template'
+                                                      : 'No approved templates available'
+                                            }
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {filteredTemplates.map((template) => (
+                                            <SelectItem key={template.id} value={String(template.id)}>
+                                                {template.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Template selection will be implemented with Task 2.6
+                                    Select an approved template for this document request.
                                 </p>
                             </div>
                         </div>
@@ -398,6 +517,7 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
                             type="submit"
                             disabled={
                                 isSubmitting ||
+                                (action === 'generate' && !templateId) ||
                                 (action === 'reject' && rejectionReason.length < 20) ||
                                 (action === 'upload' && !file)
                             }

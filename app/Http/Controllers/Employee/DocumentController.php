@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 /**
@@ -47,8 +48,8 @@ class DocumentController extends Controller
             return response()->json(['error' => 'Document not found'], 404);
         }
 
-        $filePath = storage_path("app/{$document->file_path}");
-        if (!file_exists($filePath)) {
+        $filePath = $this->resolveStoredFilePath($document->file_path);
+        if (!$filePath || !file_exists($filePath)) {
             return response()->json(['error' => 'File not found'], 404);
         }
 
@@ -321,8 +322,8 @@ class DocumentController extends Controller
         }
 
         // Check if document file exists
-        $filePath = storage_path("app/{$document->file_path}");
-        if (!file_exists($filePath)) {
+        $filePath = $this->resolveStoredFilePath($document->file_path);
+        if (!$filePath || !file_exists($filePath)) {
             \Log::warning('Document file not found', [
                 'document_id' => $documentId,
                 'file_path' => $document->file_path,
@@ -671,8 +672,8 @@ public function downloadFromRequest($requestId)
         }
 
         // Check if file exists
-        $filePath = storage_path("app/{$request->file_path}");
-        if (!file_exists($filePath)) {
+        $filePath = $this->resolveStoredFilePath($request->file_path);
+        if (!$filePath || !file_exists($filePath)) {
             \Log::warning('Request document file not found', [
                 'request_id' => $requestId,
                 'file_path' => $request->file_path,
@@ -711,5 +712,30 @@ public function downloadFromRequest($requestId)
 
         return back()->with('error', 'Failed to download document. Please try again.');
     }
+}
+
+/**
+ * Resolve absolute file path across common storage disks.
+ */
+private function resolveStoredFilePath(?string $relativePath): ?string
+{
+    if (!$relativePath) {
+        return null;
+    }
+
+    $defaultDisk = config('filesystems.default', 'local');
+    $candidateDisks = array_values(array_unique([$defaultDisk, 'local', 'public']));
+
+    foreach ($candidateDisks as $disk) {
+        try {
+            if (Storage::disk($disk)->exists($relativePath)) {
+                return Storage::disk($disk)->path($relativePath);
+            }
+        } catch (\Throwable $e) {
+            // Continue checking other disks if one disk is misconfigured.
+        }
+    }
+
+    return null;
 }
 }

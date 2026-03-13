@@ -1,4 +1,3 @@
-import { wayfinder } from '@laravel/vite-plugin-wayfinder';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import laravel from 'laravel-vite-plugin';
@@ -31,14 +30,6 @@ export default defineConfig({
             },
         }),
         tailwindcss(),
-        wayfinder({
-            formVariants: true,
-            // Only regenerate routes when actual route definition files change.
-            // Excluding app/Http/**/*.php prevents unnecessary regeneration (and
-            // the resulting transient "Failed to resolve @/routes" HMR errors)
-            // every time a controller is saved during development.
-            watch: ['routes/**/*.php'],
-        }),
     ],
     esbuild: {
         jsx: 'automatic',

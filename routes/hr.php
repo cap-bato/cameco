@@ -212,6 +212,10 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 Route::get('/', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'index'])
                     ->middleware('permission:hr.documents.view')
                     ->name('index');
+
+                Route::get('/{request}', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'show'])
+                    ->middleware('permission:hr.documents.view')
+                    ->name('show');
                 
                 Route::post('/{request}/process', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'process'])
                     ->middleware('permission:hr.documents.upload')
@@ -219,11 +223,11 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 
                 // Individual approve/reject endpoints (use FormRequests for authorization/validation)
                 Route::post('/{request}/approve', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'approve'])
-                    ->middleware('permission:hr.documents.approve')
+                    ->middleware('permission:hr.documents.approve|hr.documents.upload')
                     ->name('approve');
 
                 Route::post('/{request}/reject', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'reject'])
-                    ->middleware('permission:hr.documents.reject')
+                    ->middleware('permission:hr.documents.reject|hr.documents.upload')
                     ->name('reject');
                 
                 // Bulk actions for document requests
