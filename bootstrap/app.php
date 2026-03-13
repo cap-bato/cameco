@@ -12,7 +12,12 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -58,5 +63,50 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->report(function (Throwable $e) {
+            // Skip expected validation errors and client-side HTTP errors.
+            if ($e instanceof ValidationException) {
+                return;
+            }
+
+            if ($e instanceof HttpExceptionInterface && $e->getStatusCode() < 500) {
+                return;
+            }
+
+            try {
+                if (!Schema::hasTable('system_error_logs')) {
+                    return;
+                }
+
+                $request = request();
+
+                $level = 'error';
+                if ($e instanceof \Error) {
+                    $level = 'critical';
+                } elseif ($e instanceof HttpExceptionInterface && $e->getStatusCode() >= 500) {
+                    $level = 'critical';
+                }
+
+                \App\Models\SystemErrorLog::create([
+                    'level' => $level,
+                    'message' => Str::limit($e->getMessage() ?: class_basename($e), 250),
+                    'exception_class' => get_class($e),
+                    'exception_message' => $e->getMessage(),
+                    'stack_trace' => $e->getTraceAsString(),
+                    'file' => $e->getFile() ? Str::limit($e->getFile(), 250, '') : null,
+                    'line' => $e->getLine(),
+                    'url' => $request?->fullUrl(),
+                    'method' => $request?->method(),
+                    'ip_address' => $request?->ip(),
+                    'user_id' => Auth::id(),
+                    'context' => [
+                        'environment' => app()->environment(),
+                        'status_code' => $e instanceof HttpExceptionInterface ? $e->getStatusCode() : null,
+                    ],
+                    'is_resolved' => false,
+                ]);
+            } catch (Throwable $loggingException) {
+                // Avoid recursive failures in the exception handler.
+            }
+        });
     })->create();
