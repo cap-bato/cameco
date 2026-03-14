@@ -6,7 +6,6 @@ import type { PayrollReviewPageProps } from '@/types/payroll-review-types';
 import { PayrollSummaryCards } from '@/components/payroll/payroll-summary-cards';
 import { ReviewByDepartment } from '@/components/payroll/review-by-department';
 import { ReviewExceptions } from '@/components/payroll/review-exceptions';
-import { ApprovalWorkflow } from '@/components/payroll/approval-workflow';
 import { EmployeeCalculationDetails } from '@/components/payroll/employee-calculation-details';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -23,7 +22,7 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '#',
     },
     {
-        title: 'Review & Approval',
+        title: 'Payroll Review',
         href: '/payroll/review',
     },
 ];
@@ -197,12 +196,7 @@ export default function PayrollReviewPage({
         }
     };
 
-    const statusColor =
-        payroll_period.status === 'approved'
-            ? 'text-green-600'
-            : payroll_period.status === 'reviewing'
-              ? 'text-yellow-600'
-              : 'text-blue-600';
+    const statusColor = payroll_period.status === 'approved' ? 'text-green-600' : 'text-blue-600';
 
     const statusIcon =
         payroll_period.status === 'approved' ? (
@@ -213,7 +207,7 @@ export default function PayrollReviewPage({
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Payroll Review & Approval" />
+            <Head title="Payroll Review" />
 
             <div className="space-y-6 rounded-xl p-6">
                 {/* Status Message */}
@@ -259,7 +253,8 @@ export default function PayrollReviewPage({
                     </div>
 
                     <div className="flex gap-2">
-                        {approval_workflow.can_approve && payroll_period.status !== 'approved' && (
+                        {/* Approve - only when calculated */}
+                        {approval_workflow.can_approve && (
                             <Button
                                 onClick={handleApprove}
                                 disabled={isSubmittingApproval}
@@ -269,6 +264,8 @@ export default function PayrollReviewPage({
                                 {isSubmittingApproval ? 'Approving...' : 'Approve Payroll'}
                             </Button>
                         )}
+
+                        {/* Lock - only when approved */}
                         {payroll_period.status === 'approved' && (
                             <Button
                                 onClick={() => setShowLockDialog(true)}
@@ -276,9 +273,24 @@ export default function PayrollReviewPage({
                                 className="gap-2"
                             >
                                 <Lock className="h-4 w-4" />
-                                Lock Payroll
+                                Lock & Finalize
                             </Button>
                         )}
+
+                        {/* Send back for recalculation - payroll officer found error after approving */}
+                        {approval_workflow.can_reject && (
+                            <Button
+                                onClick={() => {
+                                    const reason = prompt('Reason for sending back for recalculation?');
+                                    if (reason) handleReject(reason);
+                                }}
+                                variant="outline"
+                                className="gap-2 border-orange-300 text-orange-600 hover:bg-orange-50"
+                            >
+                                Send Back for Recalculation
+                            </Button>
+                        )}
+
                         <Button onClick={handleDownloadPayslips} variant="outline" className="gap-2">
                             <Download className="h-4 w-4" />
                             Generate Payslips
@@ -307,8 +319,20 @@ export default function PayrollReviewPage({
                     </Card>
                 )}
 
-                {/* Approval Workflow */}
-                <ApprovalWorkflow workflow={approval_workflow} onReject={handleReject} />
+                {/* Officer Approval Status */}
+                {payroll_period.status === 'approved' && (
+                    <Card className="border-green-200 bg-green-50 p-4">
+                        <div className="flex items-center gap-3">
+                            <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-600" />
+                            <div>
+                                <p className="font-medium text-green-800">Payroll Approved</p>
+                                <p className="text-sm text-green-700">
+                                    Approved by Payroll Officer. Ready to lock and release for payment.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+                )}
 
                 {/* Tabs for different views */}
                 <Tabs defaultValue="department" className="w-full">

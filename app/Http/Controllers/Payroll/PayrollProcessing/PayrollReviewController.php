@@ -12,7 +12,7 @@ use Inertia\Inertia;
 
 class PayrollReviewController extends Controller
 {
-    private const REVIEWABLE_STATUSES = ['calculated', 'under_review', 'pending_approval', 'approved'];
+    private const REVIEWABLE_STATUSES = ['calculated', 'approved'];
 
     /**
      * Display payroll review and approval page
@@ -29,7 +29,7 @@ class PayrollReviewController extends Controller
         }
 
         // Available periods for the period selector dropdown
-        $availablePeriods = PayrollPeriod::whereIn('status', self::REVIEWABLE_STATUSES)
+        $availablePeriods = PayrollPeriod::whereIn('status', ['calculated', 'approved', 'finalized', 'completed'])
             ->orderByDesc('period_start')
             ->get(['id', 'period_name', 'status', 'period_start', 'period_end'])
             ->map(fn($p) => [
@@ -53,7 +53,7 @@ class PayrollReviewController extends Controller
         // Previous period for variance comparison
         $previousPeriod = PayrollPeriod::where('id', '<>', $period->id)
             ->where('period_start', '<', $period->period_start)
-            ->whereIn('status', ['calculated', 'under_review', 'pending_approval', 'approved', 'finalized', 'completed'])
+            ->whereIn('status', ['calculated', 'approved', 'finalized', 'completed'])
             ->orderByDesc('period_start')
             ->first();
 
@@ -77,25 +77,8 @@ class PayrollReviewController extends Controller
             $period     = PayrollPeriod::findOrFail($periodId);
             $prevStatus = $period->status;
 
-            // Use appropriate model method based on current status
-            if ($prevStatus === 'calculated') {
-                $period->submitForReview();
-                $nextStatus = 'under_review';
-            } elseif ($prevStatus === 'under_review') {
-                // Transition to pending_approval manually (no specific model method)
-                $period->update([
-                    'status'      => 'pending_approval',
-                    'approved_by' => auth()->id(),
-                    'approved_at' => now(),
-                ]);
-                $nextStatus = 'pending_approval';
-            } elseif ($prevStatus === 'pending_approval') {
-                $period->approve(auth()->id());
-                $nextStatus = 'approved';
-            } else {
-                $period->approve(auth()->id());
-                $nextStatus = 'approved';
-            }
+            $period->approve(auth()->id());
+            $nextStatus = 'approved';
 
             PayrollApprovalHistory::create([
                 'payroll_period_id' => $periodId,
@@ -438,7 +421,7 @@ class PayrollReviewController extends Controller
                 'id'                => 0,
                 'payroll_period_id' => 0,
                 'current_step'      => 1,
-                'total_steps'       => 3,
+                'total_steps'       => 1,
                 'status'            => 'pending',
                 'can_approve'       => false,
                 'can_reject'        => false,
@@ -452,21 +435,6 @@ class PayrollReviewController extends Controller
 
         $status = $period->status;
 
-        $currentStep = match ($status) {
-            'calculated'                         => 1,
-            'under_review'                       => 2,
-            'pending_approval'                   => 3,
-            'approved', 'finalized', 'completed' => 3,
-            default                              => 1,
-        };
-
-        $workflowStatus = match ($status) {
-            'approved', 'finalized', 'completed' => 'approved',
-            'calculated', 'under_review',
-            'pending_approval'                   => 'in_progress',
-            default                              => 'pending',
-        };
-
         $history = PayrollApprovalHistory::where('payroll_period_id', $period->id)
             ->orderBy('created_at')
             ->get();
@@ -477,11 +445,11 @@ class PayrollReviewController extends Controller
         return [
             'id'                => $period->id,
             'payroll_period_id' => $period->id,
-            'current_step'      => $currentStep,
-            'total_steps'       => 3,
-            'status'            => $workflowStatus,
-            'can_approve'       => in_array($status, ['calculated', 'under_review', 'pending_approval']),
-            'can_reject'        => in_array($status, ['under_review', 'pending_approval']),
+            'current_step'      => 1,
+            'total_steps'       => 1,
+            'status'            => in_array($status, ['approved', 'finalized', 'completed']) ? 'approved' : 'in_progress',
+            'can_approve'       => $status === 'calculated',
+            'can_reject'        => $status === 'approved',
             'approver_role'     => 'Payroll Officer',
             'steps'             => $this->buildWorkflowSteps($period, $history),
             'rejection_reason'  => $rejectionEntry?->rejection_reason ?? $period->rejection_reason,
