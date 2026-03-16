@@ -98,8 +98,11 @@ export function BadgeIssuanceModal({
 
     // Validate card UID format
     const validateCardUid = (uid: string) => {
-        const uidRegex = /^([0-9A-Fa-f]{2}:){4}[0-9A-Fa-f]{2}$/;
-        return uidRegex.test(uid);
+        // Accept plug-and-play numeric IDs (e.g. 1234567890) and hex UIDs with separators.
+        const numericUidRegex = /^\d{6,20}$/;
+        const hexUidRegex = /^[0-9A-F]{8,20}$/;
+        const hexSeparatedUidRegex = /^([0-9A-F]{2}[:-]){3,9}[0-9A-F]{2}$/;
+        return numericUidRegex.test(uid) || hexUidRegex.test(uid) || hexSeparatedUidRegex.test(uid);
     };
 
     // Subtask 1.3.4: Validate form before submission
@@ -115,7 +118,7 @@ export function BadgeIssuanceModal({
         if (!formData.card_uid) {
             newErrors.card_uid = 'Card UID is required';
         } else if (!validateCardUid(formData.card_uid)) {
-            newErrors.card_uid = 'Card UID format must be XX:XX:XX:XX:XX (e.g., 04:3A:B2:C5:D8)';
+            newErrors.card_uid = 'Use numeric UID (e.g., 1234567890) or hex UID (e.g., 04:3A:B2:C5:D8)';
         } else if (existingBadgeUids.includes(formData.card_uid)) {
             // Subtask 1.3.4: Card UID uniqueness check
             newErrors.card_uid = 'This card UID is already assigned to another employee';
@@ -144,7 +147,7 @@ export function BadgeIssuanceModal({
                 if (!value) {
                     fieldErrors.card_uid = 'Card UID is required';
                 } else if (!validateCardUid(value)) {
-                    fieldErrors.card_uid = 'Card UID format must be XX:XX:XX:XX:XX';
+                    fieldErrors.card_uid = 'Use numeric UID or hex UID';
                 } else if (existingBadgeUids.includes(value)) {
                     fieldErrors.card_uid = 'This card UID is already in use';
                 } else {
@@ -184,7 +187,7 @@ export function BadgeIssuanceModal({
     };
 
     const handleCardUidChange = (value: string) => {
-        const upperValue = value.toUpperCase();
+        const upperValue = value.toUpperCase().replace(/\s+/g, '');
         setFormData((prev) => ({
             ...prev,
             card_uid: upperValue,
@@ -382,10 +385,10 @@ export function BadgeIssuanceModal({
                                     <label className="text-sm font-medium">
                                         Card UID <span className="text-red-600">*</span>
                                     </label>
-                                    <p className="text-xs text-muted-foreground">Format: XX:XX:XX:XX:XX (e.g., 04:3A:B2:C5:D8)</p>
+                                    <p className="text-xs text-muted-foreground">Accepts numeric RFID IDs (e.g., 1234567890) or hex UID (e.g., 04:3A:B2:C5:D8)</p>
                                     <div className="flex gap-2">
                                         <Input
-                                            placeholder="XX:XX:XX:XX:XX"
+                                            placeholder="1234567890 or 04:3A:B2:C5:D8"
                                             value={formData.card_uid}
                                             onChange={(e) => handleCardUidChange(e.target.value)}
                                             onBlur={() => {
