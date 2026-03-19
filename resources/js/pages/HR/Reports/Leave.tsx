@@ -16,6 +16,12 @@ const breadcrumbs = [
 
 export default function LeaveReports({ summary, by_type, by_status, by_month }: LeaveReportsPageProps) {
     const totalRequests = (summary?.total_pending_requests || 0) + (summary?.total_approved_requests || 0) + (summary?.total_rejected_requests || 0);
+    // Debug: Log by_month prop
+    // eslint-disable-next-line no-console
+    console.log('LeaveReports by_month:', by_month);
+
+    // Fix: Convert by_month object to array if needed
+    const byMonthArray = Array.isArray(by_month) ? by_month : Object.values(by_month ?? {});
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -238,9 +244,9 @@ export default function LeaveReports({ summary, by_type, by_status, by_month }: 
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {by_month && by_month.length > 0 ? (
+                        {byMonthArray && byMonthArray.length > 0 ? (
                             <ResponsiveContainer width="100%" height={320}>
-                                <BarChart data={by_month} margin={{ top: 16, right: 24, left: 8, bottom: 8 }}>
+                                <BarChart data={byMonthArray} margin={{ top: 16, right: 24, left: 8, bottom: 8 }}>
                                     <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                                     <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                                     <Tooltip />
