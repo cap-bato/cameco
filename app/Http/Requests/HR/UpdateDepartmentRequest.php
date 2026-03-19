@@ -8,7 +8,7 @@ class UpdateDepartmentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()->hasAnyRole(['HR Manager', 'HR Staff', 'Superadmin']);
     }
 
     public function rules(): array
