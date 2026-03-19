@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Users, UserCheck, TrendingUp, Clock } from 'lucide-react';
 import DepartmentBreakdownChart from '@/components/hr/department-breakdown-chart';
+import EmployeeStatusPieChart from '@/components/hr/employee-status-pie-chart';
 import RecentHiresWidget from '@/components/hr/recent-hires-widget';
 
 interface Metric {
@@ -184,34 +185,37 @@ export default function Analytics({ metrics }: AnalyticsPageProps) {
                         <DepartmentBreakdownChart data={safeMetrics.employees_by_department ?? []} />
                     </div>
 
-                    {/* Employee Status Breakdown */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Employee Status</CardTitle>
-                            <CardDescription>Distribution by employment status</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-3">
-                                {safeMetrics.employee_status_breakdown && safeMetrics.employee_status_breakdown.length > 0 ? (
-                                    safeMetrics.employee_status_breakdown.map((status) => (
-                                        <div key={status.status_key} className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <Badge className={getStatusColor(status.status)}>
-                                                    {status.status}
-                                                </Badge>
+                    {/* Employee Status Pie and Breakdown */}
+                    <div className="flex flex-col gap-4">
+                        <EmployeeStatusPieChart data={safeMetrics.employee_status_breakdown ?? []} />
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Employee Status</CardTitle>
+                                <CardDescription>Distribution by employment status</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-3">
+                                    {safeMetrics.employee_status_breakdown && safeMetrics.employee_status_breakdown.length > 0 ? (
+                                        safeMetrics.employee_status_breakdown.map((status) => (
+                                            <div key={status.status_key} className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge className={getStatusColor(status.status)}>
+                                                        {status.status}
+                                                    </Badge>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-sm font-semibold">{status.count}</p>
+                                                    <p className="text-xs text-muted-foreground">{status.percentage}%</p>
+                                                </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-sm font-semibold">{status.count}</p>
-                                                <p className="text-xs text-muted-foreground">{status.percentage}%</p>
-                                            </div>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">No status data available</p>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
+                                        ))
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground">No status data available</p>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
 
                 {/* Recent Hires and Employment Type */}
