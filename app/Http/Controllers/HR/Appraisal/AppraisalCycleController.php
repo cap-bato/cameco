@@ -166,7 +166,8 @@ class AppraisalCycleController extends Controller
             }
         }
 
-        return redirect()->back()->with('success', $created . ' employees assigned successfully.');
+        return redirect()->route('hr.appraisals.cycles.show', $id)
+            ->with('success', $created . ' employees assigned successfully.');
     }
 
     /**
