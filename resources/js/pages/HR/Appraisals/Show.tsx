@@ -117,7 +117,14 @@ export default function AppraisalsShow({ appraisal, employee, cycle }: Appraisal
                                 label="Overall Score"
                                 value={appraisal.overall_score ? appraisal.overall_score.toFixed(1) : 'Not scored'}
                             />
-                            <InfoRow label="Attendance" value={`${appraisal.attendance_rate.toFixed(1)}%`} />
+                            <InfoRow
+                                label="Attendance"
+                                value={
+                                    appraisal.attendance_rate != null
+                                        ? `${appraisal.attendance_rate.toFixed(1)}%`
+                                        : '—'
+                                }
+                            />
                             <InfoRow label="Late Entries" value={appraisal.lateness_count} />
                             <InfoRow label="Violations" value={appraisal.violation_count} />
                         </CardContent>
