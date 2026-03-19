@@ -25,6 +25,7 @@ import {
     type Position,
     type Department,
 } from '@/components/hr/position-form-modal';
+import { PositionArchiveDialog } from '@/components/hr/position-archive-dialog';
 import { Briefcase, Plus, Edit, Archive, MoreHorizontal } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 
@@ -57,6 +58,7 @@ export default function PositionIndex({
     const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
     const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
     const [selectedDepartmentFilter, setSelectedDepartmentFilter] = useState<number | null>(null);
+    const [positionToArchive, setPositionToArchive] = useState<Position | null>(null);
 
     // Detect if accessed from Admin or HR context
     const isAdminContext = page.url.startsWith('/admin');
@@ -127,9 +129,7 @@ export default function PositionIndex({
     };
 
     const handleArchive = (position: Position) => {
-        if (confirm(`Are you sure you want to archive "${position.title}"?`)) {
-            router.delete(`${routePrefix}/positions/${position.id}`);
-        }
+        setPositionToArchive(position);
     };
 
     /**
@@ -414,6 +414,18 @@ export default function PositionIndex({
                 positions={positions}
                 mode={modalMode}
             />
+
+            {/* Position Archive Dialog */}
+            {positionToArchive && (
+                <PositionArchiveDialog
+                    open={!!positionToArchive}
+                    onOpenChange={(open) => !open && setPositionToArchive(null)}
+                    positionId={positionToArchive.id}
+                    positionTitle={positionToArchive.title}
+                    employeeCount={positionToArchive.employee_count}
+                    routePrefix={routePrefix}
+                />
+            )}
         </AppLayout>
     );
 }

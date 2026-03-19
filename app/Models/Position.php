@@ -58,6 +58,14 @@ class Position extends Model
     }
 
     /**
+     * Employees in this position
+     */
+    public function employees(): HasMany
+    {
+        return $this->hasMany(Employee::class, 'position_id');
+    }
+
+    /**
      * Get the organizational hierarchy up to the root
      */
     public function getHierarchy()

@@ -21,6 +21,7 @@ class PositionController extends Controller
     {
         $this->authorize('viewAny', Position::class);
         $positions = Position::query()
+            ->withCount('employees')
             ->orderBy('title')
             ->get()
             ->map(function (Position $pos) {
@@ -35,6 +36,7 @@ class PositionController extends Controller
                     'salary_min' => $pos->min_salary,
                     'salary_max' => $pos->max_salary,
                     'is_active' => (bool) $pos->is_active,
+                    'employee_count' => $pos->employees_count ?? 0,
                 ];
             });
 
