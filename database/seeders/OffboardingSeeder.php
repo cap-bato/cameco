@@ -15,50 +15,76 @@ class OffboardingSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Ensure at least one department, HR user, and employee exist
-        $department = Department::firstOrCreate(['id' => 1], ['name' => 'HR']);
-        $user = User::updateOrCreate(
-            [
-                'username' => 'hrstaff',
-            ],
-            [
-                'email' => 'hrstaff@example.com',
-                'name' => 'HR Staff',
-                'password' => bcrypt('password'),
-            ]
-        );
-        $employee = Employee::firstOrCreate(
-            ['employee_number' => 'EMP-1001'],
-            [
-                'profile_id' => 1,
-                'department_id' => $department->id,
-                'user_id' => $user->id,
-                'status' => 'active',
-                'position_id' => 1,
-                'employment_type' => 'regular',
-                'date_hired' => now()->subYears(2),
-                'created_by' => $user->id,
-            ]
-        );
+        // Departments
+        $departments = [
+            Department::firstOrCreate(['id' => 1], ['name' => 'HR']),
+            Department::firstOrCreate(['id' => 2], ['name' => 'IT']),
+            Department::firstOrCreate(['id' => 3], ['name' => 'Finance']),
+        ];
 
-        // 2. Create 3 offboarding cases for this employee
-        $service = app(OffboardingService::class);
-        for ($i = 1; $i <= 3; $i++) {
-            $case = OffboardingCase::create([
-                'employee_id' => $employee->id,
-                'initiated_by' => $user->id,
-                'case_number' => $service->generateCaseNumber(),
-                'separation_type' => 'resignation',
-                'separation_reason' => 'Personal reasons',
-                'last_working_day' => Carbon::now()->addDays(10 * $i),
-                'notice_period_days' => 30,
-                'status' => 'pending',
-                'resignation_submitted_at' => Carbon::now()->subDays(2 * $i),
-                'hr_coordinator_id' => $user->id,
-            ]);
-            $service->createDefaultClearanceItems($case);
-            $service->createDefaultAccessRevocations($case);
+        // Users & Employees
+        $users = [];
+        $employees = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $users[$i] = User::updateOrCreate(
+                [ 'username' => 'user'.$i ],
+                [
+                    'email' => "user{$i}@example.com",
+                    'name' => "User {$i}",
+                    'password' => bcrypt('password'),
+                ]
+            );
+            $employees[$i] = Employee::firstOrCreate(
+                ['employee_number' => 'EMP-10'.str_pad($i, 2, '0', STR_PAD_LEFT)],
+                [
+                    'profile_id' => $i,
+                    'department_id' => $departments[$i % 3]->id,
+                    'user_id' => $users[$i]->id,
+                    'status' => 'active',
+                    'position_id' => 1,
+                    'employment_type' => 'regular',
+                    'date_hired' => now()->subYears(rand(1,5)),
+                    'created_by' => $users[$i]->id,
+                ]
+            );
         }
-        $this->command->info('Seeded 3 offboarding cases with default clearance items and access revocations.');
+
+        $service = app(OffboardingService::class);
+        $statuses = ['pending', 'in_progress', 'completed', 'cancelled', 'pending', 'in_progress', 'overdue'];
+        $separationTypes = ['resignation', 'termination', 'retirement', 'end_of_contract'];
+        $now = Carbon::now();
+
+        // Diverse offboarding cases for analytics
+        $caseCount = 0;
+        foreach ($employees as $idx => $employee) {
+            for ($j = 0; $j < 3; $j++) {
+                $status = $statuses[($idx + $j) % count($statuses)];
+                $sepType = $separationTypes[($idx + $j) % count($separationTypes)];
+                $daysOffset = ($j - 1) * 30 + ($idx * 3); // some past, some future
+                $lastWorkingDay = $now->copy()->addDays($daysOffset - 10);
+                $createdAt = $now->copy()->addDays($daysOffset - 40);
+                $completedAt = in_array($status, ['completed']) ? $lastWorkingDay->copy()->addDays(1) : null;
+
+                $case = OffboardingCase::create([
+                    'employee_id' => $employee->id,
+                    'initiated_by' => $users[$idx]->id,
+                    'case_number' => $service->generateCaseNumber(),
+                    'separation_type' => $sepType,
+                    'separation_reason' => ucfirst($sepType).' reason',
+                    'last_working_day' => $lastWorkingDay,
+                    'notice_period_days' => 30,
+                    'status' => $status === 'overdue' ? 'pending' : $status,
+                    'resignation_submitted_at' => $createdAt->copy()->subDays(2),
+                    'hr_coordinator_id' => $users[1]->id,
+                    'completed_at' => $completedAt,
+                    'created_at' => $createdAt,
+                    'updated_at' => $createdAt,
+                ]);
+                $service->createDefaultClearanceItems($case);
+                $service->createDefaultAccessRevocations($case);
+                $caseCount++;
+            }
+        }
+        $this->command->info("Seeded {$caseCount} offboarding cases with diverse statuses, types, and dates for analytics.");
     }
 }
