@@ -176,7 +176,7 @@ export default function OffboardingAnalytics({
             <Head title="Exit Analytics & Reports" />
 
             {/* Header and Filters */}
-            <div className="mb-8">
+            <div className="space-y-6 p-6 mb-8">
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900">Exit Analytics & Reports</h1>
