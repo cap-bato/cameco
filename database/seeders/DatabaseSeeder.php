@@ -191,5 +191,9 @@ class DatabaseSeeder extends Seeder
             if (class_exists(LeaveRequestSeeder::class)) {
                 $this->call(LeaveRequestSeeder::class);
             }
+
+            if (class_exists(LeaveBalanceSeeder::class)) {
+                $this->call(LeaveBalanceSeeder::class);
+            }
     }
 }
