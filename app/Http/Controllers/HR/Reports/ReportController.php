@@ -88,9 +88,14 @@ class ReportController extends Controller
 
         // Live leave statistics
         $now = now();
-        $yearStart = $now->copy()->startOfYear();
+        $months = collect(range(0, 5))->map(function ($i) use ($now) {
+            return $now->copy()->subMonths($i)->startOfMonth();
+        })->reverse();
+        $earliestMonth = $months->first()->copy()->startOfMonth();
+        $latestMonth = $months->last()->copy()->endOfMonth();
         $leaveRequests = \App\Models\LeaveRequest::with('leavePolicy')
-            ->whereYear('start_date', $now->year)
+            ->whereDate('start_date', '>=', $earliestMonth->toDateString())
+            ->whereDate('start_date', '<=', $latestMonth->toDateString())
             ->get();
 
         $summary = [
