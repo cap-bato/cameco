@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,14 +23,7 @@ interface Employee {
     };
 }
 
-interface BadgeSubmitResult {
-    employeeName: string;
-    employeeId: string;
-    cardUid: string;
-    cardType: string;
-    expiresAt: string;
-    issuedAt: string;
-}
+
 
 interface CreateBadgeProps {
     employees: Employee[];
@@ -43,7 +36,6 @@ export default function CreateBadge({ employees, existingBadgeUids }: CreateBadg
     const [submitResult, setSubmitResult] = useState<{
         success: boolean;
         message: string;
-        badgeData?: BadgeSubmitResult;
     } | null>(null);
 
     const breadcrumbs = [
@@ -58,43 +50,40 @@ export default function CreateBadge({ employees, existingBadgeUids }: CreateBadg
         setSubmitResult(null);
     };
 
-    const handleSubmit = async (formData: BadgeFormData) => {
+    const handleSubmit = (formData: BadgeFormData) => {
         setIsSubmitting(true);
 
-        // Simulate API call (Phase 1 - mock data)
-        setTimeout(() => {
-            try {
-                // Mock success response
-                const selectedEmployee = employees.find((emp) => emp.id === formData.employee_id);
+        const selectedEmployee = employees.find((emp) => emp.id === formData.employee_id);
 
-                setSubmitResult({
-                    success: true,
-                    message: `Badge successfully issued to ${selectedEmployee?.name}`,
-                    badgeData: {
-                        employeeName: selectedEmployee?.name || '',
-                        employeeId: selectedEmployee?.employee_id || '',
-                        cardUid: formData.card_uid,
-                        cardType: formData.card_type,
-                        expiresAt: formData.expires_at || '',
-                        issuedAt: new Date().toISOString(),
-                    },
-                });
-
-                setIsSubmitting(false);
-                setIsModalOpen(false);
-
-                // Auto-clear success message after 5 seconds
-                setTimeout(() => {
-                    setSubmitResult(null);
-                }, 5000);
-            } catch {
-                setSubmitResult({
-                    success: false,
-                    message: 'Failed to issue badge. Please try again.',
-                });
-                setIsSubmitting(false);
+        router.post(
+            route('hr.timekeeping.badges.store'),
+            {
+                employee_id:               formData.employee_id,
+                card_uid:                  formData.card_uid,
+                card_type:                 formData.card_type,
+                expires_at:                formData.expires_at ?? null,
+                notes:                     formData.issue_notes ?? null, // map issue_notes → notes
+                acknowledgement_signature: formData.acknowledgement_signature ?? null,
+                replace_existing:          selectedEmployee?.badge?.is_active ? true : false,
+            },
+            {
+                onSuccess: () => {
+                    setIsSubmitting(false);
+                    setIsModalOpen(false);
+                    // Backend redirects to badges.index with a flash success message
+                },
+                onError: (errors) => {
+                    setIsSubmitting(false);
+                    setSubmitResult({
+                        success: false,
+                        message: errors.error
+                            ?? errors.employee_id
+                            ?? errors.card_uid
+                            ?? 'Failed to issue badge. Please try again.',
+                    });
+                },
             }
-        }, 1000);
+        );
     };
 
     return (
@@ -121,39 +110,7 @@ export default function CreateBadge({ employees, existingBadgeUids }: CreateBadg
                 </div>
 
                 {/* Success/Error Alert */}
-                {submitResult && (
-                    <Alert className={submitResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}>
-                        <div className="flex gap-3">
-                            {submitResult.success ? (
-                                <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                            ) : (
-                                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-                            )}
-                            <div>
-                                <AlertTitle className={submitResult.success ? 'text-green-900' : 'text-red-900'}>
-                                    {submitResult.success ? 'Badge Issued Successfully' : 'Error'}
-                                </AlertTitle>
-                                <AlertDescription className={submitResult.success ? 'text-green-800' : 'text-red-800'}>
-                                    {submitResult.message}
-                                </AlertDescription>
-                                {submitResult.badgeData && (
-                                    <div className="mt-3 bg-white/50 rounded p-3 text-sm space-y-1">
-                                        <p>
-                                            <strong>Employee:</strong> {submitResult.badgeData.employeeName} ({submitResult.badgeData.employeeId})
-                                        </p>
-                                        <p>
-                                            <strong>Card UID:</strong>{' '}
-                                            <code className="font-mono">{submitResult.badgeData.cardUid}</code>
-                                        </p>
-                                        <p>
-                                            <strong>Card Type:</strong> {submitResult.badgeData.cardType}
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </Alert>
-                )}
+                {/* Success/Error Alert removed: backend handles flash message on redirect */}
 
                 {/* Main Content */}
                 <Card>
