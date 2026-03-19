@@ -362,25 +362,25 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 ->middleware('permission:hr.ats.view')
                 ->name('job-postings.index');
             Route::get('/job-postings/create', [JobPostingController::class, 'create'])
-                ->middleware('permission:hr.ats.candidates.create')
+                ->middleware('permission:hr.ats.job-postings.create')
                 ->name('job-postings.create');
             Route::post('/job-postings', [JobPostingController::class, 'store'])
-                ->middleware('permission:hr.ats.candidates.create')
+                ->middleware('permission:hr.ats.job-postings.create')
                 ->name('job-postings.store');
             Route::get('/job-postings/{id}/edit', [JobPostingController::class, 'edit'])
-                ->middleware('permission:hr.ats.candidates.update')
+                ->middleware('permission:hr.ats.job-postings.update')
                 ->name('job-postings.edit');
             Route::put('/job-postings/{id}', [JobPostingController::class, 'update'])
-                ->middleware('permission:hr.ats.candidates.update')
+                ->middleware('permission:hr.ats.job-postings.update')
                 ->name('job-postings.update');
             Route::delete('/job-postings/{id}', [JobPostingController::class, 'destroy'])
-                ->middleware('permission:hr.ats.candidates.delete')
+                ->middleware('permission:hr.ats.job-postings.delete')
                 ->name('job-postings.destroy');
             Route::post('/job-postings/{id}/publish', [JobPostingController::class, 'publish'])
-                ->middleware('permission:hr.ats.candidates.update')
+                ->middleware('permission:hr.ats.job-postings.update')
                 ->name('job-postings.publish');
             Route::post('/job-postings/{id}/close', [JobPostingController::class, 'close'])
-                ->middleware('permission:hr.ats.candidates.update')
+                ->middleware('permission:hr.ats.job-postings.update')
                 ->name('job-postings.close');
 
             // Facebook Integration Routes
@@ -421,6 +421,9 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::put('/candidates/{id}', [CandidateController::class, 'update'])
                 ->middleware('permission:hr.ats.candidates.update')
                 ->name('candidates.update');
+            Route::delete('/candidates/{id}', [CandidateController::class, 'destroy'])
+                ->middleware('permission:hr.ats.candidates.delete')
+                ->name('candidates.destroy');
             Route::post('/candidates/{id}/notes', [CandidateController::class, 'addNote'])
                 ->middleware('permission:hr.ats.candidates.update')
                 ->name('candidates.notes.store');
@@ -441,6 +444,18 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::post('/applications/{id}/reject', [ApplicationController::class, 'reject'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.reject');
+            Route::post('/applications/{id}/move', [ApplicationController::class, 'move'])
+                ->middleware('permission:hr.ats.applications.update')
+                ->name('applications.move');
+            Route::post('/applications/{id}/schedule-interview', [ApplicationController::class, 'scheduleInterview'])
+                ->middleware('permission:hr.ats.applications.update')
+                ->name('applications.schedule-interview');
+            Route::post('/applications/{id}/generate-offer', [ApplicationController::class, 'generateOffer'])
+                ->middleware('permission:hr.ats.applications.update')
+                ->name('applications.generate-offer');
+            Route::post('/applications/{id}/notes', [ApplicationController::class, 'addNote'])
+                ->middleware('permission:hr.ats.applications.update')
+                ->name('applications.notes.store');
 
             // Interviews
             Route::get('/interviews', [InterviewController::class, 'index'])
@@ -455,7 +470,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::put('/interviews/{id}', [InterviewController::class, 'update'])
                 ->middleware('permission:hr.ats.interviews.schedule')
                 ->name('interviews.update');
-            Route::post('/interviews/{id}/feedback', [InterviewController::class, 'addFeedback'])
+            Route::post('/interviews/{id}/feedback', [InterviewController::class, 'updateFeedback'])
                 ->middleware('permission:hr.ats.interviews.schedule')
                 ->name('interviews.feedback');
             Route::post('/interviews/{id}/cancel', [InterviewController::class, 'cancel'])

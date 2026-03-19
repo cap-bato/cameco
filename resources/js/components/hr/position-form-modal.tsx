@@ -29,6 +29,7 @@ export interface Position {
     title: string;
     code: string;
     description: string | null;
+    level: string;
     department_id: number;
     reports_to: number | null;
     salary_min: number | null;
@@ -70,6 +71,7 @@ export function PositionFormModal({
         title: '',
         code: '',
         description: '',
+        level: '',
         department_id: '',
         reports_to: '',
         salary_min: '',
@@ -85,7 +87,7 @@ export function PositionFormModal({
             setFormData({
                 title: position.title,
                 code: position.code,
-                description: position.description || '',
+                level: position.level || '',
                 department_id: String(position.department_id),
                 reports_to: position.reports_to ? String(position.reports_to) : '',
                 salary_min: position.salary_min ? String(position.salary_min) : '',
@@ -98,6 +100,7 @@ export function PositionFormModal({
                 title: '',
                 code: '',
                 description: '',
+                level: '',
                 department_id: '',
                 reports_to: '',
                 salary_min: '',
@@ -147,6 +150,11 @@ export function PositionFormModal({
             return;
         }
 
+        if (!formData.level.trim()) {
+            setError('Position level is required');
+            return;
+        }
+
         if (!formData.department_id) {
             setError('Department is required');
             return;
@@ -174,6 +182,7 @@ export function PositionFormModal({
                 title: formData.title.trim(),
                 code: formData.code.trim(),
                 description: formData.description.trim() || null,
+                level: formData.level.trim(),
                 department_id: Number(formData.department_id),
                 reports_to: formData.reports_to ? Number(formData.reports_to) : null,
                 salary_min: formData.salary_min ? parseFloat(formData.salary_min) : null,
@@ -236,6 +245,19 @@ export function PositionFormModal({
                             name="code"
                             placeholder="e.g., SHM001"
                             value={formData.code}
+                            onChange={handleInputChange}
+                            disabled={isLoading}
+                        />
+                    </div>
+
+                    {/* Position Level */}
+                    <div className="space-y-2">
+                        <Label htmlFor="level">Position Level *</Label>
+                        <Input
+                            id="level"
+                            name="level"
+                            placeholder="e.g., junior, mid, senior, lead, manager"
+                            value={formData.level}
                             onChange={handleInputChange}
                             disabled={isLoading}
                         />

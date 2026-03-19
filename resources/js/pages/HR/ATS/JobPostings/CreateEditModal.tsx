@@ -219,7 +219,7 @@ export function JobPostingCreateEditModal({
             />
           </div>
 
-          {/* Auto-Post to Facebook */}
+          {/* Auto-Post to Facebook 
           <div className="space-y-2">
             <Label className="text-sm">Facebook Integration</Label>
             <label className="flex items-start gap-3 cursor-pointer p-3 border rounded-md hover:bg-accent/50 transition-colors">
@@ -245,7 +245,7 @@ export function JobPostingCreateEditModal({
                 </p>
               </div>
             </label>
-          </div>
+          </div> */}
 
           {/* Info Alert */}
           <Alert>

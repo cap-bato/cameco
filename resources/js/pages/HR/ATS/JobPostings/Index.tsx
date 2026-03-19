@@ -457,7 +457,7 @@ const handleConfirmAction = async () => {
                     </Button>
                   )}
                   
-                  {/* Facebook Post Button */}
+                  {/* Facebook Post Button
                   {job.status === 'open' && !job.facebook_post_id && (
                     <Button
                       variant="outline"
@@ -468,7 +468,7 @@ const handleConfirmAction = async () => {
                       <Facebook className="h-4 w-4" />
                       Post to Facebook
                     </Button>
-                  )}
+                  )} */}
                 </CardContent>
               </Card>
             ))

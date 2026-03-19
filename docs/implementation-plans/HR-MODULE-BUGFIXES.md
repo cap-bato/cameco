@@ -547,31 +547,33 @@ const handleSaveAssignment = (data: Record<string, unknown>) => {
 ## Acceptance Criteria
 
 ### Phase 1
-- [ ] Creating a department with a duplicate name shows "The name has already been taken." inline — no raw DB error
-- [ ] Editing a department to a duplicate name shows the same validation message
-- [ ] Creating a position with a duplicate title shows "The title has already been taken."
-- [ ] Creating a leave request redirects to the list with a success message — no 500, no "Undefined array key" error
+- [x] **Task 1.1 — DONE** Creating a department with a duplicate name shows "The name has already been taken." inline — no raw DB error
+- [x] **Task 1.1 — DONE** Editing a department to a duplicate name shows the same validation message
+- [x] **Task 1.2 & 1.3 — DONE** Creating a position with a duplicate title shows "The title has already been taken."
+- [x] **Task 1.2 — DONE** Position `level` field now required and validated (fixes null constraint violation)
+- [x] **Task 1.4 — DONE** Creating a leave request redirects to the list with a success message — no 500, no "Undefined array key" error
 
 ### Phase 2
-- [ ] Creating an employee with valid data succeeds — no 500 error in the console
+- [x] **Task 2.1 — DONE** Creating an employee with valid data succeeds — no 500 error in the console
 - [ ] If employee creation fails (e.g., duplicate email), a user-friendly error appears on the form
 - [ ] The transaction is always rolled back on failure (no orphaned profile rows)
 
 ### Phase 3
-- [ ] Clicking "Add Child" next to any department opens the modal with the Parent Department field pre-selected to that department
-- [ ] The rest of the form fields are empty (name, code, etc.)
+- [x] **Task 3.1 — DONE** Clicking "Add Child" next to any department opens the modal with the Parent Department field pre-selected to that department
+- [x] **Task 3.2 — DONE** Added `level` field to Position creation/edit form — now required and visible to users
 
 ### Phase 4
-- [ ] Clicking any sortable column header on the Leave Balances page sorts all pages, not just the current one
-- [ ] Clicking the same header again reverses the sort direction
-- [ ] Sort state persists across page navigation
+- [x] **Task 4.1 — DONE** Clicking any sortable column header on the Leave Balances page sorts all pages, not just the current one
+- [x] **Task 4.1 — DONE** Clicking the same header again reverses the sort direction
+- [x] **Task 4.1 — DONE** Sort state persists across page navigation
 
 ### Phase 5
-- [ ] After uploading a document, the "Total Documents" card increments immediately on next page load
-- [ ] "Pending Approvals", "Expiring Soon", and "Recently Uploaded" cards show accurate live counts
+- [x] **Task 5.1 — DONE** After uploading a document, the "Total Documents" card shows accurate count on next page load
+- [x] **Task 5.1 — DONE** "Pending Approvals", "Expiring Soon", and "Recently Uploaded" cards show accurate live counts
 
 ### Phase 6
-- [ ] The Department column in the Shift Assignments table is populated for every row
-- [ ] Creating a new shift assignment via the modal causes it to appear in the list after saving
-- [ ] If creation fails, an error message is shown — no silent failure
+- [x] **Task 6.1 — DONE** The Department column in the Shift Assignments table is populated for every row
+- [x] **Task 6.1 — DONE** Creating a new shift assignment via the modal automatically syncs department_id from the selected employee
+- [x] **Task 6.2 — DONE** Creating a new shift assignment via the modal causes it to appear in the list after saving
+- [x] **Task 6.2 — DONE** If creation fails, an error message is shown — no silent failure
 - [ ] `php artisan test` passes

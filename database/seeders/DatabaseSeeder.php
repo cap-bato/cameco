@@ -16,7 +16,7 @@ class DatabaseSeeder extends Seeder
         User::firstOrCreate(
             ['email' => 'superadmin@cameco.com'],
             [
-                'name'              => 'Test User',
+                'name'              => 'Alex Tamayo',
                 'username'          => 'superadmin',
                 'password'          => 'password',
                 'email_verified_at' => now(),
@@ -26,7 +26,7 @@ class DatabaseSeeder extends Seeder
         User::firstOrCreate(
             ['email' => 'hrmanager@cameco.com'],
             [
-                'name'              => 'HR Manager',
+                'name'              => 'Mitch Magno',
                 'username'          => 'hrmanager',
                 'password'          => 'password',
                 'email_verified_at' => now(),

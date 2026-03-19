@@ -59,10 +59,12 @@ class EmployeeService
             ]);
             
             return $path;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Profile picture upload failed', [
                 'employee_number' => $employeeNumber,
                 'error' => $e->getMessage(),
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
             ]);
             return null;
         }
@@ -182,11 +184,13 @@ class EmployeeService
                 'employee' => $employee->load(['profile', 'department', 'supervisor', 'position', 'dependents']),
                 'message' => 'Employee created successfully'
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
 
             Log::error('Employee creation failed', [
                 'error' => $e->getMessage(),
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
             ]);
 
             return [
@@ -304,12 +308,14 @@ class EmployeeService
                 'employee' => $updatedEmployee->load(['profile', 'department', 'supervisor', 'position', 'dependents']),
                 'message' => 'Employee updated successfully'
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
 
             Log::error('Employee update failed', [
                 'employee_id' => $id,
                 'error' => $e->getMessage(),
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
             ]);
 
             return [
@@ -413,12 +419,14 @@ class EmployeeService
                 'success' => true,
                 'message' => 'Employee archived successfully'
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
 
             Log::error('Employee archive failed', [
                 'employee_id' => $employeeId,
                 'error' => $e->getMessage(),
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
             ]);
 
             return [
@@ -463,12 +471,14 @@ class EmployeeService
                 'employee' => $employee->load(['profile', 'department', 'supervisor', 'position']),
                 'message' => 'Employee restored successfully'
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
 
             Log::error('Employee restore failed', [
                 'employee_id' => $id,
                 'error' => $e->getMessage(),
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
             ]);
 
             return [

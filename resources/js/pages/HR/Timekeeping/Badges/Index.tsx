@@ -145,10 +145,7 @@ export default function BadgesIndex({ badges, stats, filters, employees, employe
     const handleReplacementSubmit = useCallback((data: { old_badge_id: string; new_card_uid: string; reason: string }) => {
         // Simulate replacement submission
         console.log('Badge replacement submitted:', data);
-        setReplacementResult({
-            success: true,
-            message: `Badge ${data.new_card_uid} has been successfully issued as replacement for ${data.old_badge_id}. Old badge ${data.old_badge_id} has been deactivated.`,
-        });
+        setReplacementResult({ success: true, message: `...` });
         setIsReplacementModalOpen(false);
         // In Phase 2, this will submit to the backend
         setTimeout(() => setReplacementResult(null), 5000);

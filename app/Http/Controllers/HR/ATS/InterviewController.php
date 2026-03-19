@@ -37,15 +37,20 @@ public function index(Request $request)
 
     if ($search) {
         $query->whereHas('application.candidate', function ($q) use ($search) {
-            $q->where('first_name', 'ilike', "%{$search}%")
-              ->orWhere('last_name', 'ilike', "%{$search}%");
+            $q->whereRaw('LOWER(first_name) LIKE ?', ['%' . strtolower($search) . '%'])
+              ->orWhereRaw('LOWER(last_name) LIKE ?', ['%' . strtolower($search) . '%']);
         });
     }
 
     $interviews = $query->get()->map(function ($interview) {
+        $candidate = optional(optional($interview->application)->candidate);
+        $candidateName = $candidate && $candidate->first_name
+            ? trim($candidate->first_name . ' ' . $candidate->last_name)
+            : 'Unknown';
+        
         return [
             'id' => $interview->id,
-            'candidate_name' => $interview->application->candidate->first_name . ' ' . $interview->application->candidate->last_name,
+            'candidate_name' => $candidateName,
             'interviewer_name' => $interview->interviewer_name,
             'job_title' => $interview->job_title,
             'status' => $interview->status,
@@ -64,7 +69,7 @@ public function index(Request $request)
         'total_interviews' => Interview::count(),
         'scheduled' => Interview::where('status', 'scheduled')->count(),
         'completed' => Interview::where('status', 'completed')->count(),
-        'cancelled' => Interview::where('status', 'canceled')->count(),
+        'cancelled' => Interview::where('status', 'cancelled')->count(),
         'no_show' => Interview::where('status', 'no_show')->count(),
         'upcoming_this_week' => Interview::whereBetween('scheduled_date', [
             now()->startOfWeek(),
@@ -94,7 +99,7 @@ public function store(Request $request)
         'scheduled_date' => 'required|date',
         'scheduled_time' => 'required',
         'duration_minutes' => 'nullable|integer|min:15|max:480',
-        'location_type' => 'required|in:office,virtual',
+        'location_type' => 'required|in:office,video_call,phone',
         'interviewer_name' => 'required|string|max:255',
     ]);
 
@@ -121,11 +126,11 @@ public function update(Request $request, Interview $interview)
     $validated = $request->validate([
         'scheduled_date' => 'nullable|date|after_or_equal:today',
         'scheduled_time' => 'nullable',
-        'duration_minutes' => 'nullable|integer|min:1',
+        'duration_minutes' => 'nullable|integer|min:15|max:480',
         'location_type' => 'nullable|string',
         'feedback' => 'nullable|string',
         'score' => 'nullable|numeric|min:0|max:100',
-        'recommendation' => 'nullable|in:hire,pending,reject',
+        'recommendation' => 'nullable|in:hire,no_hire,hold',
     ]);
 
     $interview->update($validated);
@@ -199,5 +204,18 @@ public function updateFeedback(Request $request, Interview $interview)
     ]);
 
     return back()->with('success', 'Feedback saved!');
+}
+
+public function markCompleted(Request $request, Interview $interview)
+{
+    $validated = $request->validate([
+        'score'          => 'nullable|numeric|min:0|max:100',
+        'recommendation' => 'nullable|in:hire,no_hire,hold',
+        'feedback'       => 'nullable|string',
+    ]);
+
+    $interview->update(array_merge($validated, ['status' => 'completed']));
+
+    return response()->json(['success' => true, 'interview' => $interview]);
 }
 }

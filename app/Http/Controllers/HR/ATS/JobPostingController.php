@@ -106,7 +106,7 @@ class JobPostingController extends Controller
         ]);
 
         $jobPosting = JobPosting::create(array_merge($validated, [
-            'created_by' => '1',
+            'created_by' => Auth::id(),
             'posted_at' => $validated['status'] === 'open' ? now() : null,
         ]));
 

@@ -24,8 +24,6 @@ interface Employee {
     };
 }
 
-
-
 interface CreateBadgeProps {
     employees: Employee[];
     existingBadgeUids: string[];

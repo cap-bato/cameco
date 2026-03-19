@@ -24,6 +24,8 @@ class LeaveBalanceController extends Controller
         $employeeId = $request->input('employee_id');
         $perPage = (int) $request->input('per_page', 25); // Default: 25 employees per page
         $page = (int) $request->input('page', 1);
+        $sortBy = $request->input('sort_by', 'name');        // ← new
+        $sortDirection = $request->input('sort_direction', 'asc');  // ← new
 
         // Validate per_page value
         $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 25;
@@ -60,26 +62,72 @@ class LeaveBalanceController extends Controller
         // Get all balances for summary calculations (before pagination)
         $allBalances = $balancesQuery->get();
 
-        // Group by employee
-        $groupedBalances = $allBalances->groupBy('employee_id')
-            ->map(function ($employeeBalances) {
-                $employee = $employeeBalances->first()->employee;
-                
-                return [
-                    'id' => $employee->id,
-                    'employee_number' => $employee->employee_number,
-                    'name' => $employee->profile?->first_name . ' ' . $employee->profile?->last_name,
-                    'department' => $employee->department?->name,
-                    'balances' => $employeeBalances->map(fn($bal) => [
-                        'type' => $bal->leavePolicy->code,
-                        'name' => $bal->leavePolicy->name,
-                        'earned' => (float) $bal->earned,
-                        'used' => (float) $bal->used,
-                        'remaining' => (float) $bal->remaining,
-                        'carried_forward' => (float) $bal->carried_forward,
-                    ])->values(),
-                ];
-            })->values();
+        // Determine if sorting by nested leave balance fields or group-level fields
+        $sortByNestedField = in_array($sortBy, ['earned', 'used', 'remaining', 'carried_forward', 'leave_type']);
+
+        if ($sortByNestedField) {
+            // Sort flat collection by nested field BEFORE grouping
+            if ($sortBy === 'leave_type') {
+                $sortedBalances = $allBalances->sortBy(function($bal) { 
+                    return $bal->leavePolicy->name; 
+                }, SORT_REGULAR, $sortDirection === 'desc');
+            } else {
+                // Numeric fields: earned, used, remaining, carried_forward
+                $sortedBalances = $allBalances->sortBy($sortBy, SORT_REGULAR, $sortDirection === 'desc');
+            }
+            
+            // NOW group after sorting
+            $groupedBalances = $sortedBalances->groupBy('employee_id')
+                ->map(function ($employeeBalances) {
+                    $employee = $employeeBalances->first()->employee;
+                    
+                    return [
+                        'id' => $employee->id,
+                        'employee_number' => $employee->employee_number,
+                        'name' => $employee->profile?->first_name . ' ' . $employee->profile?->last_name,
+                        'department' => $employee->department?->name,
+                        'balances' => $employeeBalances->map(fn($bal) => [
+                            'type' => $bal->leavePolicy->code,
+                            'name' => $bal->leavePolicy->name,
+                            'earned' => (float) $bal->earned,
+                            'used' => (float) $bal->used,
+                            'remaining' => (float) $bal->remaining,
+                            'carried_forward' => (float) $bal->carried_forward,
+                        ])->values(),
+                    ];
+                })->values();
+        } else {
+            // Group by employee first
+            $groupedBalances = $allBalances->groupBy('employee_id')
+                ->map(function ($employeeBalances) {
+                    $employee = $employeeBalances->first()->employee;
+                    
+                    return [
+                        'id' => $employee->id,
+                        'employee_number' => $employee->employee_number,
+                        'name' => $employee->profile?->first_name . ' ' . $employee->profile?->last_name,
+                        'department' => $employee->department?->name,
+                        'balances' => $employeeBalances->map(fn($bal) => [
+                            'type' => $bal->leavePolicy->code,
+                            'name' => $bal->leavePolicy->name,
+                            'earned' => (float) $bal->earned,
+                            'used' => (float) $bal->used,
+                            'remaining' => (float) $bal->remaining,
+                            'carried_forward' => (float) $bal->carried_forward,
+                        ])->values(),
+                    ];
+                })->values();
+
+            // Sort $groupedBalances by group-level field (name, department, number)
+            $groupedBalances = $groupedBalances->sortBy(function ($item) use ($sortBy) {
+                return match ($sortBy) {
+                    'name'       => $item['name'],
+                    'department' => $item['department'],
+                    'number'     => $item['employee_number'],
+                    default      => $item['name'],
+                };
+            }, SORT_REGULAR, $sortDirection === 'desc');
+        }
 
         // Apply pagination AFTER grouping
         $paginated = new LengthAwarePaginator(
@@ -117,6 +165,8 @@ class LeaveBalanceController extends Controller
             'selectedEmployeeId' => $employeeId,
             'years' => $years,
             'summary' => $summary,
+            'sortBy'        => $sortBy,           // ← pass back to frontend
+            'sortDirection' => $sortDirection,    // ← pass back to frontend
         ]);
     }
 }

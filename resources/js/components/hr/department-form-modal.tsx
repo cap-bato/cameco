@@ -19,6 +19,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import { usePage } from '@inertiajs/react';
 
 // ============================================================================
 // Type Definitions
@@ -55,6 +56,7 @@ export function DepartmentFormModal({
     departments = [],
     mode = 'create'
 }: DepartmentFormModalProps) {
+    const page = usePage();
     const [formData, setFormData] = useState({
         name: '',
         code: '',
@@ -64,6 +66,7 @@ export function DepartmentFormModal({
     });
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
 
     // Initialize form with department data when editing
     useEffect(() => {
@@ -81,12 +84,21 @@ export function DepartmentFormModal({
                 name: '',
                 code: '',
                 description: '',
-                parent_id: '',
+                // Pre-fill parent_id if passed (e.g. from "Add Child" action)
+                parent_id: department?.parent_id ? String(department.parent_id) : '',
                 is_active: true,
             });
         }
+        
+        // Check for validation errors from Inertia
+        const errors = page.props.errors as { [key: string]: string } | undefined;
+        if (errors && Object.keys(errors).length > 0) {
+            setFieldErrors(errors);
+        } else {
+            setFieldErrors({});
+        }
         setError(null);
-    }, [mode, department, isOpen]);
+    }, [mode, department, isOpen, page.props.errors]);
 
     const handleInputChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -115,6 +127,7 @@ export function DepartmentFormModal({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+        setFieldErrors({});
 
         // Validation
         if (!formData.name.trim()) {
@@ -142,7 +155,7 @@ export function DepartmentFormModal({
                 parent_id: formData.parent_id ? Number(formData.parent_id) : null,
                 is_active: formData.is_active,
             });
-            onClose();
+            // Only close if no field errors (Inertia will set them if validation fails)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
@@ -187,7 +200,11 @@ export function DepartmentFormModal({
                             value={formData.name}
                             onChange={handleInputChange}
                             disabled={isLoading}
+                            className={fieldErrors.name ? 'border-red-500' : ''}
                         />
+                        {fieldErrors.name && (
+                            <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.name}</p>
+                        )}
                     </div>
 
                     {/* Department Code */}
@@ -200,7 +217,11 @@ export function DepartmentFormModal({
                             value={formData.code}
                             onChange={handleInputChange}
                             disabled={isLoading}
+                            className={fieldErrors.code ? 'border-red-500' : ''}
                         />
+                        {fieldErrors.code && (
+                            <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.code}</p>
+                        )}
                     </div>
 
                     {/* Description */}
@@ -214,14 +235,18 @@ export function DepartmentFormModal({
                             onChange={handleInputChange}
                             disabled={isLoading}
                             rows={3}
+                            className={fieldErrors.description ? 'border-red-500' : ''}
                         />
+                        {fieldErrors.description && (
+                            <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.description}</p>
+                        )}
                     </div>
 
                     {/* Parent Department */}
                     <div className="space-y-2">
                         <Label htmlFor="parent_id">Parent Department (optional)</Label>
                         <Select value={formData.parent_id} onValueChange={handleSelectChange}>
-                            <SelectTrigger id="parent_id" disabled={isLoading}>
+                            <SelectTrigger id="parent_id" disabled={isLoading} className={fieldErrors.parent_id ? 'border-red-500' : ''}>
                                 <SelectValue placeholder="Select parent department..." />
                             </SelectTrigger>
                             <SelectContent>
@@ -232,19 +257,27 @@ export function DepartmentFormModal({
                                 ))}
                             </SelectContent>
                         </Select>
+                        {fieldErrors.parent_id && (
+                            <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.parent_id}</p>
+                        )}
                     </div>
 
                     {/* Active Status */}
-                    <div className="flex items-center space-x-2">
-                        <Checkbox
-                            id="is_active"
-                            checked={formData.is_active}
-                            onCheckedChange={handleCheckboxChange}
-                            disabled={isLoading}
-                        />
-                        <Label htmlFor="is_active" className="font-normal">
-                            Active
-                        </Label>
+                    <div className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="is_active"
+                                checked={formData.is_active}
+                                onCheckedChange={handleCheckboxChange}
+                                disabled={isLoading}
+                            />
+                            <Label htmlFor="is_active" className="font-normal">
+                                Active
+                            </Label>
+                        </div>
+                        {fieldErrors.is_active && (
+                            <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.is_active}</p>
+                        )}
                     </div>
 
                     {/* Buttons */}

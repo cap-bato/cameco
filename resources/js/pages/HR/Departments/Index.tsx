@@ -155,6 +155,10 @@ export default function DepartmentIndex({
             onSuccess: () => {
                 setIsModalOpen(false);
             },
+            onError: (errors) => {
+                // Validation errors will be passed to the onError callback
+                // The modal will access them from page.props.errors via usePage()
+            }
         });
     };
 

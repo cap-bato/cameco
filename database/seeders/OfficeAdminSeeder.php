@@ -97,7 +97,7 @@ class OfficeAdminSeeder extends Seeder
         $adminUser = User::firstOrCreate(
             ['email' => 'admin@cameco.com'],
             [
-                'name' => 'Office Admin',
+                'name' => 'Bob Percival',
                 'username' => 'officeadmin',
                 'password' => Hash::make('password'),
                 'email_verified_at' => now(),

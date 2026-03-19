@@ -15,6 +15,11 @@ import {
 } from '@/components/ui/select';
 import { Calendar, TrendingUp, TrendingDown, Search, X, ChevronLeft, ChevronRight, ChevronDown, ArrowUpDown } from 'lucide-react';
 
+// Declare route as a global function (Ziggy)
+declare global {
+    function route(name: string, params?: Record<string, string | number>): string;
+}
+
 // Define window with route helper (Ziggy)
 interface WindowWithRoute extends Window {
     route?: (name: string, params?: Record<string, string | number>) => string;
@@ -71,6 +76,8 @@ interface LeaveBalancesPageProps {
         total_used: number;
         total_remaining: number;
     };
+    sortBy?: string;
+    sortDirection?: 'asc' | 'desc';
 }
 
 type SortColumn = 'employee' | 'leave_type' | 'earned' | 'used' | 'remaining' | 'carried_forward';
@@ -101,6 +108,8 @@ export default function LeaveBalances({
     summary,
     selectedYear: initialYear,
     years: initialYears,
+    sortBy: initialSortBy,
+    sortDirection: initialSortDirection,
 }: LeaveBalancesPageProps) {
     const employeeBalances = Array.isArray(balances) ? balances : [];
     const paginationData = pagination || {
@@ -113,13 +122,15 @@ export default function LeaveBalances({
         has_more_pages: false,
     };
 
+    // Get current sort state from props (server-side)
+    const currentSortBy = initialSortBy || 'name';
+    const currentSortDirection = initialSortDirection || 'asc';
+
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedYear, setSelectedYear] = useState((initialYear || new Date().getFullYear()).toString());
     const [selectedLeaveType, setSelectedLeaveType] = useState('all');
     const [perPage, setPerPage] = useState(paginationData.per_page.toString());
     const [expandedEmployees, setExpandedEmployees] = useState<Set<number>>(new Set());
-    const [sortColumn, setSortColumn] = useState<SortColumn>('employee');
-    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [showOnlyWithBalance, setShowOnlyWithBalance] = useState(false);
     const [showOnlyWithUsage, setShowOnlyWithUsage] = useState(false);
     const [selectedDepartment, setSelectedDepartment] = useState('all');
@@ -153,61 +164,40 @@ export default function LeaveBalances({
         });
     };
 
-    // Sort balances by column
-    const sortBalances = (balances: typeof flatBalances, sortCol: SortColumn, sortDir: SortDirection) => {
-        return [...balances].sort((a, b) => {
-            let aVal: string | number = '';
-            let bVal: string | number = '';
-            let isNumeric = false;
-
-            switch (sortCol) {
-                case 'employee':
-                    aVal = a.employee_name?.toLowerCase() || '';
-                    bVal = b.employee_name?.toLowerCase() || '';
-                    break;
-                case 'leave_type':
-                    aVal = a.leave_type?.toLowerCase() || '';
-                    bVal = b.leave_type?.toLowerCase() || '';
-                    break;
-                case 'earned':
-                    aVal = a.earned || 0;
-                    bVal = b.earned || 0;
-                    isNumeric = true;
-                    break;
-                case 'used':
-                    aVal = a.used || 0;
-                    bVal = b.used || 0;
-                    isNumeric = true;
-                    break;
-                case 'remaining':
-                    aVal = a.remaining || 0;
-                    bVal = b.remaining || 0;
-                    isNumeric = true;
-                    break;
-                case 'carried_forward':
-                    aVal = a.carried_forward || 0;
-                    bVal = b.carried_forward || 0;
-                    isNumeric = true;
-                    break;
-                default:
-                    return 0;
-            }
-
-            if (isNumeric) {
-                return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
-            }
-            return sortDir === 'asc' ? (aVal as string).localeCompare(bVal as string) : (bVal as string).localeCompare(aVal as string);
-        });
-    };
-
-    // Handle column sort
+    // Handle column sort - send to server
     const handleSort = (column: SortColumn) => {
-        if (sortColumn === column) {
-            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-        } else {
-            setSortColumn(column);
-            setSortDirection('asc');
-        }
+        // Map frontend column names to backend field names
+        const columnMap: Record<SortColumn, string> = {
+            'employee': 'name',                    // Sort by employee name
+            'leave_type': 'leave_type',            // Sort by leave type name
+            'earned': 'earned',                    // Sort by earned amount
+            'used': 'used',                        // Sort by used amount
+            'remaining': 'remaining',              // Sort by remaining amount
+            'carried_forward': 'carried_forward',  // Sort by carried forward amount
+        };
+
+        const newSortBy = columnMap[column];
+        const newSortDirection = (currentSortBy === newSortBy && currentSortDirection === 'asc') ? 'desc' : 'asc';
+
+        // Get filter state for router.get()
+        const filters: Record<string, any> = {
+            year: selectedYear,
+            per_page: perPage,
+            page: 1,
+            sort_by: newSortBy,
+            sort_direction: newSortDirection,
+        };
+
+        if (selectedLeaveType !== 'all') filters.leave_type = selectedLeaveType;
+        if (selectedDepartment !== 'all') filters.department = selectedDepartment;
+        if (searchTerm) filters.search = searchTerm;
+        if (showOnlyWithBalance) filters.with_balance = '1';
+        if (showOnlyWithUsage) filters.with_usage = '1';
+
+        router.get(getRoute('hr.leave.balances'), filters, { 
+            preserveState: true, 
+            replace: true 
+        });
     };
 
     // Client-side filtering for search and leave type (but pagination is server-side)
@@ -228,13 +218,10 @@ export default function LeaveBalances({
         return matchesSearch && matchesLeaveType && matchesDepartment && matchesBalance && matchesUsage;
     });
 
-    // Sort the filtered balances
-    const sortedBalances = sortBalances(filteredBalances, sortColumn, sortDirection);
-
-    // Group sorted balances by employee for collapsible rows
+    // Group balances by employee for collapsible rows (already sorted by server)
     const groupedAndSorted = employeeBalances.map((emp) => ({
         employee: emp,
-        balances: sortedBalances.filter((b) => b.employee_id === emp.id),
+        balances: filteredBalances.filter((b) => b.employee_id === emp.id),
     })).filter((item) => item.balances.length > 0);
 
     const handleClearFilters = () => {
@@ -244,8 +231,6 @@ export default function LeaveBalances({
         setSelectedDepartment('all');
         setShowOnlyWithBalance(false);
         setShowOnlyWithUsage(false);
-        setSortColumn('employee');
-        setSortDirection('asc');
         setExpandedEmployees(new Set());
     };
 
@@ -280,10 +265,23 @@ export default function LeaveBalances({
 
     // Render sort indicator
     const renderSortIcon = (column: SortColumn) => {
-        if (sortColumn !== column) {
+        // Map column names to server sort_by values (same as handleSort)
+        const columnMap: Record<SortColumn, string> = {
+            'employee': 'name',
+            'leave_type': 'leave_type',
+            'earned': 'earned',
+            'used': 'used',
+            'remaining': 'remaining',
+            'carried_forward': 'carried_forward',
+        };
+
+        const columnSortBy = columnMap[column];
+        const isActive = currentSortBy === columnSortBy;
+
+        if (!isActive) {
             return <ArrowUpDown className="h-4 w-4 text-muted-foreground ml-1 inline opacity-50" />;
         }
-        return sortDirection === 'asc' ? 
+        return currentSortDirection === 'asc' ? 
             <ArrowUpDown className="h-4 w-4 text-foreground ml-1 inline" /> : 
             <ArrowUpDown className="h-4 w-4 text-foreground ml-1 inline rotate-180" />;
     };
@@ -488,7 +486,7 @@ export default function LeaveBalances({
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {sortedBalances && sortedBalances.length > 0 ? (
+                        {flatBalances && flatBalances.length > 0 ? (
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
                                     <thead className="border-b">

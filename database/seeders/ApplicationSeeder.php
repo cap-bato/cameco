@@ -30,8 +30,8 @@ class ApplicationSeeder extends Seeder
                 $jobPosting = $jobPostings[$i % $jobPostings->count()];
                 $status = match($i % 3) {
                     0 => 'submitted',
-                    1 => 'in_review',
-                    default => 'shortlisted',
+                    1 => 'shortlisted',
+                    default => 'interviewed',
                 };
                 Application::firstOrCreate([
                     'candidate_id' => $candidate->id,

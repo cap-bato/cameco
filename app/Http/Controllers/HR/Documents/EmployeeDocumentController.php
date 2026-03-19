@@ -44,11 +44,11 @@ class EmployeeDocumentController extends Controller
         if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
-                $q->where('document_type', 'ilike', "%{$search}%")
-                  ->orWhere('file_name', 'ilike', "%{$search}%")
+                $q->whereRaw('LOWER(document_type) LIKE ?', ['%' . strtolower($search) . '%'])
+                  ->orWhereRaw('LOWER(file_name) LIKE ?', ['%' . strtolower($search) . '%'])
                   ->orWhereHas('employee.profile', function ($q) use ($search) {
-                      $q->where('first_name', 'ilike', "%{$search}%")
-                        ->orWhere('last_name', 'ilike', "%{$search}%");
+                      $q->whereRaw('LOWER(first_name) LIKE ?', ['%' . strtolower($search) . '%'])
+                        ->orWhereRaw('LOWER(last_name) LIKE ?', ['%' . strtolower($search) . '%']);
                   });
             });
         }
@@ -122,11 +122,25 @@ class EmployeeDocumentController extends Controller
             'special' => 'Special',
         ];
 
+        // Compute summary stats from the full (unfiltered) table for the summary cards
+        // These counts are global totals, not filtered-page counts
+        $meta = [
+            'total'             => \App\Models\EmployeeDocument::count(),
+            'pending_approvals' => \App\Models\EmployeeDocument::where('status', 'pending')->count(),
+            'expiring_soon'     => \App\Models\EmployeeDocument::whereNotNull('expires_at')
+                                       ->where('expires_at', '>', now())
+                                       ->where('expires_at', '<=', now()->addDays(30))
+                                       ->count(),
+            'recently_uploaded' => \App\Models\EmployeeDocument::where('uploaded_at', '>=', now()->subDays(7))
+                                       ->count(),
+        ];
+
         return Inertia::render('HR/Documents/Index', [
             'documents' => $documents,
             'filters' => $filters,
             'employees' => $employees,
             'categories' => $categories,
+            'meta' => $meta,
         ]);
     }
 

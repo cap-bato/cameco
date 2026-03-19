@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Head, Link, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Calendar, CheckCircle2, XCircle, Clock, Search } from 'lucide-react';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Calendar, CheckCircle2, XCircle, Clock, Search, CheckCircle, AlertCircle } from 'lucide-react';
 import { LeaveRequestActionModal } from '@/components/hr/leave-request-action-modal';
 import { PermissionGate, usePermission } from '@/components/permission-gate';
 
@@ -78,10 +85,33 @@ function getStatusIcon(status: string) {
 
 export default function LeaveRequests({ requests, meta }: LeaveRequestsProps) {
     const requestsData = Array.isArray(requests) ? requests : [];
+    const { flash } = usePage().props as { flash?: { success?: string; error?: string } };
     
     const [isActionModalOpen, setIsActionModalOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
     const [modalAction, setModalAction] = useState<'approve' | 'reject' | 'view'>('view');
+
+    // Flash message notification
+    const hasNotification = !!(flash?.success || flash?.error);
+    const isSuccessNotification = !!flash?.success;
+    const notificationMessage = (flash?.success || flash?.error) ?? '';
+
+    const [notificationDialog, setNotificationDialog] = useState({
+        isOpen: hasNotification,
+        isSuccess: isSuccessNotification,
+        message: notificationMessage,
+    });
+
+    // Update notification when flash message changes
+    useEffect(() => {
+        if (hasNotification) {
+            setNotificationDialog({
+                isOpen: true,
+                isSuccess: isSuccessNotification,
+                message: notificationMessage,
+            });
+        }
+    }, [hasNotification, isSuccessNotification, notificationMessage]);
 
     const handleApprove = (request: LeaveRequest) => {
         setSelectedRequest(request);
@@ -269,6 +299,29 @@ export default function LeaveRequests({ requests, meta }: LeaveRequestsProps) {
                     />
                 )}
             </div>
+
+            {/* Notification Dialog */}
+            <AlertDialog open={notificationDialog.isOpen} onOpenChange={() => setNotificationDialog({ ...notificationDialog, isOpen: false })}>
+                <AlertDialogContent>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                        {notificationDialog.isSuccess ? (
+                            <>
+                                <CheckCircle className="h-5 w-5 text-green-600" />
+                                Success
+                            </>
+                        ) : (
+                            <>
+                                <AlertCircle className="h-5 w-5 text-red-600" />
+                                Error
+                            </>
+                        )}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-gray-700">
+                        {notificationDialog.message}
+                    </AlertDialogDescription>
+                    <AlertDialogAction>OK</AlertDialogAction>
+                </AlertDialogContent>
+            </AlertDialog>
         </AppLayout>
     );
 }

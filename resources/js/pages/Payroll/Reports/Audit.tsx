@@ -56,7 +56,7 @@ export default function AuditTrailIndex({
         new Map(auditLogs.map((log) => [log.user_id, log.user_name] as [number, string])).entries(),
     ).filter(([id]) => id > 0);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const applyFilters = (action: string, entity: string, user: string, search: string, from: string, to: string) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const params: Record<string, any> = {};
