@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Download, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { LeaveReportsPageProps } from '@/types/hr-pages';
 
 const breadcrumbs = [
@@ -13,7 +14,7 @@ const breadcrumbs = [
     { title: 'Leave Reports', href: '/hr/reports/leave' },
 ];
 
-export default function LeaveReports({ summary, by_type, by_status }: LeaveReportsPageProps) {
+export default function LeaveReports({ summary, by_type, by_status, by_month }: LeaveReportsPageProps) {
     const totalRequests = (summary?.total_pending_requests || 0) + (summary?.total_approved_requests || 0) + (summary?.total_rejected_requests || 0);
 
     return (
@@ -237,14 +238,23 @@ export default function LeaveReports({ summary, by_type, by_status }: LeaveRepor
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-center py-8">
-                            <p className="text-muted-foreground">
-                                📊 Charts and detailed trends will be available with additional implementation
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-2">
-                                Feature coming soon: Monthly trend visualization
-                            </p>
-                        </div>
+                        {by_month && by_month.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={320}>
+                                <BarChart data={by_month} margin={{ top: 16, right: 24, left: 8, bottom: 8 }}>
+                                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                                    <Tooltip />
+                                    <Legend verticalAlign="top" height={36} />
+                                    <Bar dataKey="approved" fill="#22c55e" name="Approved" />
+                                    <Bar dataKey="pending" fill="#eab308" name="Pending" />
+                                    <Bar dataKey="rejected" fill="#ef4444" name="Rejected" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="text-center py-8">
+                                <p className="text-muted-foreground">No monthly trend data available</p>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
