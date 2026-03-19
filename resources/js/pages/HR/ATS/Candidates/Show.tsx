@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,6 +39,7 @@ export default function CandidateShow({
   interviews,
   notes,
 }: CandidateShowProps) {
+  const { toast } = useToast();
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -45,11 +47,18 @@ const handleAddNote = async (noteData: { note: string; is_private: boolean }) =>
   try {
     await axios.post(`/hr/ats/candidates/${candidate.id}/notes`, noteData);
 
-    alert("Note added successfully!");
-    window.location.reload(); 
+    toast({
+      title: 'Success',
+      description: 'Note added successfully!',
+    });
+    setTimeout(() => window.location.reload(), 2000);
   } catch (error: any) {
     console.error(error);
-    alert(error.response?.data?.message || "Something went wrong.");
+    toast({
+      title: 'Error',
+      description: error.response?.data?.message || 'Something went wrong.',
+      variant: 'destructive',
+    });
   }
 };
 
@@ -80,11 +89,18 @@ const handleEditCandidate = async (candidateData: CandidateFormData) => {
       }
     );
 
-    alert("Candidate updated successfully!");
-    window.location.reload();
+    toast({
+      title: 'Success',
+      description: 'Candidate updated successfully!',
+    });
+    setTimeout(() => window.location.reload(), 2000);
   } catch (error: any) {
     console.error(error);
-    alert(error.response?.data?.message || "Something went wrong.");
+    toast({
+      title: 'Error',
+      description: error.response?.data?.message || 'Something went wrong.',
+      variant: 'destructive',
+    });
   } finally {
     setIsEditModalOpen(false);
   }
