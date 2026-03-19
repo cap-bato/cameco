@@ -109,23 +109,6 @@ class DatabaseSeeder extends Seeder
             OffboardingSystemSeeder::class,
         ]);
 
-        // ── Dev / Test Data (local environment only) ───────────────────────
-        if (app()->environment('local', 'testing')) {
-            $this->call([
-                BulkEmployeeSeeder::class,
-                TimekeepingTestDataSeeder::class,
-                FebruaryFirstHalfPayrollSeeder::class,
-                FebruarySecondHalfPayrollSeeder::class,
-                FullPayrollTestDataSeeder::class,
-            ]);
-
-            // Requires SEED_PAYROLL_TEST_DATA=true in .env
-            if (env('SEED_PAYROLL_TEST_DATA', false)) {
-                $this->call(PayrollCalculationTestSeeder::class);
-            }
-
-        }
-
             if (class_exists(RolesAndPermissionsSeeder::class)) {
                 $this->call(RolesAndPermissionsSeeder::class);
             }
@@ -188,6 +171,24 @@ class DatabaseSeeder extends Seeder
             if (class_exists(OffboardingSeeder::class)) {
                 $this->call(OffboardingSeeder::class);
             }
+
+
+        // ── Dev / Test Data (local environment only) ───────────────────────
+        if (app()->environment('local', 'testing')) {
+            $this->call([
+                BulkEmployeeSeeder::class,
+                TimekeepingTestDataSeeder::class,
+                FebruaryFirstHalfPayrollSeeder::class,
+                FebruarySecondHalfPayrollSeeder::class,
+                FullPayrollTestDataSeeder::class,
+            ]);
+
+            // Requires SEED_PAYROLL_TEST_DATA=true in .env
+            if (env('SEED_PAYROLL_TEST_DATA', false)) {
+                $this->call(PayrollCalculationTestSeeder::class);
+            }
+
+        }
 
     }
 }
