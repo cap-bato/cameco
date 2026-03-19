@@ -217,9 +217,24 @@ class DatabaseSeeder extends Seeder
             $this->call(\Database\Seeders\PaymentMethodsSeeder::class);
         }
 
+        if (class_exists(\Database\Seeders\RfidLedgerSeeder::class)) {
+            $this->call(\Database\Seeders\RfidLedgerSeeder::class);
+        }
+
+        if (class_exists(\Database\Seeders\TaxBracketsSeeder::class)) {
+            $this->call(\Database\Seeders\TaxBracketsSeeder::class);
+        }
+        if (class_exists(\Database\Seeders\GovernmentContributionRatesSeeder::class)) {
+            $this->call(\Database\Seeders\GovernmentContributionRatesSeeder::class);
+        }
+
         // Seed Payroll Periods (must run after employees)
         if (class_exists(\Database\Seeders\PayrollPeriodsSeeder::class)) {
             $this->call(\Database\Seeders\PayrollPeriodsSeeder::class);
+        }
+
+        if (class_exists(\Database\Seeders\PayslipsSeeder::class)) {
+            $this->call(\Database\Seeders\PayslipsSeeder::class);
         }
 
         // Payroll Calculation Test Data (dev/local only)
@@ -245,6 +260,40 @@ class DatabaseSeeder extends Seeder
             $this->call(\Database\Seeders\PayslipsSeeder::class);
         }
 
+        if (class_exists(\Database\Seeders\EmployeePayrollInfoSeeder::class)) {
+            $this->call(\Database\Seeders\EmployeePayrollInfoSeeder::class);
+        }
+
+        if (class_exists(\Database\Seeders\SalaryComponentSeeder::class)) {
+            $this->call(\Database\Seeders\SalaryComponentSeeder::class);
+
+        if (class_exists(\Database\Seeders\EmployeeSalaryComponentSeeder::class)) {
+            $this->call(\Database\Seeders\EmployeeSalaryComponentSeeder::class);
+        }   
+
+        if (class_exists(\Database\Seeders\PayrollCalculationSeeder::class)) {
+            $this->call(\Database\Seeders\PayrollCalculationSeeder::class);
+        }
+
+        if (class_exists(\Database\Seeders\OffboardingSystemSeeder::class)) {
+            $this->call(\Database\Seeders\OffboardingSystemSeeder::class);
+        }
+        
+        if (class_exists(\Database\Seeders\OffboardingChecklistSeeder::class)) {
+            $this->call(\Database\Seeders\OffboardingChecklistSeeder::class);
+    
+        }
+
+        if(class_exists(\Database\Seeders\JobPostingSeeder::class)) {
+            $this->call(\Database\Seeders\JobPostingSeeder::class);
+        }
+
+        if (class_exists(\Database\Seeders\CandidateSeeder::class)) {
+            $this->call(\Database\Seeders\CandidateSeeder::class);
+
+        }
+
+        }
     }
 
 

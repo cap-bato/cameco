@@ -125,6 +125,7 @@ const handleConfirmDelete = async () => {
   };
 
 const handleAddCandidateSubmit = async (data: CandidateFormData) => {
+    console.log('Submitting candidate data:', data); // Add this line
   try {
     const formData = new FormData();
 
@@ -134,11 +135,6 @@ const handleAddCandidateSubmit = async (data: CandidateFormData) => {
         formData.append(key, value);
       }
     });
-
-    // IMPORTANT: if resume is a File, append separately
-    if (data.resume instanceof File) {
-      formData.append("resume", data.resume);
-    }
 
     await axios.post('/hr/ats/candidates', formData, {
       headers: {
