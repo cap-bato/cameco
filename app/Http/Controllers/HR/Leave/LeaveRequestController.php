@@ -387,8 +387,9 @@ class LeaveRequestController extends Controller
         event(new LeaveRequestSubmitted($leaveRequest, $route));
 
         // Always redirect to the leave requests list after filing
+        $routeMessage = $route['message'] ?? '';
         return redirect()->route('hr.leave.requests')
-            ->with('success', "Leave request for {$employee->profile->first_name} {$employee->profile->last_name} has been submitted successfully. {$route['message']}");
+            ->with('success', "Leave request for {$employee->profile->first_name} {$employee->profile->last_name} has been submitted successfully. {$routeMessage}");
     }
 
     /**

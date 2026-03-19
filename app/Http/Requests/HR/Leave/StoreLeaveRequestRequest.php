@@ -9,7 +9,7 @@ class StoreLeaveRequestRequest extends FormRequest
     public function authorize(): bool
     {
         // authorization handled in controller for now
-        return true;
+        return $this->user()->hasAnyRole(['HR Manager', 'HR Staff', 'Superadmin']);
     }
 
     public function rules(): array
