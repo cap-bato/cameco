@@ -53,6 +53,15 @@ class LeaveBalance extends Model
     }
 
     // Scopes
+
+    // Ensure physical 'remaining' column is always in sync after save
+    protected static function booted()
+    {
+        static::saved(function ($balance) {
+            // Always update the DB column to match computed value
+            $balance->updateQuietly(['remaining' => $balance->remaining]);
+        });
+    }
     public function scopeForYear($query, int $year)
     {
         return $query->where('year', $year);

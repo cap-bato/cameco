@@ -49,6 +49,8 @@ class LeaveBalanceSeeder extends Seeder
                             'earned' => $policy->annual_entitlement,
                             'carried_forward' => 0,
                             'forfeited' => 0,
+                            // Always update the physical remaining column to match the computed value
+                            'remaining' => $policy->annual_entitlement + 0 - $balance->used,
                         ]);
                     } else {
                         // Create new balance with used = 0
@@ -60,6 +62,7 @@ class LeaveBalanceSeeder extends Seeder
                             'used' => 0,
                             'carried_forward' => 0,
                             'forfeited' => 0,
+                            'remaining' => $policy->annual_entitlement,
                         ]);
                     }
                 }
