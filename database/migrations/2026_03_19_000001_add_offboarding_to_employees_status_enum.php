@@ -10,7 +10,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement("ALTER TYPE employees_status_enum ADD VALUE IF NOT EXISTS 'offboarding'");
+        // Disabled: employees.status is now VARCHAR, not enum. No action needed.
+        // This migration is a no-op for compatibility.
     }
 
     /**
