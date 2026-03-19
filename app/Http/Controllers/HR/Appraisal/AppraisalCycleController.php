@@ -22,6 +22,38 @@ use Carbon\Carbon;
 class AppraisalCycleController extends Controller
 {
     /**
+     * Assign employees to an appraisal cycle
+     */
+    public function storeAssignment(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'employee_ids' => 'required|array|min:1',
+            'employee_ids.*' => 'integer|exists:employees,id',
+            'due_date' => 'required|date',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        // Create Appraisal records for each assigned employee if not already present for this cycle
+        $created = 0;
+        foreach ($validated['employee_ids'] as $employeeId) {
+            $exists = \App\Models\Appraisal::where('appraisal_cycle_id', $id)
+                ->where('employee_id', $employeeId)
+                ->exists();
+            if (!$exists) {
+                \App\Models\Appraisal::create([
+                    'appraisal_cycle_id' => $id,
+                    'employee_id' => $employeeId,
+                    'status' => 'draft',
+                    'created_by' => auth()->id(),
+                ]);
+                $created++;
+            }
+        }
+
+        return redirect()->back()->with('success', $created . ' employees assigned successfully.');
+    }
+
+    /**
      * Display a listing of appraisal cycles
      */
     public function index(Request $request)
