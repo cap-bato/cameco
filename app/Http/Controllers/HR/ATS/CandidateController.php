@@ -9,6 +9,7 @@ use Inertia\Response;
 use App\Models\Candidate;
 use App\Models\Application;
 use App\Models\Note;
+use Illuminate\Support\Facades\Auth;
 
 class CandidateController extends Controller
 {
@@ -32,7 +33,7 @@ class CandidateController extends Controller
                   ->orWhere('email', 'like', "%{$search}%");
             }))
             ->latest('applied_at')
-            ->get();
+            ->paginate(20);
 
         // Statistics
         $statistics = [
@@ -77,7 +78,15 @@ class CandidateController extends Controller
             'candidate' => $candidate,
             'applications' => $candidate->applications,
             'interviews' => $candidate->interviews,
-            'notes' => $candidate->notes,
+            'notes' => $candidate->notes->map(fn($note) => [
+                'id'              => $note->id,
+                'note'            => $note->note,
+                'is_private'      => $note->is_private,
+                'user_id'         => $note->user_id,
+                'created_by_name' => optional($note->user)->name,
+                'created_at'      => $note->created_at,
+                'updated_at'      => $note->updated_at,
+            ]),
             'stats' => $stats,
         ]);
     }
@@ -150,7 +159,7 @@ public function addNote(Request $request, Candidate $candidate)
     $candidate->notes()->create([
         'note' => $validated['note'],
         'is_private' => $validated['is_private'] ?? false,
-        'user_id' => 1, 
+        'user_id' => Auth::id(), 
     ]);
 
     return back()->with('success', 'Note added successfully.');
@@ -160,7 +169,8 @@ public function destroy(Candidate $candidate)
 {
     $candidate->delete();
 
-    return response()->json(['message' => 'Candidate deleted successfully']);
+    return redirect()->route('hr.ats.candidates.index')
+        ->with('success', 'Candidate deleted successfully.');
 }
 
 

@@ -12,8 +12,7 @@ use App\Models\ApplicationStatusHistory;
 use App\Models\Interview;
 use App\Models\Offer;
 use App\Models\Note;
-
-use function Laravel\Prompts\alert;
+use Illuminate\Support\Facades\Auth;
 
 class ApplicationController extends Controller
 {
@@ -33,8 +32,8 @@ class ApplicationController extends Controller
             ->when($minScore, fn($q) => $q->where('score', '>=', $minScore))
             ->when($maxScore, fn($q) => $q->where('score', '<=', $maxScore))
             ->latest('applied_at')
-            ->get()
-            ->map(function ($app) {
+            ->paginate(20)
+            ->through(function ($app) {
                 return [
                     'id' => $app->id,
                     'status' => $app->status,
@@ -91,33 +90,17 @@ public function show(Application $application): Response
     // Calculate permissions
     $canScheduleInterview = in_array($application->status, ['shortlisted', 'interviewed']);
     $canGenerateOffer = $application->status === 'interviewed';
-return Inertia::render('HR/ATS/Applications/Show', [
-    'application' => [
-        'id' => $application->id,
-        'candidate_name' => trim(
-            ($application->candidate->first_name ?? '') . ' ' .
-            ($application->candidate->middle_name ?? '') . ' ' .
-            ($application->candidate->last_name ?? '')
-        ) ?: 'Unknown',
-        'candidate_email' => $application->candidate->email ?? null,
-        'candidate_phone' => $application->candidate->phone ?? null,
-        'job_title' => $application->jobPosting->title ?? 'Unknown Position',
-        'status' => match($application->status) {
-            'new' => 'submitted',
-            'in_process' => 'shortlisted',
-            default => $application->status,
-        },
-        'original_status' => $application->status, // <— send original DB status
-        'score' => $application->score,
-        'applied_at' => $application->applied_at,
-    ],
-    'interviews' => $application->interviews,
-    'status_history' => $application->statusHistory,
-    'notes' => $application->notes ?? [],
-    'can_schedule_interview' => in_array($application->status, ['shortlisted', 'interviewed']),
-    'can_generate_offer' => $application->status === 'interviewed',
-]);
 
+    return Inertia::render('HR/ATS/Applications/Show', [
+        'application' => $application,
+        'candidate' => $application->candidate,
+        'job' => $application->jobPosting,
+        'interviews' => $application->interviews,
+        'status_history' => $application->statusHistory,
+        'notes' => $application->notes ?? [],
+        'can_schedule_interview' => $canScheduleInterview,
+        'can_generate_offer' => $canGenerateOffer,
+    ]);
 }
 
 
@@ -137,7 +120,7 @@ return Inertia::render('HR/ATS/Applications/Show', [
         ApplicationStatusHistory::create([
             'application_id' => $application->id,
             'status'         => $validated['status'],
-            'changed_by'     => 1,
+            'changed_by'     => Auth::id(),
             'notes'          => $validated['reason'] ?? null,
         ]);
 
@@ -155,7 +138,7 @@ return Inertia::render('HR/ATS/Applications/Show', [
         ApplicationStatusHistory::create([
             'application_id' => $application->id,
             'status'         => 'shortlisted',
-            'changed_by'     => 1,
+            'changed_by'     => Auth::id(),
         ]);
 
         return back()->with('success', 'Application shortlisted.');
@@ -176,7 +159,7 @@ return Inertia::render('HR/ATS/Applications/Show', [
         ApplicationStatusHistory::create([
             'application_id' => $application->id,
             'status'         => 'rejected',
-            'changed_by'     => 1,
+            'changed_by'     => Auth::id(),
             'notes'          => $validated['reason'],
         ]);
 
@@ -192,7 +175,7 @@ return Inertia::render('HR/ATS/Applications/Show', [
         $validated = $request->validate([
             'scheduled_date' => 'required|date',
             'scheduled_time' => 'required',
-            'location_type'  => 'required|in:office,virtual',
+            'location_type'  => 'required|in:office,video_call,phone',
             'interviewer_name' => 'required|string',
         ]);
 
@@ -213,10 +196,19 @@ return Inertia::render('HR/ATS/Applications/Show', [
      */
     public function generateOffer(Request $request, Application $application)
     {
+        $validated = $request->validate([
+            'salary'     => 'required|numeric|min:0',
+            'start_date' => 'required|date|after_or_equal:today',
+            'notes'      => 'nullable|string|max:2000',
+        ]);
+
         Offer::create([
             'application_id' => $application->id,
-            'title'          => $application->jobPosting->title,
-            'created_by'     => 1,
+            'title'          => $application->jobPosting->title ?? 'Job Offer',
+            'salary'         => $validated['salary'],
+            'start_date'     => $validated['start_date'],
+            'notes'          => $validated['notes'] ?? null,
+            'created_by'     => Auth::id(),
         ]);
 
         $application->status = 'offered';
@@ -225,31 +217,50 @@ return Inertia::render('HR/ATS/Applications/Show', [
         ApplicationStatusHistory::create([
             'application_id' => $application->id,
             'status'         => 'offered',
-            'changed_by'     => 1,
+            'changed_by'     => Auth::id(),
         ]);
 
         return back()->with('success', 'Offer generated.');
     }
 
     public function move(Request $request, Application $application)
-{
-    $validated = $request->validate([
-        'status' => 'required|in:submitted,shortlisted,interviewed,offered,hired,rejected,withdrawn',
-        'notes'  => 'nullable|string|max:1000',
-    ]);
+    {
+        $validated = $request->validate([
+            'status' => 'required|in:submitted,shortlisted,interviewed,offered,hired,rejected,withdrawn',
+            'notes'  => 'nullable|string|max:1000',
+        ]);
 
-    $application->status = $validated['status'];
-    $application->save();
+        $application->status = $validated['status'];
+        $application->save();
 
-    // Save to status history
-    ApplicationStatusHistory::create([
-        'application_id' => $application->id,
-        'status'         => $validated['status'],
-        'changed_by'     =>  1, // use logged-in user if available
-        'notes'          => $validated['notes'] ?? null,
-    ]);
+        // Save to status history
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'status'         => $validated['status'],
+            'changed_by'     => Auth::id(),
+            'notes'          => $validated['notes'] ?? null,
+        ]);
 
-    alert('Success', 'Application moved successfully.', 'success');
-}
+        return response()->json(['success' => true, 'status' => $validated['status']]);
+    }
+
+    /**
+     * Add a note to an application.
+     */
+    public function addNote(Request $request, Application $application)
+    {
+        $validated = $request->validate([
+            'note'       => 'required|string|max:5000',
+            'is_private' => 'boolean',
+        ]);
+
+        $application->notes()->create([
+            'note'       => $validated['note'],
+            'is_private' => $validated['is_private'] ?? false,
+            'user_id'    => Auth::id(),
+        ]);
+
+        return back()->with('success', 'Note added.');
+    }
 
 }
