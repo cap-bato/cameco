@@ -23,6 +23,31 @@ use Carbon\Carbon;
 class AppraisalCycleController extends Controller
 {
     /**
+     * Update the specified appraisal cycle in storage.
+     */
+    public function update(Request $request, $id)
+    {
+        $cycle = \App\Models\AppraisalCycle::findOrFail($id);
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'criteria' => 'nullable|array',
+            'criteria.*' => 'string',
+        ]);
+
+        $cycle->name = $validated['name'];
+        $cycle->start_date = $validated['start_date'];
+        $cycle->end_date = $validated['end_date'];
+        $cycle->criteria = $validated['criteria'] ?? [];
+        $cycle->save();
+
+        return redirect()->route('hr.appraisals.cycles.show', $cycle->id)
+            ->with('success', 'Appraisal cycle updated successfully.');
+    }
+
+    /**
      * Show the form for editing the specified appraisal cycle.
      */
     public function edit($id)
