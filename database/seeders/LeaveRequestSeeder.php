@@ -20,6 +20,7 @@ class LeaveRequestSeeder extends Seeder
      */
     public function run(): void
     {
+
         $this->command->info('Seeding leave requests with realistic stories...');
 
         $policies = LeavePolicy::all()->keyBy('code');
@@ -29,6 +30,28 @@ class LeaveRequestSeeder extends Seeder
         $faker = \Faker\Factory::create();
         $now = Carbon::now();
         $year = $now->year;
+
+        // Ensure at least one approved leave request for each of the last 6 months for the first employee
+        if ($employees->count() > 0 && $policies->count() > 0) {
+            $firstEmployee = $employees->first();
+            $policy = $policies->first();
+            for ($i = 0; $i < 6; $i++) {
+                $month = $now->copy()->subMonths($i)->startOfMonth();
+                LeaveRequest::create([
+                    'employee_id' => $firstEmployee->id,
+                    'leave_policy_id' => $policy->id,
+                    'start_date' => $month->copy()->addDays(2),
+                    'end_date' => $month->copy()->addDays(4),
+                    'days_requested' => 3,
+                    'reason' => 'Seeded monthly leave for reporting.',
+                    'status' => 'approved',
+                    'submitted_by' => $firstEmployee->user_id ?? 1,
+                    'submitted_at' => $month->copy()->addDay(),
+                    'created_at' => $month->copy()->addDay(),
+                    'updated_at' => $month->copy()->addDay(),
+                ]);
+            }
+        }
 
         foreach ($employees as $employee) {
             $hasAccount = $employee->user_id && in_array($employee->user_id, $userIds);
