@@ -25,13 +25,17 @@ import { ArrowLeft, Edit2, Lock, Trash2 } from 'lucide-react';
 
 interface CycleShowProps {
     cycle: AppraisalCycle;
-    appraisals: Appraisal[];
+    appraisals?: Appraisal[];
     analytics: CycleAnalytics;
 }
 
 export default function CycleShow({ cycle, appraisals, analytics }: CycleShowProps) {
+
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+
+    // Always use a valid array for appraisals
+    const safeAppraisals: Appraisal[] = Array.isArray(appraisals) ? appraisals : [];
 
     const breadcrumb = [
         { title: 'HR', href: '/hr' },
@@ -42,10 +46,10 @@ export default function CycleShow({ cycle, appraisals, analytics }: CycleShowPro
 
     // Calculate completion stats
     const completionStats = useMemo(() => {
-        const total = appraisals.length;
-        const completed = appraisals.filter((a) => a.status === 'completed').length;
-        const inProgress = appraisals.filter((a) => a.status === 'in_progress').length;
-        const pending = appraisals.filter((a) => a.status === 'draft').length;
+        const total = safeAppraisals.length;
+        const completed = safeAppraisals.filter((a) => a.status === 'completed').length;
+        const inProgress = safeAppraisals.filter((a) => a.status === 'in_progress').length;
+        const pending = safeAppraisals.filter((a) => a.status === 'draft').length;
 
         return {
             total,
@@ -54,11 +58,11 @@ export default function CycleShow({ cycle, appraisals, analytics }: CycleShowPro
             pending,
             percentage: total > 0 ? Math.round((completed / total) * 100) : 0,
         };
-    }, [appraisals]);
+    }, [safeAppraisals]);
 
     // Get recent activity
     const recentActivity = useMemo(() => {
-        return appraisals
+        return safeAppraisals
             .filter((a) => a.updated_at)
             .sort(
                 (a, b) =>
@@ -66,7 +70,7 @@ export default function CycleShow({ cycle, appraisals, analytics }: CycleShowPro
                     new Date(a.updated_at || 0).getTime()
             )
             .slice(0, 5);
-    }, [appraisals]);
+    }, [safeAppraisals]);
 
     const handleDelete = () => {
         router.delete(`/hr/appraisals/cycles/${cycle.id}`, {
@@ -295,7 +299,7 @@ export default function CycleShow({ cycle, appraisals, analytics }: CycleShowPro
                             <CardTitle>Assigned Appraisals</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            {appraisals.length > 0 ? (
+                            {safeAppraisals.length > 0 ? (
                                 <div className="overflow-x-auto">
                                     <table className="w-full">
                                         <thead>
@@ -321,7 +325,7 @@ export default function CycleShow({ cycle, appraisals, analytics }: CycleShowPro
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {appraisals.map((appraisal) => (
+                                            {safeAppraisals.map((appraisal) => (
                                                 <tr
                                                     key={appraisal.id}
                                                     className="border-b hover:bg-gray-50"
