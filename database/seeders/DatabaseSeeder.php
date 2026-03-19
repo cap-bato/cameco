@@ -116,6 +116,7 @@ class DatabaseSeeder extends Seeder
         // ── Employees & Profiles ───────────────────────────────────────────
         $this->call([
             EmployeeSeeder::class,
+            BulkEmployeeSeeder::class,
             EmployeeFilipinoProfileSeeder::class,
             EmployeeAccountSeeder::class,
             LinkEmployeesToUsersSeeder::class,
@@ -176,7 +177,6 @@ class DatabaseSeeder extends Seeder
         // ── Dev / Test Data (local environment only) ───────────────────────
         if (app()->environment('local', 'testing')) {
             $this->call([
-                BulkEmployeeSeeder::class,
                 TimekeepingTestDataSeeder::class,
                 FebruaryFirstHalfPayrollSeeder::class,
                 FebruarySecondHalfPayrollSeeder::class,
