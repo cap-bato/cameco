@@ -11,8 +11,8 @@ class StoreEmployeeRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        // Check if user has HR Manager role or is Superadmin
-        return $this->user()->hasAnyRole(['HR Manager', 'Superadmin']);
+        // Allow HR Manager, HR Staff, or Superadmin to create employees
+        return $this->user()->hasAnyRole(['HR Manager', 'HR Staff', 'Superadmin']);
     }
 
     /**
