@@ -13,25 +13,18 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Use VARCHAR for status and location_type for maximum compatibility
         Schema::table('interviews', function (Blueprint $table) {
-            // Update status enum: add 'no_show', standardize to 'cancelled'
-            $table->enum('status', ['scheduled', 'completed', 'cancelled', 'no_show'])
-                ->default('scheduled')
-                ->change();
-
-            // Update location_type enum: change 'virtual' to 'video_call' and 'phone'
-            $table->enum('location_type', ['office', 'video_call', 'phone'])->change();
+            $table->string('status', 32)->default('scheduled')->change();
+            $table->string('location_type', 32)->nullable()->change();
         });
+        // Optionally, update existing rows to use new values if needed:
+        // DB::statement("UPDATE interviews SET status = 'cancelled' WHERE status = 'canceled'");
+        // DB::statement("UPDATE interviews SET location_type = 'video_call' WHERE location_type = 'virtual'");
     }
 
     public function down(): void
     {
-        Schema::table('interviews', function (Blueprint $table) {
-            // Revert status enum
-            $table->enum('status', ['scheduled', 'completed', 'canceled'])->default('scheduled')->change();
-
-            // Revert location_type enum
-            $table->enum('location_type', ['office', 'virtual'])->change();
-        });
+        // Optionally, revert to previous type if needed (not implemented)
     }
 };

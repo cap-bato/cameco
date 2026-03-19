@@ -9,18 +9,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('interviews', function (Blueprint $table) {
-            $table->enum('status', ['scheduled', 'completed', 'cancelled', 'no_show'])
-                  ->default('scheduled')
-                  ->change();
+            $table->string('status', 32)->default('scheduled')->change();
         });
     }
 
     public function down(): void
     {
         Schema::table('interviews', function (Blueprint $table) {
-            $table->enum('status', ['scheduled', 'completed', 'canceled'])
-                  ->default('scheduled')
-                  ->change();
+            $table->string('status', 32)->default('scheduled')->change();
         });
     }
 };
