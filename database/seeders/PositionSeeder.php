@@ -13,6 +13,58 @@ class PositionSeeder extends Seeder
      */
     public function run(): void
     {
+        // Rolling Mill Departments
+        $rm1 = Department::where('code', 'RM1')->first();
+        $rm2 = Department::where('code', 'RM2')->first();
+        $rm3 = Department::where('code', 'RM3')->first();
+
+        // Rolling Mill Positions (same as production, but for each RM department)
+        $rollingMillPositions = [
+            [
+                'title' => 'Production Worker',
+                'description' => 'Operates production equipment and machinery',
+                'level' => 'staff',
+                'min_salary' => 20000,
+                'max_salary' => 30000,
+                'is_active' => true,
+            ],
+            [
+                'title' => 'Production Manager',
+                'description' => 'Oversees manufacturing and production processes',
+                'level' => 'manager',
+                'min_salary' => 50000,
+                'max_salary' => 75000,
+                'is_active' => true,
+            ],
+            [
+                'title' => 'Production Supervisor',
+                'description' => 'Supervises production line workers',
+                'level' => 'supervisor',
+                'min_salary' => 32000,
+                'max_salary' => 48000,
+                'is_active' => true,
+            ],
+            [
+                'title' => 'Machine Operator',
+                'description' => 'Operates specific production machinery',
+                'level' => 'staff',
+                'min_salary' => 22000,
+                'max_salary' => 32000,
+                'is_active' => true,
+            ],
+        ];
+
+        foreach ([$rm1, $rm2, $rm3] as $rmDept) {
+            if ($rmDept) {
+                foreach ($rollingMillPositions as $pos) {
+                    $data = array_merge($pos, ['department_id' => $rmDept->id]);
+                    Position::firstOrCreate(
+                        ['title' => $pos['title'], 'department_id' => $rmDept->id],
+                        $data
+                    );
+                }
+            }
+        }
         // Get department IDs
         $hr = Department::where('code', 'HR')->first();
         $it = Department::where('code', 'IT')->first();

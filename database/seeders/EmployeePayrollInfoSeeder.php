@@ -9,6 +9,7 @@ use Illuminate\Database\Seeder;
 
 class EmployeePayrollInfoSeeder extends Seeder
 {
+
     private const SALARY_PRESETS = [
         ['basic_salary' => 35000, 'daily_rate' => 1346.15, 'hourly_rate' => 168.27],
         ['basic_salary' => 28000, 'daily_rate' => 1076.92, 'hourly_rate' => 134.62],
@@ -19,6 +20,13 @@ class EmployeePayrollInfoSeeder extends Seeder
 
     public function run(): void
     {
+        // Truncate payroll info table to avoid duplicates and ensure only current employees are included
+        if (\Schema::hasTable('employee_payroll_infos')) {
+            \DB::table('employee_payroll_infos')->truncate();
+        } else {
+            $this->command->warn('Table employee_payroll_infos does not exist. Skipping truncate.');
+        }
+
         $this->command->info('Seeding EmployeePayrollInfo...');
 
         $creator = User::where('email', 'payroll@cameco.com')->first()
