@@ -13,6 +13,48 @@ class PositionSeeder extends Seeder
      */
     public function run(): void
     {
+            // Ensure every department has at least one position
+            $coreDepartments = [
+                ['code' => 'HR', 'default' => [
+                    ['title' => 'HR Generalist', 'description' => 'Handles general HR tasks', 'level' => 'staff', 'min_salary' => 25000, 'max_salary' => 40000],
+                ]],
+                ['code' => 'IT', 'default' => [
+                    ['title' => 'IT Staff', 'description' => 'Handles IT support and maintenance', 'level' => 'staff', 'min_salary' => 25000, 'max_salary' => 40000],
+                ]],
+                ['code' => 'OPS', 'default' => [
+                    ['title' => 'Operations Staff', 'description' => 'Handles daily operations', 'level' => 'staff', 'min_salary' => 22000, 'max_salary' => 35000],
+                ]],
+                ['code' => 'SALES', 'default' => [
+                    ['title' => 'Sales Staff', 'description' => 'Handles sales and customer relations', 'level' => 'staff', 'min_salary' => 22000, 'max_salary' => 35000],
+                ]],
+                ['code' => 'PROD', 'default' => [
+                    ['title' => 'Production Staff', 'description' => 'Handles production tasks', 'level' => 'staff', 'min_salary' => 22000, 'max_salary' => 35000],
+                ]],
+                ['code' => 'QA', 'default' => [
+                    ['title' => 'QA Staff', 'description' => 'Handles quality assurance', 'level' => 'staff', 'min_salary' => 22000, 'max_salary' => 35000],
+                ]],
+                ['code' => 'LOG', 'default' => [
+                    ['title' => 'Logistics Staff', 'description' => 'Handles logistics and inventory', 'level' => 'staff', 'min_salary' => 22000, 'max_salary' => 35000],
+                ]],
+                ['code' => 'RND', 'default' => [
+                    ['title' => 'R&D Staff', 'description' => 'Handles research and development', 'level' => 'staff', 'min_salary' => 22000, 'max_salary' => 35000],
+                ]],
+                ['code' => 'ADMIN', 'default' => [
+                    ['title' => 'Admin Staff', 'description' => 'Handles administrative tasks', 'level' => 'staff', 'min_salary' => 22000, 'max_salary' => 35000],
+                ]],
+            ];
+
+            foreach ($coreDepartments as $deptInfo) {
+                $dept = Department::where('code', $deptInfo['code'])->first();
+                if ($dept) {
+                    foreach ($deptInfo['default'] as $pos) {
+                        Position::firstOrCreate(
+                            ['title' => $pos['title'], 'department_id' => $dept->id],
+                            array_merge($pos, ['department_id' => $dept->id, 'is_active' => true])
+                        );
+                    }
+                }
+            }
         // Rolling Mill Departments
         $rm1 = Department::where('code', 'RM1')->first();
         $rm2 = Department::where('code', 'RM2')->first();
