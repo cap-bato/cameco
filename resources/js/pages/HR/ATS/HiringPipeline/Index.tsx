@@ -46,10 +46,6 @@ const summaryCards = [
   { title: 'Hires This Month', key: 'hires_this_month' as const, color: 'bg-emerald-50 border-emerald-200', icon: '✅' },
 ];
 
-/**
- * Hiring Pipeline Index - Tasks 8.1 & 8.2
- * Main page for Kanban and List view of hiring pipeline
- */
 const applicationStatuses: Array<{ value: ApplicationStatus; label: string }> = [
   { value: 'submitted', label: 'Submitted' },
   { value: 'shortlisted', label: 'Shortlisted' },
@@ -77,40 +73,33 @@ export default function HiringPipelineIndex({
   // Show toast on flash success
   const { props } = usePage();
   useEffect(() => {
-    if (props.flash && props.flash.success) {
-      toast.success(props.flash.success);
+    if (props.flash && (props.flash as Record<string, string>).success) {
+      toast.success((props.flash as Record<string, string>).success);
     }
   }, [props.flash]);
 
   const handleViewApplication = (app: Application) => {
-    // Navigate to the application detail page
     window.location.href = `/hr/ats/applications/${app.id}`;
   };
 
   const handleChangeApplicationStatus = (app: Application, newStatus: ApplicationStatus, notes?: string) => {
-    router.put(`/hr/ats/applications/${app.id}/status`, {
+    // ✅ Uses the correct hiring-pipeline route: PUT /hr/ats/hiring-pipeline/applications/{id}/move
+    router.put(`/hr/ats/hiring-pipeline/applications/${app.id}/move`, {
       status: newStatus,
-      notes: notes || '',
+      notes: notes ?? '',
     }, {
-      onSuccess: () => {
-        // Success toast will be shown via flash message
-      },
-      onError: (errors) => {
-        toast.error('Failed to update status.');
-        console.error('Failed to update status:', errors);
+      preserveScroll: true,
+      onError: () => {
+        toast.error('Failed to update application status. Please try again.');
       },
     });
   };
 
   const handleDeleteApplication = (app: Application) => {
-    // Call router to delete the application via API
     router.delete(`/hr/ats/applications/${app.id}`, {
-      onSuccess: () => {
-        // Page will auto-reload due to Inertia response
-      },
-      onError: (errors) => {
-        console.error('Failed to delete application:', errors);
-        // Could add toast notification here for error handling
+      preserveScroll: true,
+      onError: () => {
+        toast.error('Failed to delete application. Please try again.');
       },
     });
   };
@@ -280,9 +269,12 @@ export default function HiringPipelineIndex({
         </Card>
 
         {viewMode === 'kanban' ? (
-          <PipelineKanban pipeline={filteredPipeline} />
+          <PipelineKanban
+            pipeline={filteredPipeline}
+            onChangeApplicationStatus={handleChangeApplicationStatus}
+          />
         ) : (
-          <PipelineList 
+          <PipelineList
             pipeline={filteredPipeline}
             onViewApplication={handleViewApplication}
             onChangeApplicationStatus={handleChangeApplicationStatus}

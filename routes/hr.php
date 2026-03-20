@@ -487,14 +487,16 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::post('/interviews/{id}/complete', [InterviewController::class, 'markCompleted'])
                 ->middleware('permission:hr.ats.interviews.schedule')
                 ->name('interviews.complete');
-
+                
             // Hiring Pipeline
             Route::get('/hiring-pipeline', [HiringPipelineController::class, 'index'])
                 ->middleware('permission:hr.ats.view')
                 ->name('hiring-pipeline.index');
+            
             Route::put('/hiring-pipeline/applications/{id}/move', [HiringPipelineController::class, 'moveApplication'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('hiring-pipeline.move');
+            
         });
 
         // Workforce Management Module
