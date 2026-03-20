@@ -435,32 +435,33 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 ->middleware('permission:hr.ats.candidates.update')
                 ->name('candidates.notes.store');
 
+
             // Applications
             Route::get('/applications', [ApplicationController::class, 'index'])
                 ->middleware('permission:hr.ats.applications.view')
                 ->name('applications.index');
-            Route::get('/applications/{id}', [ApplicationController::class, 'show'])
+            Route::get('/applications/{application}', [ApplicationController::class, 'show'])
                 ->middleware('permission:hr.ats.applications.view')
                 ->name('applications.show');
-            Route::put('/applications/{id}/status', [ApplicationController::class, 'updateStatus'])
+            Route::put('/applications/{application}/status', [ApplicationController::class, 'updateStatus'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.update-status');
-            Route::post('/applications/{id}/shortlist', [ApplicationController::class, 'shortlist'])
+            Route::post('/applications/{application}/shortlist', [ApplicationController::class, 'shortlist'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.shortlist');
-            Route::post('/applications/{id}/reject', [ApplicationController::class, 'reject'])
+            Route::post('/applications/{application}/reject', [ApplicationController::class, 'reject'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.reject');
-            Route::post('/applications/{id}/move', [ApplicationController::class, 'move'])
+            Route::post('/applications/{application}/move', [ApplicationController::class, 'move'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.move');
-            Route::post('/applications/{id}/schedule-interview', [ApplicationController::class, 'scheduleInterview'])
+            Route::post('/applications/{application}/schedule-interview', [ApplicationController::class, 'scheduleInterview'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.schedule-interview');
-            Route::post('/applications/{id}/generate-offer', [ApplicationController::class, 'generateOffer'])
+            Route::post('/applications/{application}/generate-offer', [ApplicationController::class, 'generateOffer'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.generate-offer');
-            Route::post('/applications/{id}/notes', [ApplicationController::class, 'addNote'])
+            Route::post('/applications/{application}/notes', [ApplicationController::class, 'addNote'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.notes.store');
 
