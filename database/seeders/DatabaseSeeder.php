@@ -11,22 +11,17 @@ class DatabaseSeeder extends Seeder
     /**
      * Seed the application's database.
      *
-     * PERMISSION SEEDING ORDER — must follow this pattern to avoid empty roles:
+     * PERMISSION SEEDING RULES — violating any of these causes missing permissions:
      *
-     *  1. Create ALL roles and ALL permissions (base + every module extension)
-     *  2. Clear the Spatie permission cache
-     *  3. Assign roles to users  ← only now, after every permission exists
-     *  4. Everything else (employees, payroll, etc.)
-     *
-     * Previously, role assignment happened between steps 1 and the module
-     * permission seeders, so the HR Manager role existed but had no module
-     * permissions attached to it yet when the user was assigned that role.
-     * Spatie then cached that incomplete role — subsequent requests saw it
-     * as having no permissions even after the module seeders finished.
+     *  1. ALL permission seeders must finish before any role is assigned to a user.
+     *  2. Use givePermissionTo() in every module seeder — never syncPermissions(),
+     *     which replaces the role's full permission set instead of adding to it.
+     *  3. Call forgetCachedPermissions() after all permission seeding and again
+     *     after bulk role-assignment seeders, before anything reads permissions.
      */
     public function run(): void
     {
-        // ── STAGE 1: Users (no roles yet) ─────────────────────────────────
+        // ── STAGE 1: Users — no roles yet ─────────────────────────────────
         User::firstOrCreate(
             ['email' => 'superadmin@cameco.com'],
             [
@@ -47,16 +42,16 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // ── STAGE 2: ALL roles and ALL permissions first ───────────────────
-        // Base roles/permissions must come before any module extensions,
-        // but ALL of them must finish before we assign roles to anyone.
+        // ── STAGE 2: ALL roles and ALL permissions ─────────────────────────
+        // Every module permission seeder must run here — before any assignRole()
+        // call anywhere in the file. Order within this block matters only if one
+        // seeder references permissions created by another; otherwise alphabetical
+        // is fine. The critical rule is: this entire block finishes first.
         $this->call([
             LeavePolicySeeder::class,
             RolesAndPermissionsSeeder::class,
 
-            // Module permission extensions — these add permissions to existing
-            // roles (e.g. giving HR Manager access to ATS, Payroll, etc.)
-            // They must ALL run here, before any role assignment below.
+            // Module extensions — each adds permissions and calls givePermissionTo()
             ATSPermissionsSeeder::class,
             TimekeepingPermissionsSeeder::class,
             BadgeManagementPermissionsSeeder::class,
@@ -64,16 +59,15 @@ class DatabaseSeeder extends Seeder
             DocumentManagementPermissionsSeeder::class,
             PayrollPermissionsSeeder::class,
             OffboardingPermissionsSeeder::class,
-            AppraisalPermissionsSeeder::class,
+            AppraisalPermissionsSeeder::class,      // ← was using syncPermissions; now fixed
         ]);
 
-        // ── STAGE 3: Flush Spatie's permission cache ───────────────────────
-        // Spatie caches roles+permissions on first load. If the cache is stale
-        // from a previous seed run (or was partially populated during this one),
-        // role assignments below will use the stale snapshot. Always flush here.
+        // ── STAGE 3: Flush Spatie cache ────────────────────────────────────
+        // Must happen after all permission rows exist and all role↔permission
+        // pivots are written, and before the first assignRole() call.
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // ── STAGE 4: Assign roles — now that all permissions exist ─────────
+        // ── STAGE 4: Assign roles to seed users ────────────────────────────
         $superadmin = User::where('email', 'superadmin@cameco.com')->first();
         if ($superadmin && method_exists($superadmin, 'assignRole')) {
             try { $superadmin->assignRole('Superadmin'); } catch (\Throwable) {}
@@ -84,7 +78,7 @@ class DatabaseSeeder extends Seeder
             try { $hrManager->assignRole('HR Manager'); } catch (\Throwable) {}
         }
 
-        // ── STAGE 5: Additional user accounts (roles must exist first) ─────
+        // ── STAGE 5: Additional accounts (these also assign roles internally) ──
         $this->call([
             PayrollOfficerAccountSeeder::class,
             OfficeAdminSeeder::class,
@@ -92,7 +86,7 @@ class DatabaseSeeder extends Seeder
             HRStaffAccountSeeder::class,
         ]);
 
-        // Flush cache again after bulk account seeders assign more roles
+        // Flush again — the account seeders above may have triggered a cache load
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         // ── STAGE 6: System & config data ─────────────────────────────────
@@ -111,7 +105,7 @@ class DatabaseSeeder extends Seeder
             SalaryComponentSeeder::class,
         ]);
 
-        // ── STAGE 7: HR structure (departments → positions → schedules) ────
+        // ── STAGE 7: HR structure ──────────────────────────────────────────
         $this->call([
             DepartmentSeeder::class,
             PositionSeeder::class,
@@ -190,7 +184,7 @@ class DatabaseSeeder extends Seeder
             PayslipsSeeder::class,
         ]);
 
-        // ── STAGE 18: Dev / test data (local & testing only) ──────────────
+        // ── STAGE 18: Dev / test data ──────────────────────────────────────
         if (app()->environment('local', 'testing')) {
             $this->call([
                 TimekeepingTestDataSeeder::class,
@@ -204,7 +198,7 @@ class DatabaseSeeder extends Seeder
             }
         }
 
-        // ── STAGE 19: Cleanup (run last) ───────────────────────────────────
+        // ── STAGE 19: Cleanup ──────────────────────────────────────────────
         if (class_exists(RemoveDuplicateLuisTorresSeeder::class)) {
             $this->call(RemoveDuplicateLuisTorresSeeder::class);
         }
