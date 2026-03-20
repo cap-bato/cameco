@@ -398,7 +398,7 @@ class DashboardController extends Controller
                 'label' => 'Create Payroll Period',
                 'icon' => 'plus-circle',
                 'color' => 'blue',
-                'url' => '/payroll/periods/create',
+                'url' => '/payroll/periods',
                 'description' => 'Start a new payroll period',
             ],
             [

@@ -37,6 +37,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
 
         // Payroll Periods - Phase 1.1 & 1.2
         Route::get('/periods', [PayrollPeriodController::class, 'index'])->name('periods.index');
+        Route::get('/periods', [PayrollPeriodController::class, 'index'])->name('periods.index');
         Route::post('/periods', [PayrollPeriodController::class, 'store'])->name('periods.store');
         Route::get('/periods/{id}', [PayrollPeriodController::class, 'show'])->name('periods.show');
         Route::get('/periods/{id}/edit', [PayrollPeriodController::class, 'edit'])->name('periods.edit');
