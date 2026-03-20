@@ -121,10 +121,13 @@ class DatabaseSeeder extends Seeder
             EmployeeAccountSeeder::class,
             LinkEmployeesToUsersSeeder::class,
             EmployeePayrollInfoSeeder::class,
-            RemoveDuplicateLuisTorresSeeder::class, // ← added here to ensure it runs after all employee-related seeders
 
         ]);
-        
+
+        if (class_exists(RemoveDuplicateLuisTorresSeeder::class)) {
+            $this->call(RemoveDuplicateLuisTorresSeeder::class);
+        }
+
         // ── Document Management ────────────────────────────────────────────
         $this->call([
             DocumentTemplateSeeder::class,
