@@ -106,6 +106,13 @@ export default function LeaveBalances({
         totalAvailable: balances.reduce((sum, b) => sum + b.available, 0),
     };
 
+    // Helper to format leave numbers: show as integer if whole, else up to 2 decimals
+    const formatLeaveNumber = (n: number) => {
+        if (Number.isNaN(n)) return '0';
+        if (Number.isInteger(n)) return n.toString();
+        return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Leave Balances" />
@@ -174,25 +181,25 @@ export default function LeaveBalances({
                             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-900/10">
                                 <p className="text-sm text-blue-600 dark:text-blue-400">Total Entitled</p>
                                 <p className="mt-2 text-2xl font-bold text-blue-800 dark:text-blue-200">
-                                    {totalStats.totalEntitled} days
+                                    {formatLeaveNumber(totalStats.totalEntitled)} days
                                 </p>
                             </div>
                             <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-900/10">
                                 <p className="text-sm text-red-600 dark:text-red-400">Used</p>
                                 <p className="mt-2 text-2xl font-bold text-red-800 dark:text-red-200">
-                                    {totalStats.totalUsed} days
+                                    {formatLeaveNumber(totalStats.totalUsed)} days
                                 </p>
                             </div>
                             <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900 dark:bg-yellow-900/10">
                                 <p className="text-sm text-yellow-600 dark:text-yellow-400">Pending</p>
                                 <p className="mt-2 text-2xl font-bold text-yellow-800 dark:text-yellow-200">
-                                    {totalStats.totalPending} days
+                                    {formatLeaveNumber(totalStats.totalPending)} days
                                 </p>
                             </div>
                             <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-900/10">
                                 <p className="text-sm text-green-600 dark:text-green-400">Available</p>
                                 <p className="mt-2 text-2xl font-bold text-green-800 dark:text-green-200">
-                                    {totalStats.totalAvailable} days
+                                    {formatLeaveNumber(totalStats.totalAvailable)} days
                                 </p>
                             </div>
                         </div>
@@ -249,25 +256,25 @@ export default function LeaveBalances({
                                                 <div>
                                                     <p className="text-xs text-gray-600 dark:text-gray-400">Total Entitled</p>
                                                     <p className="mt-1 text-xl font-bold text-gray-900 dark:text-white">
-                                                        {balance.total_entitled}
+                                                        {formatLeaveNumber(balance.total_entitled)}
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-xs text-gray-600 dark:text-gray-400">Used</p>
                                                     <p className="mt-1 text-xl font-bold text-red-600 dark:text-red-400">
-                                                        {balance.used}
+                                                        {formatLeaveNumber(balance.used)}
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-xs text-gray-600 dark:text-gray-400">Pending</p>
                                                     <p className="mt-1 text-xl font-bold text-yellow-600 dark:text-yellow-400">
-                                                        {balance.pending}
+                                                        {formatLeaveNumber(balance.pending)}
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-xs text-gray-600 dark:text-gray-400">Available</p>
                                                     <p className="mt-1 text-xl font-bold text-green-600 dark:text-green-400">
-                                                        {balance.available}
+                                                        {formatLeaveNumber(balance.available)}
                                                     </p>
                                                 </div>
                                             </div>

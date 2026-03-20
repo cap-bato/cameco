@@ -18,9 +18,9 @@ class CandidateSeeder extends Seeder
 
         $candidates = [
             [
-                'first_name' => 'Juan',
+                'first_name' => 'Jonathan',
                 'last_name' => 'Dela Cruz',
-                'email' => 'juan.delacruz@example.com',
+                'email' => 'jonathan.delacruz@example.com',
                 'phone' => '09171234567',
                 'source' => 'referral',
                 'status' => 'new',
@@ -31,7 +31,7 @@ class CandidateSeeder extends Seeder
             [
                 'first_name' => 'Maria',
                 'last_name' => 'Santos',
-                'email' => 'maria.santos@example.com',
+                'email' => 'maria.misajon@example.com',
                 'phone' => '09181234567',
                 'source' => 'job_board',
                 'status' => 'new',
@@ -41,8 +41,8 @@ class CandidateSeeder extends Seeder
             ],
             [
                 'first_name' => 'Pedro',
-                'last_name' => 'Bautista',
-                'email' => 'pedro.bautista@example.com',
+                'last_name' => 'Asistio',
+                'email' => 'pedro.asistio@example.com',
                 'phone' => '09191234567',
                 'source' => 'walk_in',
                 'status' => 'new',
