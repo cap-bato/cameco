@@ -4,15 +4,29 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Spatie\Permission\PermissionRegistrar;
 
 class DatabaseSeeder extends Seeder
 {
     /**
      * Seed the application's database.
+     *
+     * PERMISSION SEEDING ORDER — must follow this pattern to avoid empty roles:
+     *
+     *  1. Create ALL roles and ALL permissions (base + every module extension)
+     *  2. Clear the Spatie permission cache
+     *  3. Assign roles to users  ← only now, after every permission exists
+     *  4. Everything else (employees, payroll, etc.)
+     *
+     * Previously, role assignment happened between steps 1 and the module
+     * permission seeders, so the HR Manager role existed but had no module
+     * permissions attached to it yet when the user was assigned that role.
+     * Spatie then cached that incomplete role — subsequent requests saw it
+     * as having no permissions even after the module seeders finished.
      */
     public function run(): void
     {
-        // ── Default Users ──────────────────────────────────────────────────
+        // ── STAGE 1: Users (no roles yet) ─────────────────────────────────
         User::firstOrCreate(
             ['email' => 'superadmin@cameco.com'],
             [
@@ -33,25 +47,16 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // ── Roles & Base Permissions (must run first) ──────────────────────
+        // ── STAGE 2: ALL roles and ALL permissions first ───────────────────
+        // Base roles/permissions must come before any module extensions,
+        // but ALL of them must finish before we assign roles to anyone.
         $this->call([
             LeavePolicySeeder::class,
-            RolesAndPermissionsSeeder::class,   // called ONCE here only
-        ]);
+            RolesAndPermissionsSeeder::class,
 
-        // Assign roles to the default users
-        $superadmin = User::where('email', 'superadmin@cameco.com')->first();
-        if ($superadmin && method_exists($superadmin, 'assignRole')) {
-            try { $superadmin->assignRole('Superadmin'); } catch (\Throwable) {}
-        }
-
-        $hrManager = User::where('email', 'hrmanager@cameco.com')->first();
-        if ($hrManager && method_exists($hrManager, 'assignRole')) {
-            try { $hrManager->assignRole('HR Manager'); } catch (\Throwable) {}
-        }
-
-        // ── Permission Extensions (must run after RolesAndPermissionsSeeder) ──
-        $this->call([
+            // Module permission extensions — these add permissions to existing
+            // roles (e.g. giving HR Manager access to ATS, Payroll, etc.)
+            // They must ALL run here, before any role assignment below.
             ATSPermissionsSeeder::class,
             TimekeepingPermissionsSeeder::class,
             BadgeManagementPermissionsSeeder::class,
@@ -62,7 +67,24 @@ class DatabaseSeeder extends Seeder
             AppraisalPermissionsSeeder::class,
         ]);
 
-        // ── Additional User Accounts (must run after roles) ────────────────
+        // ── STAGE 3: Flush Spatie's permission cache ───────────────────────
+        // Spatie caches roles+permissions on first load. If the cache is stale
+        // from a previous seed run (or was partially populated during this one),
+        // role assignments below will use the stale snapshot. Always flush here.
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
+        // ── STAGE 4: Assign roles — now that all permissions exist ─────────
+        $superadmin = User::where('email', 'superadmin@cameco.com')->first();
+        if ($superadmin && method_exists($superadmin, 'assignRole')) {
+            try { $superadmin->assignRole('Superadmin'); } catch (\Throwable) {}
+        }
+
+        $hrManager = User::where('email', 'hrmanager@cameco.com')->first();
+        if ($hrManager && method_exists($hrManager, 'assignRole')) {
+            try { $hrManager->assignRole('HR Manager'); } catch (\Throwable) {}
+        }
+
+        // ── STAGE 5: Additional user accounts (roles must exist first) ─────
         $this->call([
             PayrollOfficerAccountSeeder::class,
             OfficeAdminSeeder::class,
@@ -70,7 +92,10 @@ class DatabaseSeeder extends Seeder
             HRStaffAccountSeeder::class,
         ]);
 
-        // ── System & Config Data ───────────────────────────────────────────
+        // Flush cache again after bulk account seeders assign more roles
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
+        // ── STAGE 6: System & config data ─────────────────────────────────
         $this->call([
             SLASeeder::class,
             CronJobSeeder::class,
@@ -86,14 +111,14 @@ class DatabaseSeeder extends Seeder
             SalaryComponentSeeder::class,
         ]);
 
-        // ── HR Structure (departments & positions before employees) ────────
+        // ── STAGE 7: HR structure (departments → positions → schedules) ────
         $this->call([
             DepartmentSeeder::class,
             PositionSeeder::class,
             WorkScheduleSeeder::class,
         ]);
 
-        // ── ATS / Recruitment ──────────────────────────────────────────────
+        // ── STAGE 8: ATS / Recruitment ────────────────────────────────────
         $this->call([
             JobPostingSeeder::class,
             CandidateSeeder::class,
@@ -101,12 +126,12 @@ class DatabaseSeeder extends Seeder
             InterviewSeeder::class,
         ]);
 
-        // ── Offboarding ────────────────────────────────────────────────────
+        // ── STAGE 9: Offboarding system config ────────────────────────────
         $this->call([
             OffboardingSystemSeeder::class,
         ]);
 
-        // ── Employees & Profiles ───────────────────────────────────────────
+        // ── STAGE 10: Employees & profiles ────────────────────────────────
         $this->call([
             EmployeeSeeder::class,
             BulkEmployeeSeeder::class,
@@ -116,38 +141,38 @@ class DatabaseSeeder extends Seeder
             EmployeePayrollInfoSeeder::class,
         ]);
 
-        // ── Document Management ────────────────────────────────────────────
+        // ── STAGE 11: Document management ─────────────────────────────────
         $this->call([
             DocumentTemplateSeeder::class,
         ]);
 
-        // ── Timekeeping & Attendance ───────────────────────────────────────
+        // ── STAGE 12: Timekeeping & attendance ────────────────────────────
         $this->call([
             RfidLedgerSeeder::class,
             AttendanceEventsSeeder::class,
             DailyAttendanceSummarySeeder::class,
         ]);
 
-        // ── Appraisals ─────────────────────────────────────────────────────
+        // ── STAGE 13: Appraisals ──────────────────────────────────────────
         $this->call([
             AppraisalCycleSeeder::class,
             AppraisalSeeder::class,
         ]);
 
-        // ── RFID / Badges ──────────────────────────────────────────────────
+        // ── STAGE 14: RFID / Badges ───────────────────────────────────────
         $this->call([
             RfidDeviceSeeder::class,
             RfidCardMappingSeeder::class,
         ]);
 
-        // ── Leave & Overtime ───────────────────────────────────────────────
+        // ── STAGE 15: Leave & overtime ────────────────────────────────────
         $this->call([
             LeaveBalanceSeeder::class,
             LeaveRequestSeeder::class,
             OvertimeRequestSeeder::class,
         ]);
 
-        // ── Workforce & Scheduling ─────────────────────────────────────────
+        // ── STAGE 16: Workforce & scheduling ──────────────────────────────
         $this->call([
             WorkforceSeeder::class,
         ]);
@@ -156,7 +181,7 @@ class DatabaseSeeder extends Seeder
             $this->call(OffboardingSeeder::class);
         }
 
-        // ── Payroll ────────────────────────────────────────────────────────
+        // ── STAGE 17: Payroll ─────────────────────────────────────────────
         $this->call([
             PayrollPeriodsSeeder::class,
             PaymentMethodsSeeder::class,
@@ -165,7 +190,7 @@ class DatabaseSeeder extends Seeder
             PayslipsSeeder::class,
         ]);
 
-        // ── Dev / Test Data (local environment only) ───────────────────────
+        // ── STAGE 18: Dev / test data (local & testing only) ──────────────
         if (app()->environment('local', 'testing')) {
             $this->call([
                 TimekeepingTestDataSeeder::class,
@@ -179,7 +204,7 @@ class DatabaseSeeder extends Seeder
             }
         }
 
-        // ── Cleanup (run last) ─────────────────────────────────────────────
+        // ── STAGE 19: Cleanup (run last) ───────────────────────────────────
         if (class_exists(RemoveDuplicateLuisTorresSeeder::class)) {
             $this->call(RemoveDuplicateLuisTorresSeeder::class);
         }
