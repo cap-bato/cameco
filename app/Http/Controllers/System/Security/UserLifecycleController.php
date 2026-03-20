@@ -79,6 +79,14 @@ class UserLifecycleController extends Controller
 			'unverified_users' => User::whereNull('email_verified_at')->count(),
 		];
 
+		$employeesWithoutUser = \App\Models\Employee::with(['profile' => function($q) {
+			$q->select('id', 'first_name', 'last_name');
+		}])
+			->whereNull('user_id')
+			->where('status', 'active')
+			->orderBy('employee_number')
+			->get(['id', 'employee_number', 'profile_id']);
+
 		return Inertia::render('System/Security/Users', [
 			'users' => $users,
 			'roles' => $allRoles,
@@ -89,6 +97,7 @@ class UserLifecycleController extends Controller
 				'role' => $request->get('role', 'all'),
 				'search' => $request->get('search', ''),
 			],
+			'employeesWithoutUser' => $employeesWithoutUser,
 		]);
 	}
 

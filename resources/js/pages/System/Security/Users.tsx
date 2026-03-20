@@ -49,25 +49,28 @@ interface Role {
 	name: string;
 }
 
+import type { Employee } from '@/types/hr-pages';
+
 interface UsersPageProps {
-	users: {
-		data: User[];
-		current_page: number;
-		last_page: number;
-		total: number;
-	};
-	roles: Role[];
-	stats: {
-		total_users: number;
-		active_users: number;
-		inactive_users: number;
-		unverified_users: number;
-	};
-	filters: {
-		status: string;
-		role: string;
-		search: string;
-	};
+       users: {
+	       data: User[];
+	       current_page: number;
+	       last_page: number;
+	       total: number;
+       };
+       roles: Role[];
+       stats: {
+	       total_users: number;
+	       active_users: number;
+	       inactive_users: number;
+	       unverified_users: number;
+       };
+       filters: {
+	       status: string;
+	       role: string;
+	       search: string;
+       };
+       employeesWithoutUser: Employee[];
 }
 
 export default function UsersPage({
@@ -75,6 +78,7 @@ export default function UsersPage({
 	roles,
 	stats,
 	filters,
+	employeesWithoutUser,
 }: UsersPageProps) {
 	const safeUsers = (users.data ?? []).filter(
 		(user): user is User => Boolean(user && typeof user.id === 'number'),
@@ -155,24 +159,26 @@ export default function UsersPage({
 		);
 	};
 
-	// Create user form
-	const createForm = useForm({
-		name: '',
-		email: '',
-		password: '',
-		password_confirmation: '',
-		roles: [] as number[],
-	});
 
-	const handleCreateSubmit = (e: React.FormEvent) => {
-		e.preventDefault();
-		createForm.post('/system/users', {
-			onSuccess: () => {
-				setShowCreateModal(false);
-				createForm.reset();
-			},
-		});
-	};
+	       // Create user form
+	       const createForm = useForm({
+		       name: '',
+		       email: '',
+		       password: '',
+		       password_confirmation: '',
+		       roles: [] as number[],
+		       employee_id: '',
+	       });
+
+	       const handleCreateSubmit = (e: React.FormEvent) => {
+		       e.preventDefault();
+		       createForm.post('/system/users', {
+			       onSuccess: () => {
+				       setShowCreateModal(false);
+				       createForm.reset();
+			       },
+		       });
+	       };
 
 	const toggleCreateRole = (roleId: number) => {
 		const current = createForm.data.roles;
@@ -591,7 +597,34 @@ export default function UsersPage({
 								Create a new system account and assign roles.
 							</DialogDescription>
 						</DialogHeader>
-						<form onSubmit={handleCreateSubmit} className="space-y-4">
+						   <form onSubmit={handleCreateSubmit} className="space-y-4">
+										       {/* Employee selection dropdown */}
+											       <div className="space-y-2">
+												       <Label htmlFor="create-employee">Link to Employee Profile</Label>
+												       <Select
+													       value={createForm.data.employee_id || 'none'}
+													       onValueChange={(val) => createForm.setData('employee_id', val === 'none' ? '' : val)}
+												       >
+													       <SelectTrigger id="create-employee">
+														       <SelectValue placeholder="Select employee (optional)" />
+													       </SelectTrigger>
+													       <SelectContent>
+														       <SelectItem value="none">No employee (standalone user)</SelectItem>
+															       {employeesWithoutUser.map((emp) => {
+																       const name = emp.profile
+																	       ? [emp.profile.first_name, emp.profile.last_name].filter(Boolean).join(' ')
+																	       : '';
+																       return (
+																	       <SelectItem key={emp.id} value={emp.id.toString()}>
+																		       {emp.employee_number}
+																		       {name ? ` - ${name}` : ''}
+																	       </SelectItem>
+																       );
+															       })}
+													       </SelectContent>
+												       </Select>
+												       {createForm.errors.employee_id && <p className="text-sm text-red-600">{createForm.errors.employee_id}</p>}
+											       </div>
 							{/* Global error */}
 							{(createForm.errors as Record<string, string>).error && (
 								<div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
