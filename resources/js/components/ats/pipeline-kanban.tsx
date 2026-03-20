@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { toast } from 'sonner';
-import { router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -24,36 +22,31 @@ interface PipelineColumn {
 
 interface PipelineKanbanProps {
   pipeline: PipelineColumn[];
+  // ✅ Receives the handler from HiringPipelineIndex instead of making its own router call
+  onChangeApplicationStatus: (app: Application, newStatus: ApplicationStatus, notes?: string) => void;
 }
 
 const statusColors: Record<ApplicationStatus, { bg: string; header: string; border: string; text: string }> = {
-  submitted: { bg: 'bg-blue-50', header: 'bg-blue-500', border: 'border-l-4 border-l-blue-500', text: 'text-blue-600' },
-  shortlisted: { bg: 'bg-purple-50', header: 'bg-purple-500', border: 'border-l-4 border-l-purple-500', text: 'text-purple-600' },
-  interviewed: { bg: 'bg-yellow-50', header: 'bg-yellow-500', border: 'border-l-4 border-l-yellow-500', text: 'text-yellow-600' },
-  offered: { bg: 'bg-green-50', header: 'bg-green-500', border: 'border-l-4 border-l-green-500', text: 'text-green-600' },
-  hired: { bg: 'bg-emerald-50', header: 'bg-emerald-500', border: 'border-l-4 border-l-emerald-500', text: 'text-emerald-600' },
-  rejected: { bg: 'bg-red-50', header: 'bg-red-500', border: 'border-l-4 border-l-red-500', text: 'text-red-600' },
-  withdrawn: { bg: 'bg-gray-50', header: 'bg-gray-500', border: 'border-l-4 border-l-gray-500', text: 'text-gray-600' },
+  submitted:   { bg: 'bg-blue-50',    header: 'bg-blue-500',    border: 'border-l-4 border-l-blue-500',    text: 'text-blue-600'    },
+  shortlisted: { bg: 'bg-purple-50',  header: 'bg-purple-500',  border: 'border-l-4 border-l-purple-500',  text: 'text-purple-600'  },
+  interviewed: { bg: 'bg-yellow-50',  header: 'bg-yellow-500',  border: 'border-l-4 border-l-yellow-500',  text: 'text-yellow-600'  },
+  offered:     { bg: 'bg-green-50',   header: 'bg-green-500',   border: 'border-l-4 border-l-green-500',   text: 'text-green-600'   },
+  hired:       { bg: 'bg-emerald-50', header: 'bg-emerald-500', border: 'border-l-4 border-l-emerald-500', text: 'text-emerald-600' },
+  rejected:    { bg: 'bg-red-50',     header: 'bg-red-500',     border: 'border-l-4 border-l-red-500',     text: 'text-red-600'     },
+  withdrawn:   { bg: 'bg-gray-50',    header: 'bg-gray-500',    border: 'border-l-4 border-l-gray-500',    text: 'text-gray-600'    },
 };
 
-/**
- * Pipeline Kanban Board - Task 8.1 with 8.3 (Status Change Dropdown)
- * Displays applications as draggable cards in status columns
- * Includes dropdown menu for status changes with confirmation modal
- */
-export const PipelineKanban = ({ pipeline }: PipelineKanbanProps) => {
+export const PipelineKanban = ({ pipeline, onChangeApplicationStatus }: PipelineKanbanProps) => {
   const [draggedCard, setDraggedCard] = useState<Application | null>(null);
   const [moveModalOpen, setMoveModalOpen] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [targetStatus, setTargetStatus] = useState<ApplicationStatus | null>(null);
-  const [isMoving, setIsMoving] = useState(false);
   const [quickViewOpen, setQuickViewOpen] = useState(false);
   const [quickViewApplication, setQuickViewApplication] = useState<Application | null>(null);
   const [addApplicationModalOpen, setAddApplicationModalOpen] = useState(false);
   const [selectedStatusForAdd, setSelectedStatusForAdd] = useState<ApplicationStatus | null>(null);
-  const [successModalOpen, setSuccessModalOpen] = useState(false);
-  const [successTitle, setSuccessTitle] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // ─── Drag and Drop ───────────────────────────────────────────────────────────
 
   const handleDragStart = (e: React.DragEvent, app: Application) => {
     setDraggedCard(app);
@@ -68,7 +61,6 @@ export const PipelineKanban = ({ pipeline }: PipelineKanbanProps) => {
   const handleDrop = (e: React.DragEvent, status: ApplicationStatus) => {
     e.preventDefault();
     if (draggedCard && draggedCard.status !== status) {
-      // Open modal for status change confirmation with target status
       setSelectedApplication(draggedCard);
       setTargetStatus(status);
       setMoveModalOpen(true);
@@ -76,67 +68,23 @@ export const PipelineKanban = ({ pipeline }: PipelineKanbanProps) => {
     setDraggedCard(null);
   };
 
+  // ─── Modal Handlers ──────────────────────────────────────────────────────────
+
   const handleConfirmMove = (newStatus: ApplicationStatus, notes?: string) => {
     if (!selectedApplication) return;
 
-    setIsMoving(true);
-    router.put(
-      `/hr/ats/pipeline/applications/${selectedApplication.id}/move`,
-      {
-        status: newStatus,
-        notes,
-      },
-      {
-        onSuccess: (page) => {
-          setIsMoving(false);
-          setMoveModalOpen(false);
-          // Compose custom modal title/message
-          let title = 'Application Moved';
-          let msg = '';
-          if (selectedApplication) {
-            const statusLabels: Record<ApplicationStatus, string> = {
-              submitted: 'Submitted',
-              shortlisted: 'Shortlisted',
-              interviewed: 'Interviewed',
-              offered: 'Offered',
-              hired: 'Hired',
-              rejected: 'Rejected',
-              withdrawn: 'Withdrawn',
-            };
-            title = `Application ${statusLabels[newStatus]}`;
-            msg = `${selectedApplication.candidate_name || 'Candidate'} for "${selectedApplication.job_title || 'Position'}" has been moved to ${statusLabels[newStatus]}.`;
-          }
-          setSuccessTitle(title);
-          setSuccessMessage(msg);
-          setSelectedApplication(null);
-          setSuccessModalOpen(true);
-        },
-        onError: (errors) => {
-          setIsMoving(false);
-          toast.error('Failed to move application.');
-          console.error('Failed to move application:', errors);
-        },
-      }
-    );
+    // ✅ Delegate entirely to the parent prop — no direct router.put here
+    onChangeApplicationStatus(selectedApplication, newStatus, notes);
+
+    setMoveModalOpen(false);
+    setSelectedApplication(null);
+    setTargetStatus(null);
   };
 
   const handleCloseModal = () => {
     setMoveModalOpen(false);
     setSelectedApplication(null);
     setTargetStatus(null);
-  };
-
-  const handleCloseAddApplicationModal = () => {
-    setAddApplicationModalOpen(false);
-    setSelectedStatusForAdd(null);
-  };
-
-  const handleAddApplication = async (applicationData: ApplicationFormData) => {
-    // This will be called when the form is submitted
-    // For now, just close the modal
-    // Backend integration will happen when API is ready
-    console.log('Adding application with status:', selectedStatusForAdd, applicationData);
-    handleCloseAddApplicationModal();
   };
 
   const handleOpenQuickView = (app: Application) => {
@@ -155,9 +103,23 @@ export const PipelineKanban = ({ pipeline }: PipelineKanbanProps) => {
     setQuickViewOpen(false);
   };
 
+  const handleCloseAddApplicationModal = () => {
+    setAddApplicationModalOpen(false);
+    setSelectedStatusForAdd(null);
+  };
+
+  const handleAddApplication = async (applicationData: ApplicationFormData) => {
+    console.log('Adding application with status:', selectedStatusForAdd, applicationData);
+    handleCloseAddApplicationModal();
+  };
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
+
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
+
+  // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -168,41 +130,28 @@ export const PipelineKanban = ({ pipeline }: PipelineKanbanProps) => {
         targetStatus={targetStatus}
         onConfirm={handleConfirmMove}
         onCancel={handleCloseModal}
-        isLoading={isMoving}
       />
-      {/* Success Modal */}
-      {successModalOpen && (
-        <Dialog open={successModalOpen} onOpenChange={setSuccessModalOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>{successTitle || 'Application Moved'}</DialogTitle>
-            </DialogHeader>
-            <div className="py-4 text-center">
-              <p className="text-lg font-semibold text-green-700">{successMessage}</p>
-            </div>
-            <DialogFooter>
-              <Button onClick={() => setSuccessModalOpen(false)} autoFocus>OK</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+
       <ApplicationQuickViewModal
         open={quickViewOpen}
         application={quickViewApplication}
         onClose={handleCloseQuickView}
         onMoveStatus={handleMoveStatusFromQuickView}
       />
+
       <AddApplicationModal
         isOpen={addApplicationModalOpen}
         initialStatus={selectedStatusForAdd || 'submitted'}
         onClose={handleCloseAddApplicationModal}
         onSubmit={handleAddApplication}
       />
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 auto-rows-max">
         {pipeline.map((column) => {
           const colors = statusColors[column.status];
           return (
             <div key={column.status} className="flex flex-col h-full">
+              {/* Column Header */}
               <div className={`${colors.header} rounded-t-lg px-3 py-2 text-white`}>
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="font-semibold text-xs truncate">{column.label}</h3>
@@ -212,6 +161,7 @@ export const PipelineKanban = ({ pipeline }: PipelineKanbanProps) => {
                 </div>
               </div>
 
+              {/* Drop Zone */}
               <div
                 className="flex-1 rounded-b-lg border border-t-0 px-2 py-2 space-y-2 bg-gray-50 min-h-[300px] overflow-y-auto"
                 onDragOver={handleDragOver}
@@ -237,8 +187,10 @@ export const PipelineKanban = ({ pipeline }: PipelineKanbanProps) => {
                             <p className="font-semibold text-xs truncate">{app.candidate_name || 'Unknown'}</p>
                             <p className="text-xs text-muted-foreground truncate line-clamp-1">{app.job_title || 'Position'}</p>
                           </div>
+
+                          {/* Status Change Dropdown */}
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                               <Button variant="ghost" size="sm" className="h-5 w-5 p-0 flex-shrink-0">
                                 <ChevronDown className="h-3 w-3" />
                               </Button>
@@ -248,28 +200,30 @@ export const PipelineKanban = ({ pipeline }: PipelineKanbanProps) => {
                                 Move to Status
                               </div>
                               <DropdownMenuSeparator />
-                              {(['submitted', 'shortlisted', 'interviewed', 'offered', 'hired', 'rejected', 'withdrawn'] as ApplicationStatus[]).map(
-                                (status) => (
+                              {(
+                                ['submitted', 'shortlisted', 'interviewed', 'offered', 'hired', 'rejected', 'withdrawn'] as ApplicationStatus[]
+                              ).map(
+                                (status) =>
                                   status !== app.status && (
                                     <DropdownMenuItem
                                       key={status}
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         setSelectedApplication(app);
                                         setTargetStatus(status);
                                         setMoveModalOpen(true);
                                       }}
                                       className="text-xs cursor-pointer"
                                     >
-                                      {status === 'submitted' && '📝 Submitted'}
+                                      {status === 'submitted'   && '📝 Submitted'}
                                       {status === 'shortlisted' && '⭐ Shortlisted'}
                                       {status === 'interviewed' && '👤 Interviewed'}
-                                      {status === 'offered' && '💼 Offered'}
-                                      {status === 'hired' && '✅ Hired'}
-                                      {status === 'rejected' && '❌ Rejected'}
-                                      {status === 'withdrawn' && '🚫 Withdrawn'}
+                                      {status === 'offered'     && '💼 Offered'}
+                                      {status === 'hired'       && '✅ Hired'}
+                                      {status === 'rejected'    && '❌ Rejected'}
+                                      {status === 'withdrawn'   && '🚫 Withdrawn'}
                                     </DropdownMenuItem>
                                   )
-                                )
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
