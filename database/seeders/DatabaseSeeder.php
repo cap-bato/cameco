@@ -121,7 +121,13 @@ class DatabaseSeeder extends Seeder
             EmployeeAccountSeeder::class,
             LinkEmployeesToUsersSeeder::class,
             EmployeePayrollInfoSeeder::class,
+
         ]);
+
+        if (class_exists(RemoveDuplicateLuisTorresSeeder::class)) {
+            $this->call(RemoveDuplicateLuisTorresSeeder::class);
+        }
+
         // ── Document Management ────────────────────────────────────────────
         $this->call([
             DocumentTemplateSeeder::class,
@@ -189,10 +195,6 @@ class DatabaseSeeder extends Seeder
                 $this->call(PayrollCalculationTestSeeder::class);
             }
 
-        }
-
-        if (class_exists(RemoveDuplicateLuisTorresSeeder::class)) {
-            $this->call(RemoveDuplicateLuisTorresSeeder::class);
         }
 
     }
