@@ -56,6 +56,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::post('/calculations/{id}/recalculate', [PayrollCalculationController::class, 'recalculate'])->name('calculations.recalculate');
         Route::post('/calculations/{id}/approve', [PayrollCalculationController::class, 'approve'])->name('calculations.approve');
         Route::delete('/calculations/{id}', [PayrollCalculationController::class, 'destroy'])->name('calculations.destroy');
+        Route::get('/calculations/{calculation}/status', [PayrollCalculationController::class, 'status'])->name('calculations.status');
 
         // Payroll Adjustments - Phase 1.4
         Route::get('/adjustments', [PayrollAdjustmentController::class, 'index'])->name('adjustments.index');

@@ -40,7 +40,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 // ============================================================================
 // Component
 // ============================================================================
-
 export default function PayrollCalculations({ 
     calculations: initialCalculations, 
     available_periods,

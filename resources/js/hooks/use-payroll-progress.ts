@@ -1,182 +1,122 @@
+// hooks/use-payroll-progress.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { batchStatus } from '@/routes/payroll/calculations';
 
-// ============================================================================
-// Type Definitions
-// ============================================================================
-
-export interface UsePayrollProgressOptions {
-    calculationId: number;
-    initialStatus: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
-    enabled?: boolean; // Default true; allows caller to disable polling
-    pollingInterval?: number; // Default 2000ms
-    onComplete?: () => void; // Callback when status becomes completed/failed
+interface ProgressState {
+  status: string;
+  progress: number;
+  processedEmployees: number;
+  totalEmployees: number;
+  failedEmployees: number;
+  errorMessage: string | null;
+  isPolling: boolean;
 }
 
-export interface PayrollProgressState {
-    progress: number; // 0–100 percentage
-    totalJobs: number | null;
-    pendingJobs: number | null;
-    failedJobs: number | null;
-    finished: boolean | null;
-    cancelled: boolean | null;
-    batchFound: boolean;
-    status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
-    isPolling: boolean;
-    error: string | null;
+interface UsePayrollProgressOptions {
+  calculationId: number;
+  initialStatus: string;
+  enabled: boolean;
+  pollingInterval?: number;
+  onComplete?: () => void;
+  onFailed?: (error: string | null) => void;
 }
 
-interface BatchStatusResponse {
-    progress: number;
-    total_jobs: number | null;
-    pending_jobs: number | null;
-    failed_jobs: number | null;
-    finished: boolean | null;
-    cancelled: boolean | null;
-    batch_found: boolean;
-    batch_id?: string;
-    error?: string;
-}
+export function usePayrollProgress({
+  calculationId,
+  initialStatus,
+  enabled,
+  pollingInterval = 2000,
+  onComplete,
+  onFailed,
+}: UsePayrollProgressOptions): ProgressState {
+  const [state, setState] = useState<ProgressState>({
+    status: initialStatus,
+    progress: 0,
+    processedEmployees: 0,
+    totalEmployees: 0,
+    failedEmployees: 0,
+    errorMessage: null,
+    isPolling: false,
+  });
 
-// ============================================================================
-// Hook Implementation
-// ============================================================================
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMounted = useRef(true);
 
-export function usePayrollProgress(options: UsePayrollProgressOptions): PayrollProgressState {
-    const {
-        calculationId,
-        initialStatus,
-        enabled = true,
-        pollingInterval = 2000,
-        onComplete,
-    } = options;
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setState(prev => ({ ...prev, isPolling: false }));
+  }, []);
 
-    // State
-    const [state, setState] = useState<PayrollProgressState>({
-        progress: 0,
-        totalJobs: null,
-        pendingJobs: null,
-        failedJobs: null,
-        finished: null,
-        cancelled: null,
-        batchFound: false,
-        status: initialStatus,
-        isPolling: false,
-        error: null,
-    });
+  const fetchStatus = useCallback(async () => {
+    if (!calculationId) return;
 
-    // Refs to track polling state
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
-    const consecutiveFailuresRef = useRef(0);
-    const hasCalledOnCompleteRef = useRef(false);
+    try {
+      const res = await fetch(`/payroll/calculations/${calculationId}/status`, {
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      });
 
-    // Stop polling helper (defined first to avoid circular dependency)
-    const stopPolling = useCallback(() => {
-        if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-            setState(prev => ({ ...prev, isPolling: false }));
-        }
-    }, []);
-
-    // Fetch batch status from API
-    const fetchBatchStatus = useCallback(async () => {
-        try {
-            const url = batchStatus.url({ id: calculationId });
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'same-origin', // Include cookies for auth
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data: BatchStatusResponse = await response.json();
-
-            // Reset failure counter on success
-            consecutiveFailuresRef.current = 0;
-
-            // Determine status from response
-            let newStatus: PayrollProgressState['status'] = state.status;
-            if (data.finished === true || data.progress >= 100) {
-                newStatus = 'completed';
-            } else if (data.cancelled === true) {
-                newStatus = 'cancelled';
-            } else if (data.progress > 0 && data.progress < 100) {
-                newStatus = 'processing';
-            }
-
-            // Update state
-            setState({
-                progress: data.progress || 0,
-                totalJobs: data.total_jobs,
-                pendingJobs: data.pending_jobs,
-                failedJobs: data.failed_jobs,
-                finished: data.finished,
-                cancelled: data.cancelled,
-                batchFound: data.batch_found,
-                status: newStatus,
-                isPolling: true,
-                error: null,
-            });
-
-            // Check if calculation is complete
-            if ((data.finished === true || data.cancelled === true || data.progress >= 100) && 
-                onComplete && 
-                !hasCalledOnCompleteRef.current) {
-                hasCalledOnCompleteRef.current = true;
-                onComplete();
-                stopPolling();
-            }
-
-        } catch (error) {
-            consecutiveFailuresRef.current += 1;
-            console.error('Failed to fetch batch status:', error);
-
-            // Update error state but continue polling (transient error tolerance)
-            setState(prev => ({
-                ...prev,
-                error: error instanceof Error ? error.message : 'Failed to fetch batch status',
-                isPolling: true,
-            }));
-
-            // Stop polling after 3 consecutive failures
-            if (consecutiveFailuresRef.current >= 3) {
-                console.error('Stopping polling after 3 consecutive failures');
-                setState(prev => ({
-                    ...prev,
-                    error: 'Failed to fetch batch status after 3 attempts. Please refresh the page.',
-                    isPolling: false,
-                }));
-                stopPolling();
-            }
-        }
-    }, [calculationId, onComplete, state.status, stopPolling]);
-
-    // Start polling effect
-    useEffect(() => {
-        // Don't poll if disabled or not processing status
-        if (!enabled || state.status !== 'processing') {
+    if (!res.ok) {
+        if (res.status === 404 || res.status === 403) {
             stopPolling();
-            return;
         }
+        return;
+    }
+      const data = await res.json();
 
-        // Fetch immediately on mount/enable
-        fetchBatchStatus();
+      if (!isMounted.current) return;
 
-        // Start interval polling
-        intervalRef.current = setInterval(fetchBatchStatus, pollingInterval);
+      // Prefer live batch data when available
+      const batch = data.batch;
+    const total     = batch?.total    ?? data.total_employees     ?? 0;
+    const pending   = batch?.pending  ?? null;
+    const failed    = batch?.failed   ?? data.failed_employees    ?? 0;
+    const progress  = batch?.progress ?? data.progress_percentage ?? 0;
+    const processed = pending !== null
+        ? Math.max(0, total - pending)
+        : data.processed_employees ?? 0;
 
-        // Cleanup on unmount or when dependencies change
-        return () => {
-            stopPolling();
-        };
-    }, [enabled, state.status, pollingInterval, fetchBatchStatus, stopPolling]);
+    setState(prev => ({
+        ...prev,
+        status:             data.status,
+        progress:           isNaN(progress) ? 0 : Math.round(progress),
+        processedEmployees: isNaN(processed) ? 0 : processed,
+        totalEmployees:     isNaN(total) ? 0 : total,
+        failedEmployees:    isNaN(failed) ? 0 : failed,
+        errorMessage:       data.error_message ?? null,
+    }));
 
-    return state;
+      // Terminal states — stop polling and fire callbacks
+      if (data.status === 'completed') {
+        stopPolling();
+        onComplete?.();
+      } else if (data.status === 'failed' || data.status === 'cancelled') {
+        stopPolling();
+        onFailed?.(data.error_message ?? null);
+      }
+    } catch (e) {
+      // Network error — keep polling, don't crash
+      console.warn('Polling error:', e);
+    }
+  }, [calculationId, stopPolling, onComplete, onFailed]);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || !calculationId) return;
+
+    setState(prev => ({ ...prev, isPolling: true }));
+
+    // Fetch immediately, then on interval
+    fetchStatus();
+    intervalRef.current = setInterval(fetchStatus, pollingInterval);
+
+    return () => stopPolling();
+  }, [enabled, calculationId, pollingInterval, fetchStatus, stopPolling]);
+
+  return state;
 }

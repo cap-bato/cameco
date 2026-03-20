@@ -412,4 +412,54 @@ class PayrollCalculationController extends Controller
             default                  => 'pending',
         };
     }
+
+            // for polling 
+        public function status(int $id): JsonResponse
+        {
+    try {
+        $period = PayrollPeriod::findOrFail($id);
+
+        $batchProgress = null;
+        if ($period->status === 'calculating' && $period->calculation_batch_id) {
+            $batch = Bus::findBatch($period->calculation_batch_id);
+            if ($batch) {
+                $batchProgress = [
+                    'progress' => $batch->progress(),
+                    'total'    => $batch->totalJobs,
+                    'pending'  => $batch->pendingJobs,
+                    'failed'   => $batch->failedJobs,
+                    'finished' => $batch->finished(),
+                ];
+            }
+        }
+
+        $empCounts = EmployeePayrollCalculation::where('payroll_period_id', $id)
+            ->selectRaw("
+                COUNT(*) as total,
+                SUM(CASE WHEN calculation_status IN ('calculated','adjusted','approved','locked') THEN 1 ELSE 0 END) as processed,
+                SUM(CASE WHEN calculation_status = 'exception' THEN 1 ELSE 0 END) as failed
+            ")
+            ->first();
+
+        return response()->json([
+            'status'              => $this->dbStatusToCalcStatus($period->status),
+            'progress_percentage' => (float) ($period->progress_percentage ?? 0),
+            'processed_employees' => (int) ($empCounts?->processed ?? 0),
+            'total_employees'     => (int) ($period->total_employees ?? $empCounts?->total ?? 0),
+            'failed_employees'    => (int) ($empCounts?->failed ?? 0),
+            'total_gross_pay'     => (float) ($period->total_gross_pay ?? 0),
+            'total_net_pay'       => (float) ($period->total_net_pay ?? 0),
+            'error_message'       => null,
+            'batch'               => $batchProgress,
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Failed to retrieve calculation status', [
+            'id'    => $id,
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json(['error' => 'Failed to retrieve status'], 500);
+    }
+}
 }

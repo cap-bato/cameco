@@ -72,20 +72,27 @@ export function CalculationProgressModal({
 
     // Real-time progress polling
     const progressState = usePayrollProgress({
-        calculationId: calculation?.id || 0,
-        initialStatus: calculation?.status || 'pending',
-        enabled: isOpen && !!calculation && calculation.status === 'processing',
-        pollingInterval: 2000,
-        onComplete: () => {
-            router.reload({ only: ['calculations'] });
-            if (calculation) {
-                toast({
-                    title: 'Calculation Complete',
-                    description: `Payroll calculation completed for ${calculation.payroll_period.name}`,
-                    variant: 'default',
-                });
-            }
-        },
+    calculationId: calculation?.id || 0,
+    initialStatus: calculation?.status || 'pending',
+    enabled: isOpen && !!calculation && calculation.status === 'processing',
+    pollingInterval: 2000,
+    onComplete: () => {
+        // ✅ Reload FIRST, then optionally close
+        router.reload({ only: ['calculations'] });
+        toast({
+        title: 'Calculation Complete',
+        description: `Payroll for ${calculation?.payroll_period?.name} is done.`,
+        });
+        // Don't call onClose() here — let the user see the completed state
+    },
+    onFailed: (error) => {
+        toast({
+        title: 'Calculation Failed',
+        description: error ?? 'An error occurred during payroll calculation.',
+        variant: 'destructive',
+        });
+        router.reload({ only: ['calculations'] });
+    },
     });
 
     const handleStartCalculation = () => {
@@ -277,7 +284,7 @@ export function CalculationProgressModal({
                             </div>
                             <Progress value={progressPercentage} className="h-2" />
                             <div className="text-xs text-muted-foreground">
-                                {processedEmployees} of {totalEmployees} employees processed
+                                {processedEmployees ?? 0} of {totalEmployees ?? 0} employees processed
                             </div>
                         </div>
                     </div>
