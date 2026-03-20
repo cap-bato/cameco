@@ -67,24 +67,21 @@ class ApplicationsController extends Controller
      */
     public function show(int $applicationId): Response
     {
-        $application = Application::with(['candidate.profile', 'jobPosting'])
+        $application = Application::with(['candidate', 'jobPosting'])
             ->findOrFail($applicationId);
-        
-        $resumeUrl = null;
-        if ($application->resume_path && Storage::disk('public')->exists($application->resume_path)) {
-            $resumeUrl = Storage::disk('public')->url($application->resume_path);
-        }
-        
-        // Compose candidate name/email/phone with fallback to profile
-        $profile = $application->candidate->profile ?? null;
-        $candidateName = $profile?->full_name
-            ?? trim(($profile?->first_name ?? '') . ' ' . ($profile?->last_name ?? ''))
-            ?? trim(($application->candidate->first_name ?? '') . ' ' . ($application->candidate->last_name ?? ''))
-            ?? 'Unknown Candidate';
-        $candidateEmail = $profile?->email ?? $application->candidate->email ?? 'N/A';
-        $candidatePhone = $profile?->phone ?? $application->candidate->phone ?? 'N/A';
 
-        return Inertia::render('HR/ATS/Applications/Show', [
+        $resumeUrl = null;
+        if ($application->resume_path && \Storage::disk('public')->exists($application->resume_path)) {
+            $resumeUrl = \Storage::disk('public')->url($application->resume_path);
+        }
+
+        // Compose candidate name/email/phone from candidate fields
+        $candidate = $application->candidate;
+        $candidateName = trim(($candidate->first_name ?? '') . ' ' . ($candidate->last_name ?? '')) ?: 'Unknown Candidate';
+        $candidateEmail = $candidate->email ?? 'N/A';
+        $candidatePhone = $candidate->phone ?? 'N/A';
+
+        return \Inertia\Inertia::render('HR/ATS/Applications/Show', [
             'application' => [
                 'id' => $application->id,
                 'status' => $application->status,
@@ -98,18 +95,18 @@ class ApplicationsController extends Controller
                 'job_title' => $application->jobPosting->title ?? 'N/A',
             ],
             'candidate' => [
-                'id' => $application->candidate->id,
-                'first_name' => $profile?->first_name,
-                'last_name' => $profile?->last_name,
-                'full_name' => $profile?->full_name,
-                'email' => $profile?->email,
-                'phone' => $profile?->phone,
-                'address' => $profile?->address ?? 'N/A',
-                'city' => $profile?->city ?? 'N/A',
-                'state' => $profile?->state ?? 'N/A',
-                'postal_code' => $profile?->postal_code ?? 'N/A',
-                'country' => $profile?->country ?? 'N/A',
-                'date_of_birth' => $profile?->date_of_birth?->format('F d, Y'),
+                'id' => $candidate->id,
+                'first_name' => $candidate->first_name,
+                'last_name' => $candidate->last_name,
+                'full_name' => trim(($candidate->first_name ?? '') . ' ' . ($candidate->last_name ?? '')),
+                'email' => $candidate->email,
+                'phone' => $candidate->phone,
+                'address' => $candidate->address ?? 'N/A',
+                'city' => $candidate->city ?? 'N/A',
+                'state' => $candidate->state ?? 'N/A',
+                'postal_code' => $candidate->postal_code ?? 'N/A',
+                'country' => $candidate->country ?? 'N/A',
+                'date_of_birth' => $candidate->birthdate ? date('F d, Y', strtotime($candidate->birthdate)) : null,
             ],
             'jobPosting' => [
                 'id' => $application->jobPosting->id,
