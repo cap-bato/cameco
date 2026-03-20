@@ -260,6 +260,7 @@ class PayrollCalculationController extends Controller
                     'finished'           => null,
                     'cancelled'          => null,
                     'batch_found'        => false,
+                    
                 ]);
             }
 

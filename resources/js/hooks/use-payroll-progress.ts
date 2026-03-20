@@ -113,11 +113,14 @@ setState(prev => ({
   useEffect(() => {
     if (!enabled || !calculationId) return;
 
-    // Fetch immediately (defer to avoid sync setState in effect)
-    queueMicrotask(() => fetchStatus());
+    // Fetch immediately (async), then on interval
+    const timeout = setTimeout(fetchStatus, 0);
     intervalRef.current = setInterval(fetchStatus, pollingInterval);
 
-    return () => stopPolling();
+    return () => {
+      clearTimeout(timeout);
+      stopPolling();
+    };
   }, [enabled, calculationId, pollingInterval, fetchStatus, stopPolling]);
 
   return state;

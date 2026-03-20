@@ -252,10 +252,10 @@ const progressPercentage = progressState.isPolling
     : calculation.progress_percentage;
 
 const processedEmployees = progressState.isPolling 
-    ? progressState.processedEmployees 
+    ? (progressState.processedEmployees ?? 0)
     : (calculation.processed_employees ?? 0);
 const totalEmployees = progressState.isPolling 
-    ? progressState.totalEmployees 
+    ? (progressState.totalEmployees ?? 0)
     : (calculation.total_employees ?? 0);
 
 const failedEmployees = progressState.isPolling 
