@@ -133,6 +133,10 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::put('/requests/{id}', [LeaveRequestController::class, 'update'])->name('requests.update');
             Route::post('/requests/{id}/process', [LeaveRequestController::class, 'processApproval'])->name('requests.process');
             Route::delete('/requests/{id}', [LeaveRequestController::class, 'destroy'])->name('requests.destroy');
+            
+            // API endpoint to get employee leave balances (for leave request form)
+            Route::get('/employee/{employeeId}/balances', [LeaveBalanceController::class, 'getEmployeeBalances'])->name('employee-balances');
+            
             Route::get('/balances', [LeaveBalanceController::class, 'index'])->name('balances');
             Route::get('/policies', [LeavePolicyController::class, 'index'])->name('policies');
             

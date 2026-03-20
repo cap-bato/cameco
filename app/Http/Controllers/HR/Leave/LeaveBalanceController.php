@@ -169,4 +169,36 @@ class LeaveBalanceController extends Controller
             'sortDirection' => $sortDirection,    // ← pass back to frontend
         ]);
     }
+
+    /**
+     * Get leave balances for a specific employee for the current year.
+     * Used to display actual leave balance when creating/editing leave requests.
+     */
+    public function getEmployeeBalances(int $employeeId)
+    {
+        $employee = Employee::findOrFail($employeeId);
+        $currentYear = now()->year;
+        
+        // Get all leave balances for this employee for the current year
+        $balances = LeaveBalance::with('leavePolicy')
+            ->where('employee_id', $employeeId)
+            ->where('year', $currentYear)
+            ->get()
+            ->map(function ($balance) {
+                return [
+                    'leave_policy_id' => $balance->leave_policy_id,
+                    'leave_type_name' => $balance->leavePolicy?->name,
+                    'earned' => (float) $balance->earned,
+                    'used' => (float) $balance->used,
+                    'carried_forward' => (float) $balance->carried_forward,
+                    'remaining' => (float) $balance->remaining,
+                ];
+            });
+        
+        return response()->json([
+            'employee_id' => $employeeId,
+            'year' => $currentYear,
+            'balances' => $balances,
+        ]);
+    }
 }

@@ -158,11 +158,21 @@ export function AddCandidateModal({
       });
       setResumeFileName('');
       onClose();
-    } catch (error) {
-      console.error('Error adding candidate:', error);
-      setErrors({
-        submit: 'Failed to add candidate. Please try again.',
-      });
+    } catch (error: any) {
+      // Extract field-specific errors from backend validation
+      if (error.response?.data?.errors) {
+        const backendErrors: Record<string, string> = {};
+        Object.keys(error.response.data.errors).forEach((field) => {
+          const fieldErrors = error.response.data.errors[field];
+          backendErrors[field] = Array.isArray(fieldErrors) ? fieldErrors[0] : fieldErrors;
+        });
+        setErrors(backendErrors);
+      } else if (error.response?.data?.message) {
+        // Only show submit error for non-validation errors
+        setErrors({
+          submit: error.response.data.message,
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -309,6 +319,14 @@ export function AddCandidateModal({
             error={errors.resume}
             disabled={isSubmitting}
           />
+
+          {/* Submit Error Message */}
+          {errors.submit && (
+            <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30">
+              <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-destructive">{errors.submit}</p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2">

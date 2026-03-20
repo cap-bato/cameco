@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Head, router, useForm } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -8,6 +8,15 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Link } from '@inertiajs/react';
+
+interface EmployeeBalance {
+    leave_policy_id: number;
+    leave_type_name: string;
+    earned: number;
+    used: number;
+    carried_forward: number;
+    remaining: number;
+}
 
 interface CreateRequestProps {
     employees: Array<{ id: number; employee_number: string; name: string }>;
@@ -24,8 +33,77 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
         hr_notes: '',
     });
 
+    const [employeeBalances, setEmployeeBalances] = useState<Record<number, EmployeeBalance>>({});
+    const [loadingBalances, setLoadingBalances] = useState(false);
+
+    // Fetch employee balances when employee is selected
+    useEffect(() => {
+        if (form.data.employee_id) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setLoadingBalances(true);
+            fetch(`/hr/leave/employee/${form.data.employee_id}/balances`)
+                .then(res => res.json())
+                .then(data => {
+                    const balanceMap: Record<number, EmployeeBalance> = {};
+                    data.balances.forEach((balance: EmployeeBalance) => {
+                        balanceMap[balance.leave_policy_id] = balance;
+                    });
+                    setEmployeeBalances(balanceMap);
+                })
+                .catch(err => console.error('Error fetching balances:', err))
+                .finally(() => setLoadingBalances(false));
+        }
+    }, [form.data.employee_id]);
+
+    // Calculate days requested
+    const calculateDaysRequested = (): number => {
+        try {
+            const start = new Date(form.data.start_date);
+            const end = new Date(form.data.end_date);
+            
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                return 0;
+            }
+            
+            const diffTime = Math.abs(end.getTime() - start.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays + 1; // Include both start and end dates
+        } catch {
+            return 0;
+        }
+    };
+
+    const daysRequested = calculateDaysRequested();
+
+    // Check if request exceeds remaining balance
+    const checkBalanceSufficiency = (): { isSufficient: boolean; message?: string } => {
+        const balance = employeeBalances[form.data.leave_policy_id];
+        if (!balance) {
+            return { isSufficient: true }; // No balance data yet
+        }
+
+        const remaining = balance.remaining;
+        if (remaining <= 0) {
+            return { isSufficient: false, message: `${remaining.toFixed(2)} days available (${balance.earned.toFixed(2)} earned, ${balance.used.toFixed(2)} used) - INSUFFICIENT BALANCE` };
+        }
+
+        if (daysRequested > remaining) {
+            return { isSufficient: false, message: `${remaining.toFixed(2)} days available (${balance.earned.toFixed(2)} earned, ${balance.used.toFixed(2)} used) - INSUFFICIENT BALANCE` };
+        }
+
+        return { isSufficient: true };
+    };
+
+    const balanceCheck = checkBalanceSufficiency();
+
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Check balance sufficiency first
+        if (!balanceCheck.isSufficient) {
+            form.setErrors({ leave_policy_id: balanceCheck.message || 'Insufficient balance for this leave type.' });
+            return;
+        }
 
         // quick client-side checks to give immediate feedback
         const errs: Record<string, string> = {};
@@ -107,19 +185,36 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select leave type" />
                                         </SelectTrigger>
-                                            <SelectContent>
-                                                {leaveTypes.map((t) => (
-                                                    <SelectItem key={t.id} value={String(t.id)}>
+                                        <SelectContent>
+                                            {leaveTypes.map((t) => {
+                                                const balance = employeeBalances[t.id];
+                                                const isEmergency = t.code?.toLowerCase() === 'el' || t.name?.toLowerCase().includes('emergency');
+                                                const hasZeroBalance = balance && balance.remaining <= 0;
+                                                const isUnavailable = hasZeroBalance && !isEmergency;
+                                                
+                                                return (
+                                                    <SelectItem key={t.id} value={String(t.id)} disabled={isUnavailable}>
                                                         <div className="flex flex-col">
                                                             <span>{t.name}</span>
-                                                            {typeof t.annual_entitlement !== 'undefined' && (
-                                                                <small className="text-xs text-muted-foreground">{Number(t.annual_entitlement) === 1 ? `${t.annual_entitlement} day` : `${t.annual_entitlement} days`}</small>
+                                                            {balance ? (
+                                                                <small className={`text-xs ${isUnavailable ? 'text-red-500 font-semibold' : 'text-muted-foreground'}`}>
+                                                                    {balance.remaining.toFixed(2)} days available ({balance.earned.toFixed(2)} earned, {balance.used.toFixed(2)} used)
+                                                                    {isUnavailable && ' - INSUFFICIENT BALANCE'}
+                                                                </small>
+                                                            ) : (
+                                                                <small className="text-xs text-muted-foreground">
+                                                                    {typeof t.annual_entitlement !== 'undefined' 
+                                                                        ? `${t.annual_entitlement} days entitlement`
+                                                                        : 'No balance data'}
+                                                                </small>
                                                             )}
                                                         </div>
                                                     </SelectItem>
-                                                ))}
-                                            </SelectContent>
+                                                );
+                                            })}
+                                        </SelectContent>
                                     </Select>
+                                    {loadingBalances && <p className="text-xs text-muted-foreground">Loading balance...</p>}
                                     {form.errors.leave_policy_id && <div className="text-sm text-red-500">{form.errors.leave_policy_id}</div>}
                                 </div>
 
@@ -151,6 +246,23 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
                                         {form.errors.end_date && <div className="text-sm text-red-500">{form.errors.end_date}</div>}
                                     </div>
                                 </div>
+
+                                {daysRequested > 0 && (
+                                    <div className={`p-3 rounded-md text-sm ${balanceCheck.isSufficient ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                                        {balanceCheck.isSufficient ? (
+                                            <>
+                                                {daysRequested} day{daysRequested !== 1 ? 's' : ''} requested
+                                                {employeeBalances[form.data.leave_policy_id] && (
+                                                    <>
+                                                        {' '}• {employeeBalances[form.data.leave_policy_id].remaining.toFixed(2)} available
+                                                    </>
+                                                )}
+                                            </>
+                                        ) : (
+                                            balanceCheck.message || 'Insufficient balance'
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -180,7 +292,12 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
                             </div>
 
                             <div className="flex items-center gap-2">
-                                <Button type="submit" disabled={form.processing}>Submit Leave Request</Button>
+                                <Button 
+                                    type="submit" 
+                                    disabled={form.processing || !balanceCheck.isSufficient}
+                                >
+                                    Submit Leave Request
+                                </Button>
                                 <Button type="button" variant="outline" onClick={() => router.visit('/hr/leave/requests')}>Cancel</Button>
                             </div>
                         </form>

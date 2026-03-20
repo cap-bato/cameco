@@ -52,7 +52,7 @@ export interface Employee {
     };
     position?: {
         id: number;
-        name: string;
+        title: string;
     };
     status: 'active' | 'on_leave' | 'terminated' | 'archived' | 'suspended';
     employment_type: string;
@@ -274,7 +274,7 @@ export function EmployeeTable({
                             <TableCell>
                                 {employee.position ? (
                                     <span className="text-sm">
-                                        {employee.position.name}
+                                        {employee.position.title}
                                     </span>
                                 ) : (
                                     <span className="text-sm text-muted-foreground">

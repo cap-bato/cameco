@@ -87,6 +87,7 @@ export function PositionFormModal({
             setFormData({
                 title: position.title,
                 code: position.code,
+                description: position.description || '',
                 level: position.level || '',
                 department_id: String(position.department_id),
                 reports_to: position.reports_to ? String(position.reports_to) : '',

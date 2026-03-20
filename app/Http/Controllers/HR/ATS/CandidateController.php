@@ -24,6 +24,7 @@ class CandidateController extends Controller
 
         // Query candidates with counts
         $candidates = Candidate::query()
+            ->select('id', 'first_name', 'last_name', 'email', 'phone', 'source', 'status', 'applied_at', 'resume_path', 'created_at', 'updated_at')
             ->withCount(['applications', 'interviews', 'notes'])
             ->when($source, fn($q) => $q->where('source', $source))
             ->when($status, fn($q) => $q->where('status', $status))
@@ -33,7 +34,7 @@ class CandidateController extends Controller
                   ->orWhere('email', 'like', "%{$search}%");
             }))
             ->latest('applied_at')
-            ->paginate(20);
+            ->get();
 
         // Statistics
         $statistics = [

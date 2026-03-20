@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, Facebook } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import type { JobPosting, JobPostingFormData } from '@/types/ats-pages';
 
@@ -33,15 +33,43 @@ export function JobPostingCreateEditModal({
   onSubmit,
 }: JobPostingCreateEditModalProps) {
   const [formData, setFormData] = useState<JobPostingFormData>({
-    title: jobPosting?.title || '',
-    department_id: jobPosting?.department_id || 0,
-    description: jobPosting?.description || '',
-    requirements: jobPosting?.requirements || '',
-    status: jobPosting?.status || 'draft',
-    auto_post_facebook: jobPosting?.auto_post_facebook || false,
+    title: '',
+    department_id: 0,
+    description: '',
+    requirements: '',
+    status: 'draft',
+    auto_post_facebook: false,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Update form data when modal opens or jobPosting changes
+  useEffect(() => {
+    if (isOpen) {
+      if (jobPosting) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setFormData({
+          title: jobPosting.title || '',
+          department_id: jobPosting.department_id || 0,
+          description: jobPosting.description || '',
+          requirements: jobPosting.requirements || '',
+          status: jobPosting.status || 'draft',
+          auto_post_facebook: jobPosting.auto_post_facebook || false,
+        });
+      } else {
+        // Reset form for create mode
+        setFormData({
+          title: '',
+          department_id: 0,
+          description: '',
+          requirements: '',
+          status: 'draft',
+          auto_post_facebook: false,
+        });
+      }
+      setErrors({});
+    }
+  }, [isOpen, jobPosting]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -77,21 +105,13 @@ export function JobPostingCreateEditModal({
   };
 
   const handleClose = () => {
-    setFormData({
-      title: '',
-      department_id: 0,
-      description: '',
-      requirements: '',
-      status: 'draft',
-      auto_post_facebook: false,
-    });
     setErrors({});
     onClose();
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? 'Edit Job Posting' : 'Create New Job Posting'}
