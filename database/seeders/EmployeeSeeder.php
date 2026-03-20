@@ -69,7 +69,17 @@ class EmployeeSeeder extends Seeder
         for ($i = 1; $i <= 30; $i++) {
             $empNum = sprintf('EMP-RM1-%04d', $i);
             $email = "rm1_{$i}@cameco.com";
-            // Check if profile already exists for this email
+            // Prevent logical duplicate: check for existing profile with same name and DOB
+            $existingProfile = Profile::where([
+                ['first_name', '=', 'Rolling'],
+                ['middle_name', '=', 'Mill1'],
+                ['last_name', '=', (string)$i],
+                ['date_of_birth', '=', '1990-01-01'],
+            ])->first();
+            if ($existingProfile) {
+                // Skip creating both profile and employee if logical duplicate found
+                continue;
+            }
             $profile = Profile::firstOrCreate([
                 'email' => $email
             ], [
@@ -82,7 +92,6 @@ class EmployeeSeeder extends Seeder
                 'current_address' => 'Rolling Mill 1 Area',
                 'permanent_address' => 'Rolling Mill 1 Area',
             ]);
-            // Only create employee if not already present for this profile
             Employee::firstOrCreate([
                 'employee_number' => $empNum
             ], [
@@ -100,14 +109,25 @@ class EmployeeSeeder extends Seeder
         // Bulk-generate Rolling Mill 2 employees (25)
         for ($i = 1; $i <= 25; $i++) {
             $empNum = sprintf('EMP-RM2-%04d', $i);
-            $profile = Profile::create([
+            $email = "rm2_{$i}@cameco.com";
+            $existingProfile = Profile::where([
+                ['first_name', '=', 'Rolling'],
+                ['middle_name', '=', 'Mill2'],
+                ['last_name', '=', (string)$i],
+                ['date_of_birth', '=', '1990-01-01'],
+            ])->first();
+            if ($existingProfile) {
+                continue;
+            }
+            $profile = Profile::firstOrCreate([
+                'email' => $email
+            ], [
                 'first_name' => 'Rolling',
                 'middle_name' => 'Mill2',
                 'last_name' => "{$i}",
                 'date_of_birth' => '1990-01-01',
                 'gender' => 'male',
                 'civil_status' => 'single',
-                'email' => "rm2_{$i}@cameco.com",
                 'current_address' => 'Rolling Mill 2 Area',
                 'permanent_address' => 'Rolling Mill 2 Area',
             ]);
@@ -128,14 +148,25 @@ class EmployeeSeeder extends Seeder
         // Bulk-generate Rolling Mill 3 employees (20)
         for ($i = 1; $i <= 20; $i++) {
             $empNum = sprintf('EMP-RM3-%04d', $i);
-            $profile = Profile::create([
+            $email = "rm3_{$i}@cameco.com";
+            $existingProfile = Profile::where([
+                ['first_name', '=', 'Rolling'],
+                ['middle_name', '=', 'Mill3'],
+                ['last_name', '=', (string)$i],
+                ['date_of_birth', '=', '1990-01-01'],
+            ])->first();
+            if ($existingProfile) {
+                continue;
+            }
+            $profile = Profile::firstOrCreate([
+                'email' => $email
+            ], [
                 'first_name' => 'Rolling',
                 'middle_name' => 'Mill3',
                 'last_name' => "{$i}",
                 'date_of_birth' => '1990-01-01',
                 'gender' => 'male',
                 'civil_status' => 'single',
-                'email' => "rm3_{$i}@cameco.com",
                 'current_address' => 'Rolling Mill 3 Area',
                 'permanent_address' => 'Rolling Mill 3 Area',
             ]);
@@ -519,19 +550,27 @@ class EmployeeSeeder extends Seeder
         foreach ($employees as $data) {
             // Check if employee already exists
             $existingEmployee = Employee::where('employee_number', $data['employee']['employee_number'])->first();
-            
             if ($existingEmployee) {
                 $createdEmployees[$data['employee']['employee_number']] = $existingEmployee;
                 continue;
             }
-
+            // Prevent logical duplicate: check for existing profile with same name and DOB
+            $profileData = $data['profile'];
+            $existingProfile = Profile::where([
+                ['first_name', '=', $profileData['first_name']],
+                ['middle_name', '=', $profileData['middle_name']],
+                ['last_name', '=', $profileData['last_name']],
+                ['date_of_birth', '=', $profileData['date_of_birth']],
+            ])->first();
+            if ($existingProfile) {
+                // Skip creating both profile and employee if logical duplicate found
+                continue;
+            }
             // Create profile
             $profile = Profile::create($data['profile']);
-
             // Create employee
             $employeeData = array_merge($data['employee'], ['profile_id' => $profile->id, 'created_by' => $createdBy, 'updated_by' => $createdBy]);
             $employee = Employee::create($employeeData);
-
             $createdEmployees[$data['employee']['employee_number']] = $employee;
         }
 
