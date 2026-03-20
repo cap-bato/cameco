@@ -406,7 +406,7 @@ class DashboardController extends Controller
                 'label' => 'Import Attendance',
                 'icon' => 'upload',
                 'color' => 'green',
-                'url' => '/payroll/timekeeping/import',
+                'url' => '/payroll/employee-payroll-info',
                 'description' => 'Import timekeeping data',
             ],
             [
@@ -414,7 +414,7 @@ class DashboardController extends Controller
                 'label' => 'Government Reports',
                 'icon' => 'file-text',
                 'color' => 'purple',
-                'url' => '/payroll/government/reports',
+                'url' => '/payroll/reports/government',
                 'description' => 'Generate compliance reports',
             ],
             [
@@ -430,7 +430,7 @@ class DashboardController extends Controller
                 'label' => 'Export Summary',
                 'icon' => 'download',
                 'color' => 'orange',
-                'url' => '/payroll/reports/export',
+                'url' => '/payroll/reports/analytics',
                 'description' => 'Export payroll summary',
             ],
         ];

@@ -75,6 +75,15 @@ class ApplicationsController extends Controller
             $resumeUrl = Storage::disk('public')->url($application->resume_path);
         }
         
+        // Compose candidate name/email/phone with fallback to profile
+        $profile = $application->candidate->profile ?? null;
+        $candidateName = $profile?->full_name
+            ?? trim(($profile?->first_name ?? '') . ' ' . ($profile?->last_name ?? ''))
+            ?? trim(($application->candidate->first_name ?? '') . ' ' . ($application->candidate->last_name ?? ''))
+            ?? 'Unknown Candidate';
+        $candidateEmail = $profile?->email ?? $application->candidate->email ?? 'N/A';
+        $candidatePhone = $profile?->phone ?? $application->candidate->phone ?? 'N/A';
+
         return Inertia::render('HR/ATS/Applications/Show', [
             'application' => [
                 'id' => $application->id,
@@ -83,20 +92,24 @@ class ApplicationsController extends Controller
                 'cover_letter' => $application->cover_letter,
                 'resume_path' => $application->resume_path,
                 'resume_url' => $resumeUrl,
+                'candidate_name' => $candidateName,
+                'candidate_email' => $candidateEmail,
+                'candidate_phone' => $candidatePhone,
+                'job_title' => $application->jobPosting->title ?? 'N/A',
             ],
             'candidate' => [
                 'id' => $application->candidate->id,
-                'first_name' => $application->candidate->profile->first_name,
-                'last_name' => $application->candidate->profile->last_name,
-                'full_name' => $application->candidate->profile->full_name,
-                'email' => $application->candidate->profile->email,
-                'phone' => $application->candidate->profile->phone,
-                'address' => $application->candidate->profile->address ?? 'N/A',
-                'city' => $application->candidate->profile->city ?? 'N/A',
-                'state' => $application->candidate->profile->state ?? 'N/A',
-                'postal_code' => $application->candidate->profile->postal_code ?? 'N/A',
-                'country' => $application->candidate->profile->country ?? 'N/A',
-                'date_of_birth' => $application->candidate->profile->date_of_birth?->format('F d, Y'),
+                'first_name' => $profile?->first_name,
+                'last_name' => $profile?->last_name,
+                'full_name' => $profile?->full_name,
+                'email' => $profile?->email,
+                'phone' => $profile?->phone,
+                'address' => $profile?->address ?? 'N/A',
+                'city' => $profile?->city ?? 'N/A',
+                'state' => $profile?->state ?? 'N/A',
+                'postal_code' => $profile?->postal_code ?? 'N/A',
+                'country' => $profile?->country ?? 'N/A',
+                'date_of_birth' => $profile?->date_of_birth?->format('F d, Y'),
             ],
             'jobPosting' => [
                 'id' => $application->jobPosting->id,
