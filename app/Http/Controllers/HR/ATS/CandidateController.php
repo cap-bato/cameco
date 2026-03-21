@@ -160,7 +160,8 @@ public function addNote(Request $request, Candidate $candidate)
     $candidate->notes()->create([
         'note' => $validated['note'],
         'is_private' => $validated['is_private'] ?? false,
-        'user_id' => Auth::id(), 
+        'user_id' => Auth::id(),
+        'candidate_id' => $candidate->id,
     ]);
 
     return back()->with('success', 'Note added successfully.');
