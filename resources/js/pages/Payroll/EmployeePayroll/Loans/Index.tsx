@@ -232,7 +232,7 @@ export default function LoansPage({
                     <Card className="p-4">
                         <p className="text-xs font-semibold text-muted-foreground">Active Status</p>
                         <p className="text-3xl font-bold mt-2">
-                            {summaryStats.totalLoans > 0
+                            {Number.isFinite(summaryStats.activeStatusPercent) && summaryStats.totalLoans > 0
                                 ? `${summaryStats.activeStatusPercent.toFixed(0)}%`
                                 : '0%'}
                         </p>

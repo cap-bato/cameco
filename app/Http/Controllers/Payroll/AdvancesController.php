@@ -92,13 +92,28 @@ class AdvancesController extends Controller
         });
 
         // Get employees list for dropdown (all active employees)
-        $employees = Employee::with('user', 'department')
+        $employees = Employee::with('user.profile', 'department')
             ->where('status', 'active')
             ->get()
             ->map(function ($emp) {
+                $user = $emp->user;
+                $profile = $user?->profile;
+                $name = null;
+                if ($profile) {
+                    $first = trim((string) ($profile->first_name ?? ''));
+                    $last = trim((string) ($profile->last_name ?? ''));
+                    $full = trim($first . ' ' . $last);
+                    $name = $full !== '' ? $full : null;
+                }
+                if (!$name && $user) {
+                    $name = $user->name ?: $user->username ?: 'N/A';
+                }
+                if (!$name) {
+                    $name = 'N/A';
+                }
                 return [
                     'id' => $emp->id,
-                    'name' => $emp->user?->full_name ?? 'N/A',
+                    'name' => $name,
                     'employee_number' => $emp->employee_number,
                     'department' => $emp->department?->name ?? 'N/A',
                 ];
