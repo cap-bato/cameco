@@ -393,5 +393,36 @@ class EmployeeSeeder extends Seeder
         }
 
         $this->command->info('✅ EmployeeSeeder complete — master list + seed accounts inserted.');
+
+        // ── Create User accounts for a subset of employees ─────────────
+        // For demo: create accounts for the first 10 employees in the master list
+        $accountCount = 0;
+        foreach ($masterList as $row) {
+            if ($accountCount >= 10) break;
+            $empNo = $row[4];
+            $employee = Employee::where('employee_number', $empNo)->first();
+            if (!$employee) continue;
+            $profile = $employee->profile;
+            $email = $profile?->email ?? null;
+            if (!$email) continue;
+            // Only create if not already present
+            $user = \App\Models\User::where('email', $email)->first();
+            if (!$user) {
+                $user = \App\Models\User::create([
+                    'name' => $profile->first_name . ' ' . $profile->last_name,
+                    'username' => strtolower($profile->first_name . '.' . $profile->last_name),
+                    'email' => $email,
+                    'password' => bcrypt('password'),
+                    'is_active' => true,
+                    'email_verified_at' => now(),
+                ]);
+            }
+            // Link user to employee by setting user_id on Employee
+            if ($employee->user_id !== $user->id) {
+                $employee->user_id = $user->id;
+                $employee->save();
+            }
+            $accountCount++;
+        }
     }
 }

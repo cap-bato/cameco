@@ -182,20 +182,6 @@ class DatabaseSeeder extends Seeder
             PayslipsSeeder::class,
         ]);
 
-        // ── STAGE 18: Dev / test data ──────────────────────────────────────
-        if (app()->environment('local', 'testing')) {
-            $this->call([
-                TimekeepingTestDataSeeder::class,
-                FebruaryFirstHalfPayrollSeeder::class,
-                FebruarySecondHalfPayrollSeeder::class,
-                FullPayrollTestDataSeeder::class,
-            ]);
-
-            if (env('SEED_PAYROLL_TEST_DATA', false)) {
-                $this->call(PayrollCalculationTestSeeder::class);
-            }
-        }
-
         // ── STAGE 19: Cleanup ──────────────────────────────────────────────
         if (class_exists(RemoveDuplicateLuisTorresSeeder::class)) {
             $this->call(RemoveDuplicateLuisTorresSeeder::class);
