@@ -82,6 +82,8 @@ class PayrollPeriodsSeeder extends Seeder
                 'created_by' => $creatorId,
                 'approved_by' => $status === 'approved' || $status === 'completed' ? $approverId : null,
                 'approved_at' => $status === 'approved' || $status === 'completed' ? $paymentDate->copy()->subDays(3) : null,
+                'active_employees' => $activeEmployees,
+                'total_net_pay' => 0.00,
                 'created_at' => $periodStart->copy()->subDays(2),
                 'updated_at' => $paymentDate,
             ];
@@ -107,6 +109,8 @@ class PayrollPeriodsSeeder extends Seeder
                 'created_by' => $creatorId,
                 'approved_by' => $status2 === 'approved' || $status2 === 'completed' ? $approverId : null,
                 'approved_at' => $status2 === 'approved' || $status2 === 'completed' ? $paymentDate2->copy()->subDays(3) : null,
+                'active_employees' => $activeEmployees,
+                'total_net_pay' => 0.00,
                 'created_at' => $periodStart2->copy()->subDays(2),
                 'updated_at' => $paymentDate2,
             ];
