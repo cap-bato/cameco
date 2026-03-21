@@ -168,14 +168,25 @@ class AllowancesDeductionsController extends Controller
             ->where('status', 'active')
             ->get()
             ->filter(fn($emp) => $emp->user !== null)
-            ->map(fn($emp) => [
-                'id' => $emp->id,
-                'employee_number' => $emp->employee_number,
-                'first_name' => $emp->user?->profile?->first_name ?? 'N/A',
-                'last_name' => $emp->user?->profile?->last_name ?? 'N/A',
-                'department' => $emp->department?->name ?? 'N/A',
-                'position' => $emp->position?->name ?? 'N/A',
-            ]);
+            ->map(function ($emp) {
+                $first = $emp->user?->profile?->first_name;
+                $last = $emp->user?->profile?->last_name;
+                // Fallback to user->name or username if profile is missing
+                if (!$first && !$last) {
+                    $full = $emp->user?->name ?? $emp->user?->username ?? 'N/A';
+                    $parts = explode(' ', $full, 2);
+                    $first = $parts[0] ?? 'N/A';
+                    $last = $parts[1] ?? '';
+                }
+                return [
+                    'id' => $emp->id,
+                    'employee_number' => $emp->employee_number,
+                    'first_name' => $first ?? 'N/A',
+                    'last_name' => $last ?? '',
+                    'department' => $emp->department?->name ?? 'N/A',
+                    'position' => $emp->position?->name ?? 'N/A',
+                ];
+            });
 
         $components = $this->salaryComponentService->getComponentsGroupedByType(true);
         $componentsList = collect([]);
