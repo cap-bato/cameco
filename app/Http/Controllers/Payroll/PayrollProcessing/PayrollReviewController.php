@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Payroll\PayrollProcessing;
 
 use App\Http\Controllers\Controller;
 use App\Models\EmployeePayrollCalculation;
+use App\Models\Payslip;
 use App\Models\PayrollApprovalHistory;
 use App\Models\PayrollPeriod;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
@@ -197,7 +199,8 @@ class PayrollReviewController extends Controller
     }
 
     /**
-     * Generate payslip data from real calculations.
+     * Generate payslip data from real calculations and create Payslip records in database.
+     * This is critical for the employee payslip view to work.
      */
     public function downloadPayslips(Request $request, int $periodId)
     {
@@ -205,6 +208,104 @@ class PayrollReviewController extends Controller
             $period       = PayrollPeriod::findOrFail($periodId);
             $calculations = EmployeePayrollCalculation::where('payroll_period_id', $periodId)->get();
 
+            if ($calculations->isEmpty()) {
+                return back()->with('error', 'No payroll calculations found for this period.');
+            }
+
+            DB::transaction(function () use ($period, $calculations, $periodId) {
+                // Delete any existing payslips for this period to avoid duplicates
+                Payslip::where('payroll_period_id', $periodId)->delete();
+
+                $payslipRecords = [];
+                $now = now();
+
+                foreach ($calculations as $calc) {
+                    // Build earnings breakdown
+                    $earningsData = [
+                        'basic_pay'             => (float) $calc->basic_monthly_salary,
+                        'regular_pay'           => (float) $calc->basic_monthly_salary,
+                        'holiday_pay'           => (float) ($calc->holiday_pay ?? 0),
+                        'overtime_pay'          => (float) ($calc->overtime_pay ?? 0),
+                        'allowance'             => (float) ($calc->allowances ?? 0),
+                        'other_earnings'        => (float) ($calc->other_earnings ?? 0),
+                    ];
+
+                    // Build deductions breakdown
+                    $deductionsData = [
+                        'sss'                   => (float) $calc->sss_deduction,
+                        'philhealth'            => (float) $calc->philhealth_deduction,
+                        'pagibig'               => (float) $calc->pagibig_deduction,
+                        'withholding_tax'       => (float) $calc->tax_deduction,
+                        'sss_contribution'      => (float) ($calc->sss_contribution ?? 0),
+                        'ph_contribution'       => (float) ($calc->philhealth_contribution ?? 0),
+                        'pagibig_contribution'  => (float) ($calc->pagibig_contribution ?? 0),
+                        'loan'                  => (float) ($calc->loan_deduction ?? 0),
+                        'advance'               => (float) ($calc->advance_deduction ?? 0),
+                        'leave'                 => (float) ($calc->leave_deduction ?? 0),
+                        'attendance'            => (float) ($calc->attendance_deduction ?? 0),
+                        'tardiness'             => (float) ($calc->tardiness_deduction ?? 0),
+                        'absence'               => (float) ($calc->absence_deduction ?? 0),
+                        'miscellaneous'         => (float) ($calc->miscellaneous_deductions ?? 0),
+                        'other'                 => (float) ($calc->other_deductions ?? 0),
+                    ];
+
+                    $payslipRecords[] = [
+                        'payroll_period_id'     => $period->id,
+                        'employee_id'           => $calc->employee_id,
+                        'payslip_number'        => 'PS-' . $period->period_number . '-' . str_pad($calc->employee_id, 5, '0', STR_PAD_LEFT),
+                        'period_start'          => $period->period_start,
+                        'period_end'            => $period->period_end,
+                        'payment_date'          => $period->payment_date,
+                        
+                        // Employee snapshot
+                        'employee_number'       => $calc->employee_number,
+                        'employee_name'         => $calc->employee_name,
+                        'department'            => $calc->department,
+                        'position'              => $calc->position,
+                        'sss_number'            => $calc->sss_number ?? null,
+                        'philhealth_number'     => $calc->philhealth_number ?? null,
+                        'pagibig_number'        => $calc->pagibig_number ?? null,
+                        'tin'                   => $calc->tin ?? null,
+                        
+                        // Amounts
+                        'total_earnings'        => (float) $calc->gross_pay,
+                        'total_deductions'      => (float) $calc->total_deductions,
+                        'net_pay'               => (float) ($calc->final_net_pay ?? $calc->net_pay),
+                        
+                        // JSON Data (must be JSON-encoded for insert() to work correctly)
+                        'earnings_data'         => json_encode($earningsData),
+                        'deductions_data'       => json_encode($deductionsData),
+                        
+                        // YTD values (simplified — use the calculated totals)
+                        'ytd_gross'             => (float) $calc->gross_pay,
+                        'ytd_tax'               => (float) $calc->tax_deduction,
+                        'ytd_sss'               => (float) $calc->sss_deduction,
+                        'ytd_philhealth'        => (float) $calc->philhealth_deduction,
+                        'ytd_pagibig'           => (float) $calc->pagibig_deduction,
+                        'ytd_net'               => (float) ($calc->final_net_pay ?? $calc->net_pay),
+                        
+                        // Distribution defaults
+                        'status'                => 'generated',
+                        'distribution_method'   => 'portal',
+                        'generated_by'          => auth()->id(),
+                        
+                        // Timestamps
+                        'created_at'            => $now,
+                        'updated_at'            => $now,
+                    ];
+                }
+
+                // Insert all payslips at once (batch insert for performance)
+                Payslip::insert($payslipRecords);
+
+                Log::info('Payslips created successfully', [
+                    'period_id'      => $periodId,
+                    'employee_count' => count($payslipRecords),
+                    'created_by'     => auth()->id(),
+                ]);
+            });
+
+            // Also export to JSON for audit trail (optional)
             $payslips = $calculations->map(fn($c) => [
                 'employee_id'     => $c->employee_id,
                 'employee_name'   => $c->employee_name,
@@ -229,15 +330,9 @@ class PayrollReviewController extends Controller
 
             file_put_contents($filepath, json_encode($payslips, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
-            Log::info('Payslips generated', [
-                'period_id'      => $periodId,
-                'employee_count' => count($payslips),
-                'filename'       => $filename,
-            ]);
-
-            return back()->with('success', 'Payslips generated successfully. ' . count($payslips) . ' payslips created.');
+            return back()->with('success', 'Payslips generated successfully. ' . count($payslips) . ' payslips created and available to employees.');
         } catch (\Exception $e) {
-            Log::error('Payslip generation error', ['period_id' => $periodId, 'error' => $e->getMessage()]);
+            Log::error('Payslip generation error', ['period_id' => $periodId, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return back()->withErrors('Failed to generate payslips: ' . $e->getMessage());
         }
     }
