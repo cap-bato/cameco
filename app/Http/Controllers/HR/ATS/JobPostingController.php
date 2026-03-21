@@ -97,6 +97,8 @@ class JobPostingController extends Controller
      */
     public function store(Request $request)
     {
+        $this->authorize('create', JobPosting::class);
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'department_id' => 'required|exists:departments,id',
