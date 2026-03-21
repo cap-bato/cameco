@@ -102,12 +102,34 @@ class AllowancesDeductionsController extends Controller
             $totalAllowances = $allowances->sum('amount') ?? 0;
             $totalDeductions = $deductions->sum('amount') ?? 0;
 
+            // Prefer profile first, then user->name, then username
+            $profile = $employee->user?->profile;
+            $first = null;
+            $last = null;
+            if ($profile) {
+                $first = $profile->first_name;
+                $last = $profile->last_name;
+            } elseif ($employee->user) {
+                // Fallback to user->name split if possible
+                $name = $employee->user->name ?? '';
+                if ($name) {
+                    $parts = explode(' ', $name, 2);
+                    $first = $parts[0] ?? $employee->user->username ?? 'N/A';
+                    $last = $parts[1] ?? '';
+                } else {
+                    $first = $employee->user->username ?? 'N/A';
+                    $last = '';
+                }
+            } else {
+                $first = 'N/A';
+                $last = '';
+            }
             return [
                 'id' => $employee->id,
                 'employee_id' => $employee->id,
                 'employee_number' => $employee->employee_number,
-                'first_name' => $employee->user?->first_name ?? 'N/A',
-                'last_name' => $employee->user?->last_name ?? 'N/A',
+                'first_name' => $first ?? 'N/A',
+                'last_name' => $last ?? '',
                 'department' => $employee->department?->name ?? 'N/A',
                 'department_id' => $employee->department_id,
                 'position' => $employee->position?->name ?? 'N/A',
