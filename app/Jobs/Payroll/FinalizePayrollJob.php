@@ -71,9 +71,6 @@ class FinalizePayrollJob implements ShouldQueue
                     'finalized_at'             => now(),
                 ]);
 
-                // Generate payslips from calculations so employees can view them
-                $this->generatePayslips($calculations);
-
                 $successCount = $calculations->count();
                 $failureCount = EmployeePayrollCalculation::query()
                     ->where('payroll_period_id', $this->payrollPeriod->id)
@@ -102,6 +99,9 @@ class FinalizePayrollJob implements ShouldQueue
                     round(microtime(true) - $startTime, 2),
                 );
             });
+
+            // Generate payslips AFTER transaction succeeds (outside transaction to avoid conflicts)
+            $this->generatePayslips();
 
         } catch (\Exception $e) {
             Log::error('Payroll finalization failed', [
@@ -135,10 +135,22 @@ class FinalizePayrollJob implements ShouldQueue
     /**
      * Generate payslip records from employee payroll calculations.
      * This allows employees to view their payslips via the portal.
+     * Called AFTER transaction to avoid conflicts.
      */
-    private function generatePayslips($calculations): void
+    private function generatePayslips(): void
     {
         try {
+            $calculations = EmployeePayrollCalculation::where('payroll_period_id', $this->payrollPeriod->id)
+                ->where('calculation_status', 'calculated')
+                ->get();
+
+            if ($calculations->isEmpty()) {
+                Log::warning('No calculations found for payslip generation', [
+                    'period_id' => $this->payrollPeriod->id,
+                ]);
+                return;
+            }
+
             // Delete existing payslips for this period to avoid duplicates
             Payslip::where('payroll_period_id', $this->payrollPeriod->id)->delete();
 
@@ -237,7 +249,7 @@ class FinalizePayrollJob implements ShouldQueue
                 'error'     => $e->getMessage(),
                 'trace'     => $e->getTraceAsString(),
             ]);
-            // Don't throw — payslips generation failure shouldn't fail the whole job
+            // Don't throw — payslip generation failure shouldn't fail the payroll calculation
         }
     }
 }
