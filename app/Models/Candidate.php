@@ -6,6 +6,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Candidate extends Model
+    /**
+     * Get the profile associated with the candidate.
+     */
+    public function profile()
+    {
+        return $this->belongsTo(Profile::class, 'profile_id');
+    }
 {
     use HasFactory;
 
