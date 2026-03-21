@@ -18,11 +18,8 @@ class PayrollPaymentsSeeder extends Seeder
      */
     public function run(): void
     {
-        // Avoid duplicate seeding
-        if (PayrollPayment::count() > 0) {
-            $this->command->warn('payroll_payments already seeded — skipping.');
-            return;
-        }
+        // Truncate payroll_payments table for fresh seeding
+        \DB::statement('TRUNCATE TABLE payroll_payments RESTART IDENTITY CASCADE');
 
         // Get approved or completed periods
         $periods = PayrollPeriod::whereIn('status', ['approved', 'completed'])->get();

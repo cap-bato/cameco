@@ -17,11 +17,8 @@ class PayslipsSeeder extends Seeder
      */
     public function run(): void
     {
-        // Avoid duplicate seeding
-        if (Payslip::count() > 0) {
-            $this->command->warn('payslips already seeded — skipping.');
-            return;
-        }
+        // Truncate payslips table for fresh seeding
+        \DB::statement('TRUNCATE TABLE payslips RESTART IDENTITY CASCADE');
 
         // Get all payments
         $payments = PayrollPayment::with(['employee', 'payrollPeriod'])->get();
