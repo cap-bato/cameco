@@ -28,7 +28,6 @@ import {
   ArrowRight,
   Star,
   FileText,
-  Cloud,
 } from 'lucide-react';
 import type { PageProps } from '@inertiajs/core';
 import type { Interview } from '@/types/ats-pages';
@@ -173,11 +172,6 @@ export default function InterviewShow({
                       disabled
                       className="cursor-not-allowed opacity-50"
                     >
-                      <Cloud className="mr-2 h-4 w-4" />
-                      Sync with Google Calendar
-                      <Badge variant="outline" className="ml-auto text-xs">
-                        Phase 2
-                      </Badge>
                     </DropdownMenuItem>
                   </TooltipTrigger>
                   <TooltipContent>
