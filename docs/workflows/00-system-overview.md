@@ -344,7 +344,7 @@ graph TB
     
     Super -->|Paper| HREntry
     Emp -->|Paper/Email/Phone| HREntry
-    Apps -->|Facebook/In-Person| HREntry
+    Apps -->|Job Board/In-Person| HREntry
     RFID -->|Card Tap| AutoProcess
     
     HREntry --> Database
