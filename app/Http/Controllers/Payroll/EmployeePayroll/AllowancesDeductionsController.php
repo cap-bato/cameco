@@ -164,23 +164,33 @@ class AllowancesDeductionsController extends Controller
      */
     public function bulkAssignPage()
     {
-        $employees = Employee::with('user', 'department', 'position')
+        $employees = Employee::with(['user.profile', 'department', 'position'])
             ->where('status', 'active')
             ->get()
             ->filter(fn($emp) => $emp->user !== null)
             ->map(fn($emp) => [
                 'id' => $emp->id,
                 'employee_number' => $emp->employee_number,
-                'first_name' => $emp->user?->first_name ?? 'N/A',
-                'last_name' => $emp->user?->last_name ?? 'N/A',
+                'first_name' => $emp->user?->profile?->first_name ?? 'N/A',
+                'last_name' => $emp->user?->profile?->last_name ?? 'N/A',
                 'department' => $emp->department?->name ?? 'N/A',
                 'position' => $emp->position?->name ?? 'N/A',
             ]);
 
         $components = $this->salaryComponentService->getComponentsGroupedByType(true);
         $componentsList = collect([]);
+        // List of core payroll codes that should never be bulk assigned
+        $excludedCodes = [
+            'BASIC', 'SSS', 'PHILHEALTH', 'PAGIBIG', 'TAX', '13TH_MONTH',
+            'GROSS', 'ALLOWANCE_OTHER', 'ALLOWANCE_DIFF_RATE',
+            'OT_REG', 'OT_HOLIDAY', 'OT_DOUBLE', 'OT_TRIPLE',
+            'HOLIDAY_REG', 'HOLIDAY_DOUBLE', 'HOLIDAY_SPECIAL_WORK', 'PREMIUM_NIGHT',
+        ];
         foreach ($components as $type => $typeComponents) {
             foreach ($typeComponents as $component) {
+                if (in_array(strtoupper($component['code']), $excludedCodes)) {
+                    continue;
+                }
                 $componentsList->push([
                     'id' => $component['id'],
                     'code' => $component['code'],
