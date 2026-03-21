@@ -128,7 +128,6 @@ class DatabaseSeeder extends Seeder
         // ── STAGE 10: Employees & profiles ────────────────────────────────
         $this->call([
             EmployeeSeeder::class,
-            BulkEmployeeSeeder::class,
             EmployeeAccountSeeder::class,
             LinkEmployeesToUsersSeeder::class,
             EmployeePayrollInfoSeeder::class,

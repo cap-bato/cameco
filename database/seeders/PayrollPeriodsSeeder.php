@@ -68,7 +68,14 @@ class PayrollPeriodsSeeder extends Seeder
             $periodEnd = $periodStart->copy()->day(15);
             $paymentDate = $periodEnd->copy()->addDays(2);
             $periodNumber = sprintf('%s-%02d-1H', $periodStart->year, $periodStart->month);
-            $status = $i === 0 ? 'completed' : ($i === 1 ? 'approved' : 'draft');
+
+            // Determine status logic
+            $isMarch = ($periodStart->month === 3 && $periodStart->year === $now->year);
+            if ($isMarch) {
+                $status = 'approved';
+            } else {
+                $status = 'completed';
+            }
             $progress = ($status === 'completed' || $status === 'approved') ? 100 : 0;
             $periods[] = [
                 'period_number' => $periodNumber,
@@ -99,7 +106,12 @@ class PayrollPeriodsSeeder extends Seeder
             $periodEnd2 = $periodStart->copy()->endOfMonth();
             $paymentDate2 = $periodEnd2->copy()->addDays(2);
             $periodNumber2 = sprintf('%s-%02d-2H', $periodStart->year, $periodStart->month);
-            $status2 = $i === 0 ? 'completed' : ($i === 1 ? 'approved' : 'draft');
+            // For March, 2H should be 'draft', others 'completed'
+            if ($isMarch) {
+                $status2 = 'draft';
+            } else {
+                $status2 = 'completed';
+            }
             $progress2 = ($status2 === 'completed' || $status2 === 'approved') ? 100 : 0;
             $periods[] = [
                 'period_number' => $periodNumber2,
