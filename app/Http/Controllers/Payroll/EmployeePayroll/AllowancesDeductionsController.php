@@ -117,14 +117,22 @@ class AllowancesDeductionsController extends Controller
             ];
         });
 
-        if ($status === 'active') {
-            $employeeData = $employeeData->filter(fn($e) => count($e['components']) > 0);
-        }
+        // Do not filter out employees with no components, so all active employees are included in the assign modal
 
         $components = $this->salaryComponentService->getComponentsGroupedByType(true);
         $componentsList = collect([]);
+        // List of core payroll codes that should never be assigned manually
+        $excludedCodes = [
+            'BASIC', 'SSS', 'PHILHEALTH', 'PAGIBIG', 'TAX', '13TH_MONTH',
+            'GROSS', 'ALLOWANCE_OTHER', 'ALLOWANCE_DIFF_RATE',
+            'OT_REG', 'OT_HOLIDAY', 'OT_DOUBLE', 'OT_TRIPLE',
+            'HOLIDAY_REG', 'HOLIDAY_DOUBLE', 'HOLIDAY_SPECIAL_WORK', 'PREMIUM_NIGHT',
+        ];
         foreach ($components as $type => $typeComponents) {
             foreach ($typeComponents as $component) {
+                if (in_array(strtoupper($component['code']), $excludedCodes)) {
+                    continue;
+                }
                 $componentsList->push([
                     'id' => $component['id'],
                     'code' => $component['code'],
