@@ -123,7 +123,7 @@ class JobPostingsController extends Controller
             
             // Check if candidate already applied to this job
             $existingApplication = Application::where('candidate_id', $candidate->id)
-                ->where('job_id', $jobPosting->id)
+                ->where('job_posting_id', $jobPosting->id)
                 ->first();
             
             if ($existingApplication) {
