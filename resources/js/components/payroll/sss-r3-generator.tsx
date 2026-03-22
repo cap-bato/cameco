@@ -31,40 +31,50 @@ export function SSSR3Generator({ reports, periods }: SSSR3GeneratorProps) {
         periods.length > 0 ? String(periods[0].id) : ''
     );
     const [isLoading, setIsLoading] = useState(false);
+    const [confirmSubmitId, setConfirmSubmitId] = useState<string | number | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const currentPeriod = periods.find((p) => String(p.id) === selectedPeriod);
     const currentReport = reports.find((r) => String(r.period_id) === selectedPeriod);
 
     const handleGenerateR3 = () => {
         if (!currentPeriod) return;
-
         setIsLoading(true);
         router.post(
             `/payroll/government/sss/generate-r3/${currentPeriod.id}`,
             { month: currentPeriod.month },
             {
-                onError: () => {
-                    setIsLoading(false);
-                },
-                onSuccess: () => {
-                    setIsLoading(false);
-                },
+                onError: () => setIsLoading(false),
+                onSuccess: () => setIsLoading(false),
             }
         );
     };
 
     const handleDownload = (reportId: string | number) => {
-        router.get(`/payroll/government/sss/download-r3/${reportId}`, {}, { preserveScroll: true });
+        window.open(`/payroll/government/sss/download-r3/${reportId}`, '_blank');
     };
 
     const handleSubmit = (reportId: string | number) => {
-        if (confirm('Submit this R3 report to SSS? This action cannot be undone.')) {
-            router.post(`/payroll/government/sss/submit/${reportId}`, {}, {
+        setConfirmSubmitId(reportId);
+    };
+
+    const confirmSubmit = () => {
+        if (!confirmSubmitId) return;
+        setIsSubmitting(true);
+        router.post(
+            `/payroll/government/sss/submit/${confirmSubmitId}`,
+            {},
+            {
                 onSuccess: () => {
-                    alert('R3 report submitted successfully');
+                    setConfirmSubmitId(null);
+                    setIsSubmitting(false);
                 },
-            });
-        }
+                onError: () => {
+                    setConfirmSubmitId(null);
+                    setIsSubmitting(false);
+                },
+            }
+        );
     };
 
     const getStatusColor = (status: string) => {
@@ -146,7 +156,8 @@ export function SSSR3Generator({ reports, periods }: SSSR3GeneratorProps) {
                             <FileText className="h-4 w-4 text-blue-600" />
                             <AlertTitle className="text-blue-900">Period Information</AlertTitle>
                             <AlertDescription className="text-blue-800">
-                                Report Month: <strong>{currentPeriod.month}</strong> • Period: <strong>{currentPeriod.name}</strong>
+                                Report Month: <strong>{currentPeriod.month}</strong> • Period:{' '}
+                                <strong>{currentPeriod.name}</strong>
                             </AlertDescription>
                         </Alert>
                     )}
@@ -191,8 +202,9 @@ export function SSSR3Generator({ reports, periods }: SSSR3GeneratorProps) {
                                             <div>
                                                 <p className="font-medium">{report.file_name}</p>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Month: {report.month} • Employees: {report.total_employees} •{' '}
-                                                    Size: {(report.file_size / 1024).toFixed(1)} KB
+                                                    Month: {report.month} • Employees:{' '}
+                                                    {report.total_employees} • Size:{' '}
+                                                    {(report.file_size / 1024).toFixed(1)} KB
                                                 </p>
                                             </div>
                                         </div>
@@ -200,13 +212,16 @@ export function SSSR3Generator({ reports, periods }: SSSR3GeneratorProps) {
 
                                     <div className="flex items-center gap-3 pl-4">
                                         <div className="text-right">
-                                            <Badge className={getStatusColor(report.status)}>
+                                            <Badge
+                                                className={`inline-flex items-center gap-1 ${getStatusColor(report.status)}`}
+                                            >
                                                 {getStatusIcon(report.status)}
-                                                <span className="ml-1">{report.status}</span>
+                                                <span>{report.status}</span>
                                             </Badge>
                                             {report.submission_date && (
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    Submitted: {new Date(report.submission_date).toLocaleDateString()}
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                    Submitted:{' '}
+                                                    {new Date(report.submission_date).toLocaleDateString()}
                                                 </p>
                                             )}
                                         </div>
@@ -248,7 +263,8 @@ export function SSSR3Generator({ reports, periods }: SSSR3GeneratorProps) {
                         <div>
                             <p className="font-medium mb-2">File Format: Comma-Separated Values (CSV)</p>
                             <p className="text-muted-foreground mb-3">
-                                The R3 report is generated in CSV format compatible with SSS ERPS portal upload requirements.
+                                The R3 report is generated in CSV format compatible with SSS ERPS portal
+                                upload requirements.
                             </p>
                         </div>
                         <div>
@@ -267,6 +283,30 @@ export function SSSR3Generator({ reports, periods }: SSSR3GeneratorProps) {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Submit Confirmation Dialog */}
+            {confirmSubmitId !== null && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+                        <h3 className="text-lg font-semibold">Submit R3 Report</h3>
+                        <p className="mt-2 text-sm text-gray-600">
+                            Submit this R3 report to SSS? This action cannot be undone.
+                        </p>
+                        <div className="mt-4 flex justify-end gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setConfirmSubmitId(null)}
+                                disabled={isSubmitting}
+                            >
+                                Cancel
+                            </Button>
+                            <Button onClick={confirmSubmit} disabled={isSubmitting}>
+                                {isSubmitting ? 'Submitting...' : 'Submit'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
