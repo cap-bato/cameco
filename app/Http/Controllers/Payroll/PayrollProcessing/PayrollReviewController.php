@@ -131,7 +131,7 @@ class PayrollReviewController extends Controller
             PayrollApprovalHistory::create([
                 'payroll_period_id' => $periodId,
                 'approval_step'     => 'rejected',
-                'action'            => 'rejected',
+                'action'            => 'reject',
                 'status_from'       => $prevStatus,
                 'status_to'         => 'calculated',
                 'user_id'           => auth()->id(),

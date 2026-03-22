@@ -123,7 +123,6 @@ class DocumentRequestController extends Controller
     {
         return match($type) {
             'certificate_of_employment' => 'Certificate of Employment',
-            'payslip' => 'Payslip',
             'bir_form_2316' => 'BIR Form 2316',
             'government_compliance' => 'SSS/PhilHealth/Pag-IBIG Contribution',
             default => ucwords(str_replace('_', ' ', $type)),
@@ -572,7 +571,6 @@ class DocumentRequestController extends Controller
     {
         return match($type) {
             'certificate_of_employment' => 'employment',
-            'payslip' => 'employment',
             'bir_form_2316' => 'government',
             'government_compliance' => 'government',
             default => 'special',

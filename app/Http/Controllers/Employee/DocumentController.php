@@ -16,7 +16,7 @@ use Inertia\Inertia;
  *
  * Handles employee self-service document operations:
  * - View own documents
- * - Request new documents (COE, Payslip, 2316 Form)
+ * - Request new documents (COE, Payslip (removed employee can already download their payslips), 2316 Form)
  * - Download documents
  *
  * @package App\Http\Controllers\Employee
@@ -211,11 +211,6 @@ class DocumentController extends Controller
                 'description' => 'Official document confirming your employment',
             ],
             [
-                'value' => 'payslip',
-                'label' => 'Payslip',
-                'description' => 'Salary statement for a specific period',
-            ],
-            [
                 'value' => 'bir_form_2316',
                 'label' => 'BIR Form 2316',
                 'description' => 'Tax form for government filing',
@@ -247,9 +242,8 @@ class DocumentController extends Controller
     {
         // Validate request
         $validated = $request->validate([
-            'document_type' => 'required|string|in:certificate_of_employment,payslip,bir_form_2316,government_compliance',
+            'document_type' => 'required|string|in:certificate_of_employment,bir_form_2316,government_compliance',
             'purpose' => 'nullable|string|max:500',
-            'period' => 'nullable|string|required_if:document_type,payslip|max:7', // For payslip: YYYY-MM
         ]);
 
         $user = Auth::user();
@@ -506,7 +500,6 @@ private function formatDocumentType(string $type): string
 {
     return match($type) {
         'certificate_of_employment' => 'Certificate of Employment',
-        'payslip' => 'Payslip',
         'bir_form_2316' => 'BIR Form 2316',
         'government_compliance' => 'Government Compliance Document',
         default => ucwords(str_replace('_', ' ', $type)),

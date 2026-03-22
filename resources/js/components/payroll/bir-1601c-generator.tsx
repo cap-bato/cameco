@@ -25,14 +25,16 @@ import {
     Download,
     FileText,
     Loader,
-    Upload,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { BIRPeriod } from '@/types/bir-pages';
 
+import { BIR1601CEmployee } from '@/types/bir-pages';
+
 interface BIR1601CGeneratorProps {
     period?: BIRPeriod;
     periodId: string;
+    employees?: BIR1601CEmployee[];
 }
 
 /**
@@ -40,9 +42,8 @@ interface BIR1601CGeneratorProps {
  * Monthly Remittance of Income Tax Withheld
  * For submitting employee income tax withholding to BIR
  */
-export const BIR1601CGenerator: React.FC<BIR1601CGeneratorProps> = ({ period, periodId }) => {
+export const BIR1601CGenerator: React.FC<BIR1601CGeneratorProps> = ({ period, periodId, employees = [] }) => {
     const [isGenerating, setIsGenerating] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusMessage, setStatusMessage] = useState<{
         type: 'success' | 'error' | 'info';
@@ -50,57 +51,20 @@ export const BIR1601CGenerator: React.FC<BIR1601CGeneratorProps> = ({ period, pe
     } | null>(null);
     const [rdo, setRdo] = useState('2421'); // Default RDO for Metro Manila
 
-    // Mock data for employees
-    const mockEmployees = [
-        {
-            employee_id: 'EMP001',
-            tin: '123456789012',
-            employee_name: 'Juan Dela Cruz',
-            gross_compensation: 45000,
-            withholding_tax: 5400,
-        },
-        {
-            employee_id: 'EMP002',
-            tin: '123456789013',
-            employee_name: 'Maria Santos',
-            gross_compensation: 55000,
-            withholding_tax: 6600,
-        },
-        {
-            employee_id: 'EMP003',
-            tin: '123456789014',
-            employee_name: 'Pedro Reyes',
-            gross_compensation: 38000,
-            withholding_tax: 4200,
-        },
-        {
-            employee_id: 'EMP004',
-            tin: '123456789015',
-            employee_name: 'Rosa Garcia',
-            gross_compensation: 42000,
-            withholding_tax: 5040,
-        },
-        {
-            employee_id: 'EMP005',
-            tin: '123456789016',
-            employee_name: 'Carlos Morales',
-            gross_compensation: 52000,
-            withholding_tax: 6240,
-        },
-    ];
-
-    const filteredEmployees = mockEmployees.filter((emp) =>
+    const filteredEmployees = employees.filter((emp) =>
         emp.employee_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         emp.employee_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         emp.tin.includes(searchTerm)
     );
 
     const summary = {
-        total_employees: mockEmployees.length,
-        total_compensation: mockEmployees.reduce((sum, e) => sum + e.gross_compensation, 0),
-        total_withholding_tax: mockEmployees.reduce((sum, e) => sum + e.withholding_tax, 0),
-        average_tax_rate: ((mockEmployees.reduce((sum, e) => sum + e.withholding_tax, 0) /
-            mockEmployees.reduce((sum, e) => sum + e.gross_compensation, 0)) * 100).toFixed(2),
+        total_employees: employees.length,
+        total_compensation: employees.reduce((sum, e) => sum + e.gross_compensation, 0),
+        total_withholding_tax: employees.reduce((sum, e) => sum + e.withholding_tax, 0),
+        average_tax_rate: employees.length > 0
+            ? ((employees.reduce((sum, e) => sum + e.withholding_tax, 0) /
+                employees.reduce((sum, e) => sum + e.gross_compensation, 0)) * 100).toFixed(2)
+            : '0.00',
     };
 
     const handleGenerate = () => {
@@ -125,30 +89,6 @@ export const BIR1601CGenerator: React.FC<BIR1601CGeneratorProps> = ({ period, pe
                     });
                 },
                 onFinish: () => setIsGenerating(false),
-            }
-        );
-    };
-
-    const handleSubmit = () => {
-        setIsSubmitting(true);
-        router.post(
-            `/payroll/government/bir/submit-1601c/${periodId}`,
-            {},
-            {
-                onSuccess: () => {
-                    setStatusMessage({
-                        type: 'success',
-                        message: 'Form 1601C submitted to BIR successfully',
-                    });
-                    setTimeout(() => setStatusMessage(null), 3000);
-                },
-                onError: () => {
-                    setStatusMessage({
-                        type: 'error',
-                        message: 'Failed to submit form. Please try again.',
-                    });
-                },
-                onFinish: () => setIsSubmitting(false),
             }
         );
     };
@@ -347,24 +287,6 @@ export const BIR1601CGenerator: React.FC<BIR1601CGeneratorProps> = ({ period, pe
                         >
                             <Download className="w-4 h-4 mr-2" />
                             Download
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            onClick={handleSubmit}
-                            disabled={isSubmitting}
-                            className="flex-1"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <Loader className="w-4 h-4 mr-2 animate-spin" />
-                                    Submitting...
-                                </>
-                            ) : (
-                                <>
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    Submit to BIR
-                                </>
-                            )}
                         </Button>
                     </div>
                 </CardContent>

@@ -23,6 +23,26 @@ class BIRController extends Controller
     {
         $periodId = $request->input('period_id') ? (int) $request->input('period_id') : null;
 
+        // Fetch BIR Alphalist employee data for the selected period
+        $birAlphalistEmployees = collect($this->birService->getContributions('bir', $periodId))
+            ->map(function ($row, $i) {
+                $row = (object) $row;
+                return [
+                    'sequence_number' => $i + 1,
+                    'tin' => $row->tin ?? '',
+                    'employee_name' => $row->employee_name ?? '',
+                    'address' => $row->employee_address ?? '',
+                    'birth_date' => $row->birth_date ?? '',
+                    'gender' => $row->gender ?? '',
+                    'civil_status' => $row->civil_status ?? '',
+                    'annual_gross_compensation' => $row->gross_compensation ?? 0,
+                    'annual_non_taxable_compensation' => $row->deminimis_benefits ?? 0,
+                    'annual_taxable_compensation' => $row->taxable_income ?? 0,
+                    'annual_tax_withheld' => $row->withholding_tax ?? 0,
+                    'status_flag' => $row->status_flag ?? 'Active',
+                ];
+            })->values();
+
         $reports = GovernmentReport::with('payrollPeriod')
             ->where('agency', 'bir')
             ->orderByDesc('created_at')
@@ -60,11 +80,51 @@ class BIRController extends Controller
                 'rejection_reason'  => $r->rejection_reason,
             ]);
 
+        // Fetch BIR employee contributions for the selected period
+        $birEmployees = collect($this->birService->getContributions('bir', $periodId))
+            ->map(function ($row) {
+                $row = (object) $row;
+                return [
+                    'employee_id' => isset($row->employee_number) ? $row->employee_number : $row->employee_id,
+                    'tin' => $row->tin ?? '',
+                    'employee_name' => $row->employee_name ?? '',
+                    'gross_compensation' => $row->gross_compensation ?? 0,
+                    'withholding_tax' => $row->withholding_tax ?? 0,
+                ];
+            })->values();
+
+        // Fetch BIR 2316 certificate data for the selected period
+        $bir2316Certificates = collect($this->birService->getContributions('bir', $periodId))
+            ->map(function ($row) use ($periodId) {
+                $row = (object) $row;
+                return [
+                    'id' => $row->id ?? null,
+                    'employee_id' => isset($row->employee_number) ? $row->employee_number : $row->employee_id,
+                    'tin' => $row->tin ?? '',
+                    'employee_name' => $row->employee_name ?? '',
+                    'employee_address' => $row->employee_address ?? '',
+                    'employer_tin' => $row->employer_tin ?? '',
+                    'employer_name' => $row->employer_name ?? '',
+                    'tax_year' => $row->tax_year ?? (now()->year),
+                    'gross_compensation' => $row->gross_compensation ?? 0,
+                    'non_taxable_compensation' => $row->deminimis_benefits ?? 0,
+                    'taxable_compensation' => $row->taxable_income ?? 0,
+                    'tax_withheld' => $row->withholding_tax ?? 0,
+                    'deductions_from_compensation' => $row->deductions_from_compensation ?? 0,
+                    'net_compensation' => ($row->gross_compensation ?? 0) - ($row->deductions_from_compensation ?? 0),
+                    'generated_at' => $row->generated_at ?? null,
+                    'issued_at' => $row->issued_at ?? null,
+                ];
+            })->values();
+
         return Inertia::render('Payroll/Government/BIR/Index', [
             'reports'           => $reports,
             'periods'           => $this->birService->getPeriods(),
             'summary'           => $this->birService->getSummary('bir', $periodId),
             'generated_reports' => $generatedReports,
+            'bir_employees'     => $birEmployees,
+            'bir_2316_certificates' => $bir2316Certificates,
+            'bir_alphalist_employees' => $birAlphalistEmployees,
         ]);
     }
 
