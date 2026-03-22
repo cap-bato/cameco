@@ -121,12 +121,6 @@ export function NavPayroll() {
 
     const paymentsItems = [
         {
-            title: 'Bank Files',
-            icon: CreditCard,
-            href: '/payroll/bank-files',
-            enabled: true,
-        },
-        {
             title: 'Payslips',
             icon: FileText,
             href: '/payroll/payments/payslips',
