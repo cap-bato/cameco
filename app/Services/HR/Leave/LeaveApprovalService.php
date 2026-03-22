@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Leave Approval Service
- * 
+ *
  * Handles leave request approval logic including:
  * - Auto-approval determination
  * - Duration-based routing
@@ -28,7 +28,7 @@ class LeaveApprovalService
 
     /**
      * Check if leave request can be auto-approved
-     * 
+     *
      * Criteria:
      * - Duration is 1-2 days
      * - Employee has sufficient balance
@@ -36,24 +36,18 @@ class LeaveApprovalService
      * - Advance notice meets minimum requirement
      * - Not within blackout period
      * - Auto-approval is enabled system-wide
-     * 
-     * @param LeaveRequest $leaveRequest
-     * @return bool
      */
     public function canAutoApprove(LeaveRequest $leaveRequest): bool
     {
-        // Check if auto-approval is enabled
         if (!$this->isAutoApprovalEnabled()) {
             return false;
         }
 
-        // Check duration (1-2 days only)
         $duration = $this->calculateDuration($leaveRequest->start_date, $leaveRequest->end_date);
         if ($duration < 1 || $duration > 2) {
             return false;
         }
 
-        // Check sufficient balance
         if (!$this->balanceService->hasSufficientBalance(
             $leaveRequest->employee_id,
             $leaveRequest->leave_policy_id,
@@ -62,17 +56,14 @@ class LeaveApprovalService
             return false;
         }
 
-        // Check workforce coverage
         if (!$this->checkWorkforceCoverage($leaveRequest)) {
             return false;
         }
 
-        // Check advance notice
         if (!$this->meetsAdvanceNotice($leaveRequest->start_date)) {
             return false;
         }
 
-        // Check blackout period
         if ($this->isInBlackoutPeriod($leaveRequest)) {
             return false;
         }
@@ -82,9 +73,6 @@ class LeaveApprovalService
 
     /**
      * Check if department coverage meets minimum threshold
-     * 
-     * @param LeaveRequest $leaveRequest
-     * @return bool
      */
     public function checkWorkforceCoverage(LeaveRequest $leaveRequest): bool
     {
@@ -95,7 +83,6 @@ class LeaveApprovalService
             return false;
         }
 
-        // Get coverage percentage if this leave is granted
         $coverage = $this->coverageService->calculateCoverageWithLeave(
             $department->id,
             $leaveRequest->start_date,
@@ -103,90 +90,137 @@ class LeaveApprovalService
             $employee->id
         );
 
-        // Check against department minimum or default 75%
         $minCoverage = $department->min_coverage_percentage ?? 75.00;
 
         return $coverage >= $minCoverage;
     }
 
     /**
-     * Determine approval route based on duration and requestor role
-     * 
+     * Determine the required approvers for a leave request based on
+     * duration and requestor role ONLY — does NOT re-evaluate auto-approval.
+     *
+     * This is the method used when deciding who can approve an already-submitted request.
+     *
      * Rules:
-     * - 1-2 days: Auto-approve (if criteria met)
-     * - 3-5 days: HR Manager approval required
-     * - 6+ days: HR Manager + Office Admin approval required
-     * - If requestor is HR Manager: escalate to Office Admin
-     * 
-     * @param LeaveRequest $leaveRequest
-     * @return array{route: string, required_approvers: array}
+     * - 1-2 days: HR Manager (auto-approval was already attempted at submission)
+     * - 3-5 days: HR Manager (or Office Admin if requestor is HR Manager)
+     * - 6+ days:  HR Manager + Office Admin (or Office Admin only if requestor is HR Manager)
+     *
+     * @return array{route: string, required_approvers: string[]}
+     */
+    public function getApprovalRouteForRequest(LeaveRequest $leaveRequest): array
+    {
+        $duration = $this->calculateDuration($leaveRequest->start_date, $leaveRequest->end_date);
+        $isHRManager = $leaveRequest->employee->user?->hasRole('HR Manager') ?? false;
+
+        if ($duration >= 1 && $duration <= 2) {
+            // Short leave that wasn't auto-approved — needs HR Manager
+            return [
+                'route' => 'manager',
+                'required_approvers' => ['HR Manager'],
+            ];
+        }
+
+        if ($duration >= 3 && $duration <= 5) {
+            if ($isHRManager) {
+                return [
+                    'route' => 'admin',
+                    'required_approvers' => ['Office Admin'],
+                ];
+            }
+
+            return [
+                'route' => 'manager',
+                'required_approvers' => ['HR Manager'],
+            ];
+        }
+
+        // 6+ days
+        if ($isHRManager) {
+            return [
+                'route' => 'admin',
+                'required_approvers' => ['Office Admin'],
+            ];
+        }
+
+        return [
+            'route' => 'manager_and_admin',
+            'required_approvers' => ['HR Manager', 'Office Admin'],
+        ];
+    }
+
+    /**
+     * Determine approval route at submission time.
+     *
+     * This is called when a request is first submitted. It checks if the request
+     * qualifies for auto-approval and returns 'auto' if so. For already-submitted
+     * requests use getApprovalRouteForRequest() instead.
+     *
+     * @return array{route: string, required_approvers: string[], message?: string}
      */
     public function determineApprovalRoute(LeaveRequest $leaveRequest): array
     {
         $duration = $this->calculateDuration($leaveRequest->start_date, $leaveRequest->end_date);
-        $employee = $leaveRequest->employee;
-        
-        // Check if requestor is HR Manager
-        $isHRManager = $employee->user?->hasRole('HR Manager');
+        $isHRManager = $leaveRequest->employee->user?->hasRole('HR Manager') ?? false;
 
-        // Get routing configuration
-        $routingConfig = $this->getApprovalRoutingConfig();
-
-        // Determine route based on duration
         if ($duration >= 1 && $duration <= 2) {
-            // Auto-approve if possible
             if ($this->canAutoApprove($leaveRequest)) {
                 return [
                     'route' => 'auto',
-                    'required_approvers' => []
+                    'required_approvers' => [],
+                    'message' => 'Request has been auto-approved.',
                 ];
             }
-            
-            // Otherwise, HR Manager approval needed
+
             return [
                 'route' => 'manager',
-                'required_approvers' => ['HR Manager']
-            ];
-        } elseif ($duration >= 3 && $duration <= 5) {
-            // HR Manager approval
-            if ($isHRManager) {
-                // Self-approval prevention: escalate to Office Admin
-                return [
-                    'route' => 'admin',
-                    'required_approvers' => ['Office Admin']
-                ];
-            }
-            
-            return [
-                'route' => 'manager',
-                'required_approvers' => ['HR Manager']
-            ];
-        } else {
-            // 6+ days: HR Manager + Office Admin
-            if ($isHRManager) {
-                // Skip HR Manager, go straight to Office Admin
-                return [
-                    'route' => 'admin',
-                    'required_approvers' => ['Office Admin']
-                ];
-            }
-            
-            return [
-                'route' => 'manager_and_admin',
-                'required_approvers' => ['HR Manager', 'Office Admin']
+                'required_approvers' => ['HR Manager'],
+                'message' => 'Request is awaiting HR Manager approval.',
             ];
         }
+
+        if ($duration >= 3 && $duration <= 5) {
+            if ($isHRManager) {
+                return [
+                    'route' => 'admin',
+                    'required_approvers' => ['Office Admin'],
+                    'message' => 'Request has been forwarded to the Office Admin for approval.',
+                ];
+            }
+
+            return [
+                'route' => 'manager',
+                'required_approvers' => ['HR Manager'],
+                'message' => 'Request is awaiting HR Manager approval.',
+            ];
+        }
+
+        // 6+ days
+        if ($isHRManager) {
+            return [
+                'route' => 'admin',
+                'required_approvers' => ['Office Admin'],
+                'message' => 'Request has been forwarded to the Office Admin for approval.',
+            ];
+        }
+
+        return [
+            'route' => 'manager_and_admin',
+            'required_approvers' => ['HR Manager', 'Office Admin'],
+            'message' => 'Request is awaiting HR Manager approval, then Office Admin.',
+        ];
     }
 
     /**
-     * Check if user can approve the leave request
-     * 
-     * Prevents self-approval and validates role-based permissions
-     * 
+     * Check if a user can approve the given leave request.
+     *
+     * Uses getApprovalRouteForRequest() — which is based purely on duration/role —
+     * so it never re-runs canAutoApprove() and never produces an empty approvers list
+     * for a pending request.
+     *
      * @param LeaveRequest $leaveRequest
-     * @param int $userId
-     * @param string $role (e.g., 'HR Manager', 'Office Admin')
-     * @return bool
+     * @param int          $userId  The ID of the user attempting to approve
+     * @param string       $role    The approving user's role ('HR Manager' | 'Office Admin')
      */
     public function canUserApprove(LeaveRequest $leaveRequest, int $userId, string $role): bool
     {
@@ -195,17 +229,16 @@ class LeaveApprovalService
             return false;
         }
 
-        // Get approval route
-        $route = $this->determineApprovalRoute($leaveRequest);
+        // Use the submission-time-agnostic route resolver
+        $route = $this->getApprovalRouteForRequest($leaveRequest);
 
-        // Check if role is required for this route
-        if (!in_array($role, $route['required_approvers'])) {
+        // Role must be in the required list for this route
+        if (!in_array($role, $route['required_approvers'], true)) {
             return false;
         }
 
-        // If route requires both manager and admin, check approval sequence
+        // For sequential approval (manager_and_admin), Office Admin must wait for HR Manager
         if ($route['route'] === 'manager_and_admin') {
-            // Office Admin can only approve after HR Manager
             if ($role === 'Office Admin' && !$leaveRequest->manager_approved_at) {
                 return false;
             }
@@ -215,10 +248,7 @@ class LeaveApprovalService
     }
 
     /**
-     * Check if leave request falls within blackout period
-     * 
-     * @param LeaveRequest $leaveRequest
-     * @return bool
+     * Check if leave request falls within a blackout period
      */
     public function isInBlackoutPeriod(LeaveRequest $leaveRequest): bool
     {
@@ -235,73 +265,53 @@ class LeaveApprovalService
     }
 
     /**
-     * Calculate duration in days between two dates
-     * 
+     * Calculate duration in days (inclusive of both start and end date)
+     *
      * @param string|Carbon $startDate
      * @param string|Carbon $endDate
-     * @return int
      */
     public function calculateDuration($startDate, $endDate): int
     {
         $start = $startDate instanceof Carbon ? $startDate : Carbon::parse($startDate);
-        $end = $endDate instanceof Carbon ? $endDate : Carbon::parse($endDate);
+        $end   = $endDate   instanceof Carbon ? $endDate   : Carbon::parse($endDate);
 
-        return $start->diffInDays($end) + 1;
+        return (int) $start->diffInDays($end) + 1;
     }
 
     /**
-     * Check if leave request meets minimum advance notice requirement
-     * 
+     * Check if leave request meets the minimum advance-notice requirement
+     *
      * @param string|Carbon $startDate
-     * @return bool
      */
     protected function meetsAdvanceNotice($startDate): bool
     {
         $minDays = $this->getMinAdvanceNoticeDays();
-        $start = $startDate instanceof Carbon ? $startDate : Carbon::parse($startDate);
-        
+        $start   = $startDate instanceof Carbon ? $startDate : Carbon::parse($startDate);
+
         return Carbon::now()->diffInDays($start, false) >= $minDays;
     }
 
-    /**
-     * Get auto-approval enabled setting
-     * 
-     * @return bool
-     */
     protected function isAutoApprovalEnabled(): bool
     {
         return SystemSetting::getValue('leave_auto_approval_enabled', true);
     }
 
-    /**
-     * Get minimum advance notice days setting
-     * 
-     * @return int
-     */
     protected function getMinAdvanceNoticeDays(): int
     {
         return SystemSetting::getValue('leave_min_advance_notice_days', 3);
     }
 
-    /**
-     * Get approval routing configuration
-     * 
-     * @return array
-     */
     protected function getApprovalRoutingConfig(): array
     {
         return SystemSetting::getValue('leave_approval_routing', [
-            'short_leave' => ['min' => 1, 'max' => 2, 'approvers' => []],
+            'short_leave'  => ['min' => 1, 'max' => 2, 'approvers' => []],
             'medium_leave' => ['min' => 3, 'max' => 5, 'approvers' => ['HR Manager']],
-            'long_leave' => ['min' => 6, 'max' => null, 'approvers' => ['HR Manager', 'Office Admin']]
+            'long_leave'   => ['min' => 6, 'max' => null, 'approvers' => ['HR Manager', 'Office Admin']],
         ]);
     }
 
     /**
-     * Process auto-approval for leave request
-     * 
-     * @param LeaveRequest $leaveRequest
-     * @return bool
+     * Process auto-approval for a leave request
      */
     public function processAutoApproval(LeaveRequest $leaveRequest): bool
     {
@@ -310,7 +320,6 @@ class LeaveApprovalService
         }
 
         DB::transaction(function () use ($leaveRequest) {
-            // Calculate coverage percentage
             $coverage = $this->coverageService->calculateCoverageWithLeave(
                 $leaveRequest->employee->department_id,
                 $leaveRequest->start_date,
@@ -318,15 +327,13 @@ class LeaveApprovalService
                 $leaveRequest->employee_id
             );
 
-            // Update leave request
             $leaveRequest->update([
-                'status' => 'approved',
-                'auto_approved' => true,
+                'status'              => 'approved',
+                'auto_approved'       => true,
                 'coverage_percentage' => $coverage,
                 'manager_approved_at' => now(),
             ]);
 
-            // Deduct balance
             $duration = $this->calculateDuration($leaveRequest->start_date, $leaveRequest->end_date);
             $this->balanceService->deductBalance(
                 $leaveRequest->employee_id,
