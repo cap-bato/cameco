@@ -118,23 +118,80 @@ class PayslipsController extends Controller
         }
     }
 
-    public function preview(int $payslipId)
-    {
-        $previewData = $this->getMockPreviewData($payslipId);
+public function preview(int $payslipId)
+{
+    $payslip = Payslip::with([
+        'employee.profile',
+        'employee.department',
+        'employee.position',
+        'payrollPayment.payrollPeriod',
+    ])->findOrFail($payslipId);
 
-        return Inertia::render('Payroll/Payments/Payslips/Index', [
-            'previewData' => $previewData,
-        ]);
-    }
+    $employee = $payslip->employee;
+    $period   = $payslip->payrollPayment?->payrollPeriod;
 
+    // Build earnings breakdown from payslip columns
+    $earnings = array_filter([
+        ['name' => 'Basic Salary',      'amount' => (float) $payslip->basic_salary],
+        ['name' => 'Overtime Pay',      'amount' => (float) $payslip->overtime_pay],
+        ['name' => 'Night Differential','amount' => (float) $payslip->night_differential],
+        ['name' => 'Holiday Pay',       'amount' => (float) $payslip->holiday_pay],
+        ['name' => 'Allowances',        'amount' => (float) $payslip->allowances],
+        ['name' => 'Other Earnings',    'amount' => (float) $payslip->other_earnings],
+    ], fn($e) => $e['amount'] > 0);
+
+    $deductions = array_filter([
+        ['name' => 'SSS Contribution',       'amount' => (float) $payslip->sss_contribution],
+        ['name' => 'PhilHealth Contribution', 'amount' => (float) $payslip->philhealth_contribution],
+        ['name' => 'Pag-IBIG Contribution',  'amount' => (float) $payslip->pagibig_contribution],
+        ['name' => 'Withholding Tax',        'amount' => (float) $payslip->withholding_tax],
+        ['name' => 'Loans',                  'amount' => (float) $payslip->loans],
+        ['name' => 'Other Deductions',       'amount' => (float) $payslip->other_deductions],
+    ], fn($d) => $d['amount'] > 0);
+
+    $ytdDeductions = ((float) ($payslip->ytd_tax ?? 0))
+        + ((float) ($payslip->ytd_sss ?? 0))
+        + ((float) ($payslip->ytd_philhealth ?? 0))
+        + ((float) ($payslip->ytd_pagibig ?? 0));
+
+    return response()->json([
+        'employee_id'      => $employee?->id,
+        'employee_number'  => $employee?->employee_number ?? $payslip->employee_number,
+        'employee_name'    => $employee?->full_name ?? $payslip->employee_name,
+        'position'         => $employee?->position?->title ?? $payslip->position ?? 'Unknown',
+        'department'       => $employee?->department?->name ?? $payslip->department ?? 'Unknown',
+        'period_name'      => $period?->period_name ?? $payslip->period_name ?? 'N/A',
+        'period_start'     => $payslip->period_start->format('Y-m-d'),
+        'period_end'       => $payslip->period_end->format('Y-m-d'),
+        'pay_date'         => $payslip->payment_date->format('Y-m-d'),
+        'earnings'         => array_values($earnings),
+        'gross_pay'        => (float) $payslip->total_earnings,
+        'deductions'       => array_values($deductions),
+        'total_deductions' => (float) $payslip->total_deductions,
+        'net_pay'          => (float) $payslip->net_pay,
+        'ytd_gross'        => (float) ($payslip->ytd_gross ?? 0),
+        'ytd_deductions'   => $ytdDeductions,
+        'ytd_net'          => (float) ($payslip->ytd_net ?? 0),
+    ]);
+}
     public function download(int $payslipId)
     {
-        try {
-            // In production, this would generate and download the PDF
-            return back()->with('success', 'Payslip downloaded successfully.');
-        } catch (\Exception $e) {
-            return back()->with('error', 'Failed to download payslip: ' . $e->getMessage());
+        $payslip = Payslip::findOrFail($payslipId);
+
+        // If a stored PDF exists, stream it directly
+        if ($payslip->file_path && \Storage::exists($payslip->file_path)) {
+            return \Storage::download(
+                $payslip->file_path,
+                "Payslip-{$payslip->payslip_number}.pdf",
+                ['Content-Type' => 'application/pdf']
+            );
         }
+
+        // Fallback: generate PDF on the fly with DomPDF
+        // composer require barryvdh/laravel-dompdf
+        $pdf = \PDF::loadView('payroll.payslips.pdf', ['payslip' => $payslip]);
+
+        return $pdf->download("Payslip-{$payslip->payslip_number}.pdf");
     }
 
     public function email(int $payslipId)
