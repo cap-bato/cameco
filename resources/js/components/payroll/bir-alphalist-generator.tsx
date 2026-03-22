@@ -301,7 +301,7 @@ export const BIRAlphaListGenerator: React.FC<BIRAlphaListGeneratorProps> = ({
                             </TableHeader>
                             <TableBody>
                                 {filteredEmployees.map((emp) => (
-                                    <TableRow key={emp.tin}>
+                                    <TableRow key={`${emp.tin}-${emp.sequence_number}`}> 
                                         <TableCell className="font-mono text-sm">
                                             {emp.sequence_number}
                                         </TableCell>
