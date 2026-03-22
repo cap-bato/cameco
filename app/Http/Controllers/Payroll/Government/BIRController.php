@@ -166,6 +166,9 @@ class BIRController extends Controller
                 'generated_by' => auth()->id(),
             ]);
 
+            if ($request->hasHeader('X-Inertia')) {
+                return Inertia::location(route('bir.index'));
+            }
             return back()->with('success', 'Form 2316 certificates generated successfully for all employees');
         } catch (\Exception $e) {
             Log::error('Form 2316 generation error', [
@@ -173,13 +176,13 @@ class BIRController extends Controller
                 'error'     => $e->getMessage(),
             ]);
 
+            if ($request->hasHeader('X-Inertia')) {
+                return Inertia::location(route('bir.index'));
+            }
             return back()->withErrors('Failed to generate Form 2316: ' . $e->getMessage());
         }
-    }
 
-    /**
-     * Generate BIR Alphalist (DAT Format).
-     */
+    }
     public function generateAlphalist(Request $request, int $periodId)
     {
         try {
