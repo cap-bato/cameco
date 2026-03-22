@@ -90,5 +90,17 @@ class JobPostingSeeder extends Seeder
         }
 
         $this->command->info('✅ Seeded ' . count($postings) . ' job postings.');
+
+        // --- Reset PostgreSQL sequence to max(id) ---
+        // This prevents duplicate key errors when inserting new job postings after seeding with explicit IDs.
+        $connection = \DB::connection()->getDriverName();
+        if ($connection === 'pgsql') {
+            $maxId = \DB::table('job_postings')->max('id');
+            if ($maxId) {
+                $sequence = 'job_postings_id_seq';
+                \DB::statement("SELECT setval('$sequence', $maxId)");
+                $this->command->info("[PostgreSQL] Reset $sequence to $maxId");
+            }
+        }
     }
 }

@@ -106,6 +106,10 @@ export default function LoansPage({
             activeLoans: activeLoans.length,
             totalBalance,
             totalDeductionsThisPeriod,
+            activeStatusPercent:
+                filteredLoans.length > 0
+                    ? (activeLoans.length / filteredLoans.length) * 100
+                    : 0,
         };
     }, [filteredLoans]);
 
@@ -228,7 +232,9 @@ export default function LoansPage({
                     <Card className="p-4">
                         <p className="text-xs font-semibold text-muted-foreground">Active Status</p>
                         <p className="text-3xl font-bold mt-2">
-                            {((summaryStats.activeLoans / summaryStats.totalLoans) * 100).toFixed(0)}%
+                            {Number.isFinite(summaryStats.activeStatusPercent) && summaryStats.totalLoans > 0
+                                ? `${summaryStats.activeStatusPercent.toFixed(0)}%`
+                                : '0%'}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">Loan collection rate</p>
                     </Card>

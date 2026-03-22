@@ -128,8 +128,6 @@ class DatabaseSeeder extends Seeder
         // ── STAGE 10: Employees & profiles ────────────────────────────────
         $this->call([
             EmployeeSeeder::class,
-            BulkEmployeeSeeder::class,
-            EmployeeFilipinoProfileSeeder::class,
             EmployeeAccountSeeder::class,
             LinkEmployeesToUsersSeeder::class,
             EmployeePayrollInfoSeeder::class,
@@ -183,20 +181,6 @@ class DatabaseSeeder extends Seeder
             CashDistributionBatchSeeder::class,
             PayslipsSeeder::class,
         ]);
-
-        // ── STAGE 18: Dev / test data ──────────────────────────────────────
-        if (app()->environment('local', 'testing')) {
-            $this->call([
-                TimekeepingTestDataSeeder::class,
-                FebruaryFirstHalfPayrollSeeder::class,
-                FebruarySecondHalfPayrollSeeder::class,
-                FullPayrollTestDataSeeder::class,
-            ]);
-
-            if (env('SEED_PAYROLL_TEST_DATA', false)) {
-                $this->call(PayrollCalculationTestSeeder::class);
-            }
-        }
 
         // ── STAGE 19: Cleanup ──────────────────────────────────────────────
         if (class_exists(RemoveDuplicateLuisTorresSeeder::class)) {

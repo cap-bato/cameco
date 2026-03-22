@@ -105,7 +105,11 @@ class LoansController extends Controller
                 'department' => $emp->department?->name ?? 'N/A',
             ]);
 
-        $departments = Department::where('status', 'active')->get(['id', 'name'])->values();
+        // Fix: Remove 'status' column filter, just get all non-deleted departments
+        $departments = Department::query()
+            ->whereNull('deleted_at')
+            ->get(['id', 'name'])
+            ->values();
 
         return Inertia::render('Payroll/EmployeePayroll/Loans/Index', [
             'loans' => $loans->values()->toArray(),

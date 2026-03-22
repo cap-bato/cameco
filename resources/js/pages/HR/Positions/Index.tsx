@@ -315,6 +315,9 @@ export default function PositionIndex({
                                                                 Position Title
                                                             </TableHead>
                                                             <TableHead className="font-semibold text-slate-900 dark:text-slate-100">
+                                                                Position Level
+                                                            </TableHead>
+                                                            <TableHead className="font-semibold text-slate-900 dark:text-slate-100">
                                                                 Code
                                                             </TableHead>
                                                             <TableHead className="font-semibold text-slate-900 dark:text-slate-100">

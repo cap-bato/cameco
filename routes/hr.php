@@ -372,7 +372,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 ->middleware('permission:hr.ats.job-postings.create')
                 ->name('job-postings.create');
             Route::post('/job-postings', [JobPostingController::class, 'store'])
-                ->middleware('permission:hr.ats.job-postings.create')
+                ->middleware('permission:recruitment.job_postings.create')
                 ->name('job-postings.store');
             Route::get('/job-postings/{id}/edit', [JobPostingController::class, 'edit'])
                 ->middleware('permission:hr.ats.job-postings.update')
@@ -419,19 +419,19 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/candidates', [CandidateController::class, 'index'])
                 ->middleware('permission:hr.ats.candidates.view')
                 ->name('candidates.index');
-            Route::get('/candidates/{id}', [CandidateController::class, 'show'])
+            Route::get('/candidates/{candidate}', [CandidateController::class, 'show'])
                 ->middleware('permission:hr.ats.candidates.view')
                 ->name('candidates.show');
             Route::post('/candidates', [CandidateController::class, 'store'])
                 ->middleware('permission:hr.ats.candidates.create')
                 ->name('candidates.store');
-            Route::put('/candidates/{id}', [CandidateController::class, 'update'])
+            Route::put('/candidates/{candidate}', [CandidateController::class, 'update'])
                 ->middleware('permission:hr.ats.candidates.update')
                 ->name('candidates.update');
-            Route::delete('/candidates/{id}', [CandidateController::class, 'destroy'])
+            Route::delete('/candidates/{candidate}', [CandidateController::class, 'destroy'])
                 ->middleware('permission:hr.ats.candidates.delete')
                 ->name('candidates.destroy');
-            Route::post('/candidates/{id}/notes', [CandidateController::class, 'addNote'])
+            Route::post('/candidates/{candidate}/notes', [CandidateController::class, 'addNote'])
                 ->middleware('permission:hr.ats.candidates.update')
                 ->name('candidates.notes.store');
 

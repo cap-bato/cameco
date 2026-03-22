@@ -129,6 +129,8 @@ class LeaveRequestSeeder extends Seeder
                     'submitted_at' => $matStart->copy()->subDay(),
                     'created_at' => $matStart->copy()->subDay(),
                     'updated_at' => $matStart->copy()->subDay(),
+                    'department_id' => $employee->department_id,
+                    'supervisor_id' => $employee->immediate_supervisor_id,
                 ]);
             }
         }

@@ -26,7 +26,7 @@ class ApplicationController extends Controller
         $minScore = $request->input('min_score');
         $maxScore = $request->input('max_score');
 
-        $applications = Application::with(['candidate', 'jobPosting', 'interviews'])
+        $applications = Application::with(['candidate.profile', 'jobPosting', 'interviews'])
             ->when($status, fn($q) => $q->where('status', $status))
             ->when($jobId, fn($q) => $q->where('job_posting_id', $jobId))
             ->when($minScore, fn($q) => $q->where('score', '>=', $minScore))
@@ -34,20 +34,30 @@ class ApplicationController extends Controller
             ->latest('applied_at')
             ->paginate(20)
             ->through(function ($app) {
+                $candidate = $app->candidate;
+                $profile = $candidate?->profile;
+                $firstName = $candidate?->first_name ?? $profile?->first_name ?? '';
+                $middleName = $candidate?->middle_name ?? $profile?->middle_name ?? '';
+                $lastName = $candidate?->last_name ?? $profile?->last_name ?? '';
+                $email = $candidate?->email ?? $profile?->email ?? 'N/A';
+                $phone = $candidate?->phone ?? $profile?->phone ?? 'N/A';
+                // Ensure score is always float or null (never string or empty string)
+                $score = $app->score;
+                if ($score === '' || $score === null) {
+                    $score = null;
+                } elseif (!is_numeric($score)) {
+                    $score = null;
+                } else {
+                    $score = (float)$score;
+                }
                 return [
                     'id'               => $app->id,
                     'status'           => $app->status,
-                    'score'            => $app->score ?? 'N/A',
+                    'score'            => $score,
                     'applied_at'       => $app->applied_at,
-                    'candidate_name'   => $app->candidate
-                        ? trim(
-                            ($app->candidate->first_name ?? '') . ' ' .
-                            ($app->candidate->middle_name ?? '') . ' ' .
-                            ($app->candidate->last_name ?? '')
-                        )
-                        : 'Unknown',
-                    'candidate_email'  => $app->candidate->email ?? 'N/A',
-                    'candidate_phone'  => $app->candidate->phone ?? 'N/A',
+                    'candidate_name'   => trim("$firstName $middleName $lastName") ?: 'Unknown',
+                    'candidate_email'  => $email,
+                    'candidate_phone'  => $phone,
                     'job_title'        => $app->jobPosting->title ?? 'Unknown',
                     'interviews_count' => $app->interviews->count(),
                 ];
@@ -68,6 +78,8 @@ class ApplicationController extends Controller
             'filters'      => [
                 'status' => $status,
                 'job_id' => $jobId,
+                'min_score' => $minScore,
+                'max_score' => $maxScore,
             ],
             'statistics'   => $statistics,
             'jobPostings'  => JobPosting::select('id', 'title')->get(),
@@ -81,19 +93,31 @@ class ApplicationController extends Controller
     public function show(Application $application): Response
     {
         $application->load([
-            'candidate',
+            'candidate.profile',
             'jobPosting.department',
             'interviews',
             'statusHistory',
             'notes',
         ]);
 
+        $candidate = $application->candidate;
+        $profile = $candidate?->profile;
+        $firstName = $candidate?->first_name ?? $profile?->first_name ?? '';
+        $middleName = $candidate?->middle_name ?? $profile?->middle_name ?? '';
+        $lastName = $candidate?->last_name ?? $profile?->last_name ?? '';
+        $email = $candidate?->email ?? $profile?->email ?? 'N/A';
+        $phone = $candidate?->phone ?? $profile?->phone ?? 'N/A';
         $canScheduleInterview = in_array($application->status, ['shortlisted', 'interviewed']);
         $canGenerateOffer     = $application->status === 'interviewed';
 
+        // Merge candidate_name, candidate_email, candidate_phone into application prop for frontend
+        $application->candidate_name = trim("$firstName $middleName $lastName") ?: 'Unknown';
+        $application->candidate_email = $email;
+        $application->candidate_phone = $phone;
+
         return Inertia::render('HR/ATS/Applications/Show', [
             'application'          => $application,
-            'candidate'            => $application->candidate,
+            'candidate'            => $candidate,
             'job'                  => $application->jobPosting,
             'interviews'           => $application->interviews,
             'status_history'       => $application->statusHistory,
@@ -185,6 +209,16 @@ class ApplicationController extends Controller
             'scheduled_time'   => $validated['scheduled_time'],
             'location_type'    => $validated['location_type'],
             'interviewer_name' => $validated['interviewer_name'],
+        ]);
+
+        // Update application status to interviewed
+        $application->status = 'interviewed';
+        $application->save();
+
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'status'         => 'interviewed',
+            'changed_by'     => Auth::id(),
         ]);
 
         return back()->with('success', 'Interview scheduled.');

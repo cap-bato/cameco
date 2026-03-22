@@ -14,6 +14,7 @@ use App\Policies\EmployeePolicy;
 use App\Policies\LeavePolicyPolicy;
 use App\Policies\LeaveRequestPolicy;
 use App\Policies\PositionPolicy;
+use App\Policies\JobPostingPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 
@@ -30,6 +31,7 @@ class AuthServiceProvider extends ServiceProvider
         Position::class => PositionPolicy::class,
         LeavePolicy::class => LeavePolicyPolicy::class,
         LeaveRequest::class => LeaveRequestPolicy::class,
+        JobPosting::class => JobPostingPolicy::class,
         // AttendancePolicy doesn't need a model mapping - uses Gate directly
     ];
 

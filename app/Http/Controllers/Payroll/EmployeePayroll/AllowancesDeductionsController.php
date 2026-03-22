@@ -102,12 +102,34 @@ class AllowancesDeductionsController extends Controller
             $totalAllowances = $allowances->sum('amount') ?? 0;
             $totalDeductions = $deductions->sum('amount') ?? 0;
 
+            // Prefer profile first, then user->name, then username
+            $profile = $employee->user?->profile;
+            $first = null;
+            $last = null;
+            if ($profile) {
+                $first = $profile->first_name;
+                $last = $profile->last_name;
+            } elseif ($employee->user) {
+                // Fallback to user->name split if possible
+                $name = $employee->user->name ?? '';
+                if ($name) {
+                    $parts = explode(' ', $name, 2);
+                    $first = $parts[0] ?? $employee->user->username ?? 'N/A';
+                    $last = $parts[1] ?? '';
+                } else {
+                    $first = $employee->user->username ?? 'N/A';
+                    $last = '';
+                }
+            } else {
+                $first = 'N/A';
+                $last = '';
+            }
             return [
                 'id' => $employee->id,
                 'employee_id' => $employee->id,
                 'employee_number' => $employee->employee_number,
-                'first_name' => $employee->user?->first_name ?? 'N/A',
-                'last_name' => $employee->user?->last_name ?? 'N/A',
+                'first_name' => $first ?? 'N/A',
+                'last_name' => $last ?? '',
                 'department' => $employee->department?->name ?? 'N/A',
                 'department_id' => $employee->department_id,
                 'position' => $employee->position?->name ?? 'N/A',
@@ -117,14 +139,22 @@ class AllowancesDeductionsController extends Controller
             ];
         });
 
-        if ($status === 'active') {
-            $employeeData = $employeeData->filter(fn($e) => count($e['components']) > 0);
-        }
+        // Do not filter out employees with no components, so all active employees are included in the assign modal
 
         $components = $this->salaryComponentService->getComponentsGroupedByType(true);
         $componentsList = collect([]);
+        // List of core payroll codes that should never be assigned manually
+        $excludedCodes = [
+            'BASIC', 'SSS', 'PHILHEALTH', 'PAGIBIG', 'TAX', '13TH_MONTH',
+            'GROSS', 'ALLOWANCE_OTHER', 'ALLOWANCE_DIFF_RATE',
+            'OT_REG', 'OT_HOLIDAY', 'OT_DOUBLE', 'OT_TRIPLE',
+            'HOLIDAY_REG', 'HOLIDAY_DOUBLE', 'HOLIDAY_SPECIAL_WORK', 'PREMIUM_NIGHT',
+        ];
         foreach ($components as $type => $typeComponents) {
             foreach ($typeComponents as $component) {
+                if (in_array(strtoupper($component['code']), $excludedCodes)) {
+                    continue;
+                }
                 $componentsList->push([
                     'id' => $component['id'],
                     'code' => $component['code'],
@@ -164,23 +194,44 @@ class AllowancesDeductionsController extends Controller
      */
     public function bulkAssignPage()
     {
-        $employees = Employee::with('user', 'department', 'position')
+        $employees = Employee::with(['user.profile', 'department', 'position'])
             ->where('status', 'active')
             ->get()
             ->filter(fn($emp) => $emp->user !== null)
-            ->map(fn($emp) => [
-                'id' => $emp->id,
-                'employee_number' => $emp->employee_number,
-                'first_name' => $emp->user?->first_name ?? 'N/A',
-                'last_name' => $emp->user?->last_name ?? 'N/A',
-                'department' => $emp->department?->name ?? 'N/A',
-                'position' => $emp->position?->name ?? 'N/A',
-            ]);
+            ->map(function ($emp) {
+                $first = $emp->user?->profile?->first_name;
+                $last = $emp->user?->profile?->last_name;
+                // Fallback to user->name or username if profile is missing
+                if (!$first && !$last) {
+                    $full = $emp->user?->name ?? $emp->user?->username ?? 'N/A';
+                    $parts = explode(' ', $full, 2);
+                    $first = $parts[0] ?? 'N/A';
+                    $last = $parts[1] ?? '';
+                }
+                return [
+                    'id' => $emp->id,
+                    'employee_number' => $emp->employee_number,
+                    'first_name' => $first ?? 'N/A',
+                    'last_name' => $last ?? '',
+                    'department' => $emp->department?->name ?? 'N/A',
+                    'position' => $emp->position?->name ?? 'N/A',
+                ];
+            });
 
         $components = $this->salaryComponentService->getComponentsGroupedByType(true);
         $componentsList = collect([]);
+        // List of core payroll codes that should never be bulk assigned
+        $excludedCodes = [
+            'BASIC', 'SSS', 'PHILHEALTH', 'PAGIBIG', 'TAX', '13TH_MONTH',
+            'GROSS', 'ALLOWANCE_OTHER', 'ALLOWANCE_DIFF_RATE',
+            'OT_REG', 'OT_HOLIDAY', 'OT_DOUBLE', 'OT_TRIPLE',
+            'HOLIDAY_REG', 'HOLIDAY_DOUBLE', 'HOLIDAY_SPECIAL_WORK', 'PREMIUM_NIGHT',
+        ];
         foreach ($components as $type => $typeComponents) {
             foreach ($typeComponents as $component) {
+                if (in_array(strtoupper($component['code']), $excludedCodes)) {
+                    continue;
+                }
                 $componentsList->push([
                     'id' => $component['id'],
                     'code' => $component['code'],

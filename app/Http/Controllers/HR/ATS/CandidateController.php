@@ -157,22 +157,31 @@ public function addNote(Request $request, Candidate $candidate)
         'is_private' => 'boolean',
     ]);
 
-    $candidate->notes()->create([
+    $note = new Note([
         'note' => $validated['note'],
         'is_private' => $validated['is_private'] ?? false,
-        'user_id' => Auth::id(), 
+        'user_id' => Auth::id(),
     ]);
+    $note->candidate_id = $candidate->id;
+    $note->save();
 
     return back()->with('success', 'Note added successfully.');
 }
 
-public function destroy(Candidate $candidate)
-{
-    $candidate->delete();
+    public function destroy(Candidate $candidate)
+    {
+        $candidate->delete();
 
-    return redirect()->route('hr.ats.candidates.index')
-        ->with('success', 'Candidate deleted successfully.');
-}
+        if (request()->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Candidate deleted successfully.'
+            ]);
+        }
+
+        return redirect()->route('hr.ats.candidates.index')
+            ->with('success', 'Candidate deleted successfully.');
+    }
 
 
 }

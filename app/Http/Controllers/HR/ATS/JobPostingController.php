@@ -23,7 +23,6 @@ class JobPostingController extends Controller
     {
         $this->facebookService = $facebookService;
     }
-
     /**
      * Display a listing of job postings with real database queries.
      */
@@ -97,12 +96,34 @@ class JobPostingController extends Controller
      */
     public function store(Request $request)
     {
+        \Log::debug('JobPostingController@store: method entered', [
+            'user_id' => $request->user()?->id,
+            'email' => $request->user()?->email,
+        ]);
+
+        // Log just before authorization
+        \Log::debug('JobPostingController@store: before authorize', [
+            'user_id' => $request->user()?->id,
+            'email' => $request->user()?->email,
+        ]);
+        $this->authorize('create', JobPosting::class);
+
+        \Log::debug('JobPostingController@store: after authorize', [
+            'user_id' => $request->user()?->id,
+            'email' => $request->user()?->email,
+        ]);
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'department_id' => 'required|exists:departments,id',
             'description' => 'required|string',
             'requirements' => 'required|string',
             'status' => 'required|in:draft,open',
+        ]);
+
+        \Log::debug('JobPostingController@store: after validate', [
+            'user_id' => $request->user()?->id,
+            'email' => $request->user()?->email,
         ]);
 
         $jobPosting = JobPosting::create(array_merge($validated, [

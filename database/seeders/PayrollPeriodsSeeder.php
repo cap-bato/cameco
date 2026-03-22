@@ -17,6 +17,8 @@ class PayrollPeriodsSeeder extends Seeder
     public function run(): void
     {
         // Always create a fresh completed payroll period for demo/testing
+        // Truncate payroll_periods table for fresh seeding
+        \DB::statement('TRUNCATE TABLE payroll_periods RESTART IDENTITY CASCADE');
         $now = Carbon::now();
         $periodStart = $now->copy()->startOfMonth();
         $periodEnd = $periodStart->copy()->day(15);
@@ -29,6 +31,8 @@ class PayrollPeriodsSeeder extends Seeder
         $totalEmployees = Employee::count();
         $activeEmployees = Employee::where('status', 'active')->count();
         $excludedEmployees = max(0, $totalEmployees - $activeEmployees);
+        // For demo: use a realistic average net pay
+        $averageNetPay = 25000;
         // Remove any existing period with this number (for idempotency)
         PayrollPeriod::where('period_number', $periodNumber)->delete();
         $periodsToDelete = [];
@@ -56,27 +60,87 @@ class PayrollPeriodsSeeder extends Seeder
         $now = Carbon::now();
         $periods = [];
 
-        // Create 6 periods (last 6 months)
+        // Create 6 months of periods (12 periods: 1H and 2H per month)
+
         for ($i = 5; $i >= 0; $i--) {
+            // First half
             $periodStart = $now->copy()->subMonths($i)->startOfMonth();
             $periodEnd = $periodStart->copy()->day(15);
             $paymentDate = $periodEnd->copy()->addDays(2);
             $periodNumber = sprintf('%s-%02d-1H', $periodStart->year, $periodStart->month);
-            // ...existing code for status, etc...
-            // Collect period numbers for deletion
-            $periodsToDelete[] = $periodNumber;
-            // ...existing code for $periods[]...
-            // Second half of the month
+
+            // Determine status logic
+            $isMarch = ($periodStart->month === 3 && $periodStart->year === $now->year);
+            if ($isMarch) {
+                $status = 'approved';
+            } else {
+                $status = 'completed';
+            }
+            $progress = ($status === 'completed' || $status === 'approved') ? 100 : 0;
+            $periods[] = [
+                'period_number' => $periodNumber,
+                'period_name' => $periodNumber, // Use period_number as name for demo
+                'period_month' => $periodStart->format('Y-m'),
+                'period_year' => $periodStart->format('Y'),
+                'period_start' => $periodStart->toDateString(),
+                'period_end' => $periodEnd->toDateString(),
+                'timekeeping_cutoff_date' => $periodEnd->toDateString(),
+                'leave_cutoff_date' => $periodEnd->toDateString(),
+                'adjustment_deadline' => $periodEnd->toDateString(),
+                'payment_date' => $paymentDate->toDateString(),
+                'status' => $status,
+                'created_by' => $creatorId,
+                'approved_by' => $status === 'approved' || $status === 'completed' ? $approverId : null,
+                'approved_at' => $status === 'approved' || $status === 'completed' ? $paymentDate->copy()->subDays(3) : null,
+                'total_employees' => $totalEmployees,
+                'active_employees' => $activeEmployees,
+                'excluded_employees' => $excludedEmployees,
+                'total_net_pay' => ($status === 'completed' || $status === 'approved') ? $averageNetPay * $activeEmployees : 0.00,
+                'progress_percentage' => $progress,
+                'created_at' => $periodStart->copy()->subDays(2),
+                'updated_at' => $paymentDate,
+            ];
+
+            // Second half
             $periodStart2 = $periodEnd->copy()->addDay();
             $periodEnd2 = $periodStart->copy()->endOfMonth();
             $paymentDate2 = $periodEnd2->copy()->addDays(2);
             $periodNumber2 = sprintf('%s-%02d-2H', $periodStart->year, $periodStart->month);
-            $periodsToDelete[] = $periodNumber2;
-            // ...existing code for $periods[]...
+            // For March, 2H should be 'draft', others 'completed'
+            if ($isMarch) {
+                $status2 = 'draft';
+            } else {
+                $status2 = 'completed';
+            }
+            $progress2 = ($status2 === 'completed' || $status2 === 'approved') ? 100 : 0;
+            $periods[] = [
+                'period_number' => $periodNumber2,
+                'period_name' => $periodNumber2, // Use period_number as name for demo
+                'period_month' => $periodStart2->format('Y-m'),
+                'period_year' => $periodStart2->format('Y'),
+                'period_start' => $periodStart2->toDateString(),
+                'period_end' => $periodEnd2->toDateString(),
+                'timekeeping_cutoff_date' => $periodEnd2->toDateString(),
+                'leave_cutoff_date' => $periodEnd2->toDateString(),
+                'adjustment_deadline' => $periodEnd2->toDateString(),
+                'payment_date' => $paymentDate2->toDateString(),
+                'status' => $status2,
+                'created_by' => $creatorId,
+                'approved_by' => $status2 === 'approved' || $status2 === 'completed' ? $approverId : null,
+                'approved_at' => $status2 === 'approved' || $status2 === 'completed' ? $paymentDate2->copy()->subDays(3) : null,
+                'total_employees' => $totalEmployees,
+                'active_employees' => $activeEmployees,
+                'excluded_employees' => $excludedEmployees,
+                'total_net_pay' => ($status2 === 'completed' || $status2 === 'approved') ? $averageNetPay * $activeEmployees : 0.00,
+                'progress_percentage' => $progress2,
+                'created_at' => $periodStart2->copy()->subDays(2),
+                'updated_at' => $paymentDate2,
+            ];
         }
 
         // Remove any existing periods with the same period_number (idempotent bulk delete)
-        PayrollPeriod::whereIn('period_number', $periodsToDelete)->delete();
+        $periodNumbers = array_column($periods, 'period_number');
+        PayrollPeriod::whereIn('period_number', $periodNumbers)->delete();
 
         PayrollPeriod::insert($periods);
 
