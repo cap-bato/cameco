@@ -5,6 +5,16 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { AlertCircle, AlertTriangle, Info, CheckCircle2, Search, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 
@@ -72,8 +82,25 @@ interface Props {
     filters: Filters;
 }
 
+interface ResolveDialogState {
+    open: boolean;
+    errorId: number | null;
+    errorMessage: string;
+    notes: string;
+    isSubmitting: boolean;
+}
+
+const DEFAULT_RESOLVE_STATE: ResolveDialogState = {
+    open: false,
+    errorId: null,
+    errorMessage: '',
+    notes: '',
+    isSubmitting: false,
+};
+
 export default function ErrorLogs({ logs, stats, exceptionClasses, errorTrend, filters }: Props) {
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
+    const [resolveDialog, setResolveDialog] = useState<ResolveDialogState>(DEFAULT_RESOLVE_STATE);
 
     const handleFilterChange = (key: string, value: string | number | boolean | null) => {
         const newFilters = { ...filters, [key]: value === 'all' ? '' : value };
@@ -84,11 +111,34 @@ export default function ErrorLogs({ logs, stats, exceptionClasses, errorTrend, f
         handleFilterChange('search', searchQuery);
     };
 
-    const handleResolve = (errorId: number) => {
-        const notes = prompt('Resolution notes:');
-        if (notes) {
-            router.post(`/system/logs/errors/${errorId}/resolve`, { resolution_notes: notes });
-        }
+    const openResolveDialog = (error: ErrorLog) => {
+        setResolveDialog({
+            open: true,
+            errorId: error.id,
+            errorMessage: error.message,
+            notes: '',
+            isSubmitting: false,
+        });
+    };
+
+    const closeResolveDialog = () => {
+        if (resolveDialog.isSubmitting) return;
+        setResolveDialog(DEFAULT_RESOLVE_STATE);
+    };
+
+    const handleResolveSubmit = () => {
+        if (!resolveDialog.errorId || !resolveDialog.notes.trim()) return;
+
+        setResolveDialog((prev) => ({ ...prev, isSubmitting: true }));
+
+        router.post(
+            `/system/logs/errors/${resolveDialog.errorId}/resolve`,
+            { resolution_notes: resolveDialog.notes.trim() },
+            {
+                onSuccess: () => setResolveDialog(DEFAULT_RESOLVE_STATE),
+                onError: () => setResolveDialog((prev) => ({ ...prev, isSubmitting: false })),
+            }
+        );
     };
 
     const getLevelBadge = (level: string) => {
@@ -209,7 +259,7 @@ export default function ErrorLogs({ logs, stats, exceptionClasses, errorTrend, f
 
                             <Select
                                 value={filters.is_resolved === null ? 'all' : filters.is_resolved.toString()}
-                                onValueChange={(value) => 
+                                onValueChange={(value) =>
                                     handleFilterChange('is_resolved', value === 'all' ? null : value === 'true')
                                 }
                             >
@@ -359,7 +409,7 @@ export default function ErrorLogs({ logs, stats, exceptionClasses, errorTrend, f
                                             {!error.is_resolved && (
                                                 <Button
                                                     size="sm"
-                                                    onClick={() => handleResolve(error.id)}
+                                                    onClick={() => openResolveDialog(error)}
                                                 >
                                                     Resolve
                                                 </Button>
@@ -416,6 +466,59 @@ export default function ErrorLogs({ logs, stats, exceptionClasses, errorTrend, f
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Resolve Error Dialog */}
+            <Dialog open={resolveDialog.open} onOpenChange={(open) => !open && closeResolveDialog()}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <CheckCircle2 className="h-5 w-5 text-green-500" />
+                            Resolve Error
+                        </DialogTitle>
+                        <DialogDescription className="line-clamp-2">
+                            {resolveDialog.errorMessage}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-2 py-2">
+                        <Label htmlFor="resolution-notes">
+                            Resolution Notes <span className="text-destructive">*</span>
+                        </Label>
+                        <Textarea
+                            id="resolution-notes"
+                            placeholder="Describe how this error was resolved, what caused it, and any steps taken to prevent recurrence..."
+                            rows={4}
+                            value={resolveDialog.notes}
+                            onChange={(e) =>
+                                setResolveDialog((prev) => ({ ...prev, notes: e.target.value }))
+                            }
+                            disabled={resolveDialog.isSubmitting}
+                            className="resize-none"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Resolution notes help the team understand what was done and prevent similar issues.
+                        </p>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={closeResolveDialog}
+                            disabled={resolveDialog.isSubmitting}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleResolveSubmit}
+                            disabled={!resolveDialog.notes.trim() || resolveDialog.isSubmitting}
+                            className="gap-2"
+                        >
+                            <CheckCircle2 className="h-4 w-4" />
+                            {resolveDialog.isSubmitting ? 'Resolving...' : 'Mark as Resolved'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }
