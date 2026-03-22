@@ -111,12 +111,6 @@ export function NavPayroll() {
             href: '/payroll/government/pagibig',
             enabled: true,
         },
-        {
-            title: 'Remittances',
-            icon: CreditCard,
-            href: '/payroll/government/remittances',
-            enabled: true,
-        },
     ];
 
     const paymentsItems = [
