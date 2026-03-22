@@ -187,10 +187,5 @@ class DatabaseSeeder extends Seeder
             GovernmentContributionsDemoSeeder::class,
             GovernmentReportDemoSeeder::class,
         ]);
-
-        // ── STAGE 19: Cleanup ──────────────────────────────────────────────
-        if (class_exists(RemoveDuplicateLuisTorresSeeder::class)) {
-            $this->call(RemoveDuplicateLuisTorresSeeder::class);
-        }
     }
 }
