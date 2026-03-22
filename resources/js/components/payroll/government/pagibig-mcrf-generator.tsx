@@ -12,7 +12,6 @@ interface PagIbigMCRFGeneratorProps {
     mcrf_reports: PagIbigMCRFReport[];
     onGenerateMCRF: (periodId: number) => void;
     onDownloadMCRF: (reportId: number) => void;
-    onSubmitMCRF: (reportId: number) => void;
 }
 
 export default function PagIbigMCRFGenerator({
@@ -20,7 +19,6 @@ export default function PagIbigMCRFGenerator({
     mcrf_reports,
     onGenerateMCRF,
     onDownloadMCRF,
-    onSubmitMCRF,
 }: PagIbigMCRFGeneratorProps) {
     const [selectedPeriodId, setSelectedPeriodId] = useState<string>(periods[0]?.id.toString() || "");
     const [isGenerating, setIsGenerating] = useState(false);
