@@ -186,6 +186,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             GovernmentContributionsDemoSeeder::class,
             GovernmentReportDemoSeeder::class,
+            PagIbigMCRFReportSeeder::class,
         ]);
     }
 }
