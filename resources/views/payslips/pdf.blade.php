@@ -279,19 +279,19 @@
                 
                 <div class="detail-row">
                     <div class="detail-label">Basic Salary</div>
-                    <div class="detail-amount">₱ {{ number_format($payslip['basic_salary'], 2) }}</div>
+                    <div class="detail-amount">&#8369; {{ number_format($payslip['basic_salary'], 2) }}</div>
                 </div>
 
                 @foreach ($payslip['allowances'] as $allowance)
                     <div class="detail-row">
                         <div class="detail-label">{{ $allowance['name'] }}</div>
-                        <div class="detail-amount">₱ {{ number_format($allowance['amount'], 2) }}</div>
+                        <div class="detail-amount">&#8369; {{ number_format($allowance['amount'], 2) }}</div>
                     </div>
                 @endforeach
 
                 <div class="total-row">
                     <div class="total-label">GROSS PAY</div>
-                    <div class="total-amount">₱ {{ number_format($payslip['gross_pay'], 2) }}</div>
+                    <div class="total-amount">&#8369; {{ number_format($payslip['gross_pay'], 2) }}</div>
                 </div>
             </div>
 
@@ -302,13 +302,13 @@
                 @foreach ($payslip['deductions'] as $deduction)
                     <div class="detail-row">
                         <div class="detail-label">{{ $deduction['name'] }}</div>
-                        <div class="detail-amount">₱ {{ number_format($deduction['amount'], 2) }}</div>
+                        <div class="detail-amount">&#8369; {{ number_format($deduction['amount'], 2) }}</div>
                     </div>
                 @endforeach
 
                 <div class="total-row">
                     <div class="total-label">TOTAL DEDUCTIONS</div>
-                    <div class="total-amount">₱ {{ number_format(collect($payslip['deductions'])->sum('amount'), 2) }}</div>
+                    <div class="total-amount">&#8369; {{ number_format(collect($payslip['deductions'])->sum('amount'), 2) }}</div>
                 </div>
             </div>
         </div>
@@ -317,21 +317,21 @@
         <div class="summary-section">
             <div class="net-pay-row">
                 <div>NET PAY (Take-Home Salary)</div>
-                <div style="font-size: 13pt;">₱ {{ number_format($payslip['net_pay'], 2) }}</div>
+                <div style="font-size: 13pt;">&#8369; {{ number_format($payslip['net_pay'], 2) }}</div>
             </div>
             
             <div style="margin-top: 0.1in;">
                 <div class="summary-row">
                     <div class="summary-label">Year-to-Date Gross:</div>
-                    <div class="summary-amount">₱ {{ number_format($payslip['year_to_date_gross'], 2) }}</div>
+                    <div class="summary-amount">&#8369; {{ number_format($payslip['year_to_date_gross'], 2) }}</div>
                 </div>
                 <div class="summary-row">
                     <div class="summary-label">Year-to-Date Deductions:</div>
-                    <div class="summary-amount">₱ {{ number_format($payslip['year_to_date_deductions'], 2) }}</div>
+                    <div class="summary-amount">&#8369; {{ number_format($payslip['year_to_date_deductions'], 2) }}</div>
                 </div>
                 <div class="summary-row" style="border-top: 1px solid #ccc; padding-top: 0.08in; margin-top: 0.05in;">
                     <div class="summary-label"><strong>Year-to-Date Net:</strong></div>
-                    <div class="summary-amount"><strong>₱ {{ number_format($payslip['year_to_date_net'], 2) }}</strong></div>
+                    <div class="summary-amount"><strong>&#8369; {{ number_format($payslip['year_to_date_net'], 2) }}</strong></div>
                 </div>
             </div>
         </div>
