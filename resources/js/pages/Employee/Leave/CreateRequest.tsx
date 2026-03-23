@@ -118,9 +118,15 @@ export default function CreateRequest({
     useEffect(() => {
         if (startDate && endDate) {
             try {
-                const start = parseISO(startDate);
-                const end = parseISO(endDate);
-                const days = differenceInBusinessDays(end, start) + 1;
+                // For Half Day AM/PM Leave, always count as 0.5 days
+                let days: number;
+                if (selectedLeaveTypeData?.code === 'HAM' || selectedLeaveTypeData?.code === 'HPM') {
+                    days = 0.5;
+                } else {
+                    const start = parseISO(startDate);
+                    const end = parseISO(endDate);
+                    days = differenceInBusinessDays(end, start) + 1;
+                }
                 setNumberOfDays(days > 0 ? days : 0);
 
                 // Check balance

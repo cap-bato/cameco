@@ -291,7 +291,7 @@ export interface PositionEditProps extends PositionCreateProps {
 // LEAVE MANAGEMENT TYPES (ISSUE-5)
 // ============================================================================
 
-export type LeaveType = 'VL' | 'SL' | 'EL' | 'ML' | 'PL' | 'BL' | 'SP';
+export type LeaveType = 'VL' | 'SL' | 'EL' | 'ML' | 'PL' | 'BL' | 'SP' | 'HAM' | 'HPM';
 export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 export type PartialType = 'none' | 'first_half' | 'second_half';
 

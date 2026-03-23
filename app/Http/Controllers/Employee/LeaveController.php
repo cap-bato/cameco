@@ -415,10 +415,16 @@ class LeaveController extends Controller
             // Calculate days requested
             $startDate = Carbon::parse($validated['start_date']);
             $endDate = Carbon::parse($validated['end_date']);
-            $daysRequested = $startDate->diffInDays($endDate) + 1;
-
-            // Get leave policy
+            
+            // Get leave policy first to check if it's a Half Day leave
             $policy = LeavePolicy::findOrFail($validated['leave_policy_id']);
+            
+            // For Half Day AM/PM Leave, always count as 0.5 days
+            if ($policy->code === 'HAM' || $policy->code === 'HPM') {
+                $daysRequested = 0.5;
+            } else {
+                $daysRequested = $startDate->diffInDays($endDate) + 1;
+            }
 
             // Validate leave balance (except for emergency leaves)
             $year = $startDate->year;
