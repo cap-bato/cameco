@@ -63,6 +63,10 @@ class WorkforceCoverageSeeder extends Seeder
 
         $this->command->info("Seeding workforce coverage for {$employees->count()} active employees...");
 
+        // 0. Create shift assignments (must be done BEFORE leave requests for accurate coverage)
+        $this->command->info('Creating shift assignments...');
+        $this->seedShiftAssignments($employees);
+
         // 1. Create sample leave requests (30% of employees)
         $this->command->info('Creating sample leave requests...');
         $this->seedLeaveRequests($employees);
@@ -357,6 +361,95 @@ class WorkforceCoverageSeeder extends Seeder
         }
 
         $this->command->info("Created {$cacheRecords} workforce coverage cache records");
+    }
+
+    /**
+     * Seed shift assignments for all employees
+     * Creates actual daily shift assignments so coverage can be calculated
+     */
+    private function seedShiftAssignments($employees): void
+    {
+        $schedules = WorkSchedule::where('is_template', false)->get();
+        if ($schedules->isEmpty()) {
+            $this->command->warn('No work schedules found. Skipping shift assignment seeding.');
+            return;
+        }
+
+        $assignmentCount = 0;
+        $currentDate = $this->startDate->clone();
+
+        while ($currentDate->lte($this->endDate)) {
+            // Skip weekends for now (adjust based on business needs)
+            if ($currentDate->isWeekend()) {
+                $currentDate->addDay();
+                continue;
+            }
+
+            foreach ($employees as $employee) {
+                // Randomly assign a schedule to each employee
+                $schedule = $schedules->random();
+                
+                // Get shift times from schedule based on day of week
+                $dayOfWeek = strtolower($currentDate->format('l')); // monday, tuesday, etc.
+                $startTimeField = "{$dayOfWeek}_start";
+                $endTimeField = "{$dayOfWeek}_end";
+
+                if (!$schedule->$startTimeField || !$schedule->$endTimeField) {
+                    continue; // Skip if no schedule for this day
+                }
+
+                $shiftStart = $currentDate->clone()->format('Y-m-d') . ' ' . $schedule->$startTimeField;
+                $shiftEnd = $currentDate->clone()->format('Y-m-d') . ' ' . $schedule->$endTimeField;
+
+                // Handle overnight shifts (e.g., 10 PM to 6 AM next day)
+                if (strtotime($shiftEnd) <= strtotime($shiftStart)) {
+                    $shiftEnd = $currentDate->clone()->addDay()->format('Y-m-d') . ' ' . $schedule->$endTimeField;
+                }
+
+                // Create shift assignment
+                \App\Models\ShiftAssignment::firstOrCreate(
+                    [
+                        'employee_id' => $employee->id,
+                        'date' => $currentDate->format('Y-m-d'),
+                        'shift_start' => $shiftStart,
+                    ],
+                    [
+                        'schedule_id' => $schedule->id,
+                        'department_id' => $employee->department_id,
+                        'shift_end' => $shiftEnd,
+                        'shift_type' => $this->getShiftType($schedule->$startTimeField),
+                        'location' => 'Main Office',
+                        'has_conflict' => false,
+                        'status' => 'scheduled',
+                        'assignment_source' => 'seeder',
+                        'generated_by_user_id' => 1,
+                        'created_by' => 1,
+                    ]
+                );
+
+                $assignmentCount++;
+            }
+
+            $currentDate->addDay();
+        }
+
+        $this->command->info("Created {$assignmentCount} shift assignments");
+    }
+
+    /**
+     * Determine shift type based on start time
+     */
+    private function getShiftType(string $startTime): string
+    {
+        $hour = (int) explode(':', $startTime)[0];
+
+        if ($hour >= 6 && $hour < 12) {
+            return 'morning';
+        } elseif ($hour >= 12 && $hour < 18) {
+            return 'afternoon';
+        } else {
+            return 'night';
+        }
     }
 
     /**
