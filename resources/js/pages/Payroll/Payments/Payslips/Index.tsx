@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Send, Download, Mail, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Send, Download, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,9 +37,8 @@ export default function PayslipsIndex({
     payslips,
     summary,
     filters,
-    periods,
-    departments,
-    distributionMethods,
+    periods = [],
+    departments = [],
 }: PayslipsPageProps) {
     const { flash } = usePage().props as { flash?: { success?: string; error?: string } };
     const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
@@ -48,20 +47,16 @@ export default function PayslipsIndex({
     const [previewData, setPreviewData] = useState<PayslipPreviewData | null>(null);
     const [selectedPayslips, setSelectedPayslips] = useState<number[]>([]);
 
-    // Filters state
     const [search, setSearch] = useState(filters.search || '');
     const [periodId, setPeriodId] = useState(filters.period_id?.toString() || 'all');
     const [departmentId, setDepartmentId] = useState(filters.department_id?.toString() || 'all');
     const [status, setStatus] = useState(filters.status || 'all');
-    const [distributionMethod, setDistributionMethod] = useState(filters.distribution_method || 'all');
-    
+
     const hasNotification = !!(flash?.success || flash?.error);
     const isSuccessNotification = !!flash?.success;
     const notificationMessage = (flash?.success || flash?.error || '') as string;
 
-    // Apply filters reactively when any filter changes
     useEffect(() => {
-        // Debounce for search field
         const timer = setTimeout(() => {
             router.get(
                 '/payroll/payments/payslips',
@@ -70,31 +65,19 @@ export default function PayslipsIndex({
                     period_id: periodId !== 'all' ? periodId : undefined,
                     department_id: departmentId !== 'all' ? departmentId : undefined,
                     status: status !== 'all' ? status : undefined,
-                    distribution_method: distributionMethod !== 'all' ? distributionMethod : undefined,
                 },
-                {
-                    preserveState: true,
-                    preserveScroll: true,
-                }
+                { preserveState: true, preserveScroll: true }
             );
-        }, 500); // 500ms debounce
-
-        return () => {
-            clearTimeout(timer);
-        };
-    }, [search, periodId, departmentId, status, distributionMethod]);
-
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [search, periodId, departmentId, status]);
 
     const handleClearFilters = () => {
         setSearch('');
         setPeriodId('all');
         setDepartmentId('all');
         setStatus('all');
-        setDistributionMethod('all');
-        router.get('/payroll/payments/payslips', {}, {
-            preserveState: false,
-            preserveScroll: true,
-        });
+        router.get('/payroll/payments/payslips', {}, { preserveState: false, preserveScroll: true });
     };
 
     const handleGenerate = (data: PayslipGenerationRequest) => {
@@ -102,18 +85,14 @@ export default function PayslipsIndex({
             period_id: data.period_id,
             employee_ids: data.employee_ids,
         }, {
-            onSuccess: () => {
-                setIsGeneratorOpen(false);
-            },
+            onSuccess: () => setIsGeneratorOpen(false),
         });
     };
 
     const handleDistribute = (data: PayslipDistributionRequest) => {
         router.post('/payroll/payments/payslips/distribute', {
             payslip_ids: data.payslip_ids,
-            distribution_method: data.distribution_method,
-            email_subject: data.email_subject,
-            email_message: data.email_message,
+            distribution_method: 'portal',
         }, {
             onSuccess: () => {
                 setIsDistributionOpen(false);
@@ -124,10 +103,6 @@ export default function PayslipsIndex({
 
     const handleDownload = (id: number) => {
         window.open(`/payroll/payments/payslips/${id}/download`, '_blank');
-    };
-
-    const handleEmail = (id: number) => {
-        router.post(`/payroll/payments/payslips/${id}/email`);
     };
 
     const handleView = async (id: number) => {
@@ -144,26 +119,6 @@ export default function PayslipsIndex({
         }
     };
 
-    const handlePrint = (id: number) => {
-        router.get(`/payroll/payments/payslips/${id}/print`);
-    };
-
-    const handleBulkDistribute = () => {
-        setIsDistributionOpen(true);
-    };
-
-    const handleBulkDownload = () => {
-        router.post('/payroll/payments/payslips/bulk-download', {
-            payslip_ids: selectedPayslips,
-        });
-    };
-
-    const handleBulkEmail = () => {
-        router.post('/payroll/payments/payslips/bulk-email', {
-            payslip_ids: selectedPayslips,
-        });
-    };
-
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Payslips Management" />
@@ -174,7 +129,7 @@ export default function PayslipsIndex({
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">Payslips Management</h1>
                         <p className="mt-2 text-gray-600">
-                            Generate, distribute, and manage DOLE-compliant employee payslips
+                            Generate and distribute DOLE-compliant employee payslips via the employee portal
                         </p>
                     </div>
                     <Button onClick={() => setIsGeneratorOpen(true)} size="lg">
@@ -201,9 +156,7 @@ export default function PayslipsIndex({
                         </CardHeader>
                         <CardContent>
                             <p className="text-3xl font-bold text-green-600">{summary.distributed}</p>
-                            <p className="mt-1 text-xs text-gray-600">
-                                {summary.acknowledged} acknowledged
-                            </p>
+                            <p className="mt-1 text-xs text-gray-600">{summary.acknowledged} acknowledged</p>
                         </CardContent>
                     </Card>
 
@@ -219,23 +172,11 @@ export default function PayslipsIndex({
 
                     <Card>
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-gray-600">Distribution</CardTitle>
+                            <CardTitle className="text-sm font-medium text-gray-600">Portal</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-1 text-xs">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Email:</span>
-                                    <span className="font-medium">{summary.total_distribution_email}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Portal:</span>
-                                    <span className="font-medium">{summary.total_distribution_portal}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Printed:</span>
-                                    <span className="font-medium">{summary.total_distribution_print}</span>
-                                </div>
-                            </div>
+                            <p className="text-3xl font-bold text-blue-600">{summary.total_distribution_portal}</p>
+                            <p className="mt-1 text-xs text-gray-600">Via employee portal</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -246,7 +187,7 @@ export default function PayslipsIndex({
                         <CardTitle className="text-lg">Filters</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid gap-4 md:grid-cols-6">
+                        <div className="grid gap-4 md:grid-cols-4">
                             <div className="md:col-span-2">
                                 <Label htmlFor="search">Search</Label>
                                 <Input
@@ -256,16 +197,13 @@ export default function PayslipsIndex({
                                     onChange={(e) => setSearch(e.target.value)}
                                 />
                             </div>
-
                             <div>
                                 <Label htmlFor="period">Period</Label>
                                 <Select value={periodId} onValueChange={setPeriodId}>
-                                    <SelectTrigger id="period">
-                                        <SelectValue />
-                                    </SelectTrigger>
+                                    <SelectTrigger id="period"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all">All Periods</SelectItem>
-                                        {periods.map((period) => (
+                                        {(periods ?? []).map((period) => (
                                             <SelectItem key={period.id} value={period.id.toString()}>
                                                 {period.period_name}
                                             </SelectItem>
@@ -273,30 +211,23 @@ export default function PayslipsIndex({
                                     </SelectContent>
                                 </Select>
                             </div>
-
                             <div>
                                 <Label htmlFor="department">Department</Label>
                                 <Select value={departmentId} onValueChange={setDepartmentId}>
-                                    <SelectTrigger id="department">
-                                        <SelectValue />
-                                    </SelectTrigger>
+                                    <SelectTrigger id="department"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="all">All Departments</SelectItem>
-                                        {departments.map((dept) => (
-                                            <SelectItem key={dept.id} value={dept.id.toString()}>
-                                                {dept.name}
-                                            </SelectItem>
-                                        ))}
+                                    {(departments ?? []).map((dept) => (
+                                        <SelectItem key={dept.id} value={dept.id.toString()}>
+                                            {dept.name}
+                                        </SelectItem>
+                                    ))}
                                     </SelectContent>
                                 </Select>
                             </div>
-
                             <div>
                                 <Label htmlFor="status">Status</Label>
                                 <Select value={status} onValueChange={setStatus}>
-                                    <SelectTrigger id="status">
-                                        <SelectValue />
-                                    </SelectTrigger>
+                                    <SelectTrigger id="status"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all">All Status</SelectItem>
                                         <SelectItem value="draft">Draft</SelectItem>
@@ -306,26 +237,8 @@ export default function PayslipsIndex({
                                     </SelectContent>
                                 </Select>
                             </div>
-
-                            <div>
-                                <Label htmlFor="distribution">Distribution</Label>
-                                <Select value={distributionMethod} onValueChange={setDistributionMethod}>
-                                    <SelectTrigger id="distribution">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Methods</SelectItem>
-                                        {distributionMethods.map((method) => (
-                                            <SelectItem key={method.id} value={method.id}>
-                                                {method.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
                         </div>
-
-                        <div className="mt-4 flex justify-end gap-2">
+                        <div className="mt-4 flex justify-end">
                             <Button variant="outline" onClick={handleClearFilters}>
                                 <RefreshCw className="mr-2 h-4 w-4" />
                                 Clear Filters
@@ -342,20 +255,18 @@ export default function PayslipsIndex({
                                 <p className="font-semibold">
                                     {selectedPayslips.length} payslip{selectedPayslips.length > 1 ? 's' : ''} selected
                                 </p>
-                                <p className="text-sm text-gray-600">Perform bulk actions on selected payslips</p>
+                                <p className="text-sm text-gray-600">Release selected payslips to the employee portal</p>
                             </div>
                             <div className="flex gap-2">
-                                <Button variant="outline" size="sm" onClick={handleBulkDownload}>
+                                <Button variant="outline" size="sm" onClick={() => {
+                                    selectedPayslips.forEach(id => handleDownload(id));
+                                }}>
                                     <Download className="mr-2 h-4 w-4" />
                                     Download All
                                 </Button>
-                                <Button variant="outline" size="sm" onClick={handleBulkEmail}>
-                                    <Mail className="mr-2 h-4 w-4" />
-                                    Email All
-                                </Button>
-                                <Button size="sm" onClick={handleBulkDistribute}>
+                                <Button size="sm" onClick={() => setIsDistributionOpen(true)}>
                                     <Send className="mr-2 h-4 w-4" />
-                                    Distribute
+                                    Release to Portal
                                 </Button>
                             </div>
                         </CardContent>
@@ -364,17 +275,14 @@ export default function PayslipsIndex({
 
                 {/* Payslips Table */}
                 <PayslipsList
-                    payslips={payslips.data}
+                    payslips={payslips?.data ?? []}
                     selectedPayslips={selectedPayslips}
                     onSelectionChange={setSelectedPayslips}
                     onDownload={handleDownload}
-                    onEmail={handleEmail}
                     onView={handleView}
-                    onPrint={handlePrint}
                 />
             </div>
 
-            {/* Modals */}
             <PayslipGenerator
                 open={isGeneratorOpen}
                 onOpenChange={setIsGeneratorOpen}
@@ -397,25 +305,21 @@ export default function PayslipsIndex({
                 onDownload={() => previewData && handleDownload(Number(previewData.employee_id))}
             />
 
-            {/* Notification Dialog */}
             <AlertDialog open={hasNotification} onOpenChange={() => {}}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <div className="flex items-center gap-3">
-                            {isSuccessNotification ? (
-                                <CheckCircle className="h-6 w-6 text-green-600" />
-                            ) : (
-                                <AlertCircle className="h-6 w-6 text-red-600" />
-                            )}
+                            {isSuccessNotification
+                                ? <CheckCircle className="h-6 w-6 text-green-600" />
+                                : <AlertCircle className="h-6 w-6 text-red-600" />
+                            }
                             <AlertDialogTitle className={isSuccessNotification ? 'text-green-700' : 'text-red-700'}>
                                 {isSuccessNotification ? 'Success' : 'Error'}
                             </AlertDialogTitle>
                         </div>
                         <AlertDialogDescription>{notificationMessage}</AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogAction onClick={() => router.reload()}>
-                        OK
-                    </AlertDialogAction>
+                    <AlertDialogAction onClick={() => router.reload()}>OK</AlertDialogAction>
                 </AlertDialogContent>
             </AlertDialog>
         </AppLayout>
