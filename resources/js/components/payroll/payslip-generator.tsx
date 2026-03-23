@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { FileText, AlertCircle, CheckCircle2, Globe } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -47,7 +47,7 @@ export function PayslipGenerator({
     const [regenerate, setRegenerate] = useState(false);
     const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
     const [generationScope, setGenerationScope] = useState<'all' | 'selected'>('all');
-    const [distributionMethod, setDistributionMethod] = useState<'email' | 'portal' | 'print' | 'sms'>('portal');
+    const distributionMethod = 'portal';
 
     // Reset form when dialog closes
     const handleGenerate = () => {
@@ -132,25 +132,12 @@ export function PayslipGenerator({
                     </div>
 
                     {/* Distribution Method */}
-                    <div className="space-y-2">
-                        <Label htmlFor="distribution-method">Distribution Method *</Label>
-                        <Select
-                            value={distributionMethod}
-                            onValueChange={(value) =>
-                                setDistributionMethod(value as 'email' | 'portal' | 'print' | 'sms')
-                            }
-                            disabled={isLoading}
-                        >
-                            <SelectTrigger id="distribution-method">
-                                <SelectValue placeholder="Select distribution method" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="email">Email</SelectItem>
-                                <SelectItem value="portal">Employee Portal</SelectItem>
-                                <SelectItem value="print">Print</SelectItem>
-                                <SelectItem value="sms">SMS</SelectItem>
-                            </SelectContent>
-                        </Select>
+                    <div className="flex items-center gap-3 rounded-lg border border-green-300 bg-green-50 p-4">
+                        <Globe className="h-5 w-5 text-green-600 shrink-0" />
+                        <div>
+                            <p className="font-medium text-green-900">Distribution Method</p>
+                            <p className="text-sm text-green-700">Payslips will be distributed via Employee Portal</p>
+                        </div>
                     </div>
 
                     {/* Generation Scope */}

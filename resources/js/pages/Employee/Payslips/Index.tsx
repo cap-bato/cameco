@@ -31,6 +31,8 @@ interface EmployeeInfo {
 
 interface SalaryComponent {
     name: string;
+    description?: string;
+    category?: string;
     amount: number;
 }
 
