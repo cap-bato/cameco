@@ -67,10 +67,23 @@ class AllowanceDeductionService
         // Set effective date to today if not provided
         $effectiveDate = $data['effective_date'] ?? Carbon::now()->toDateString();
 
-        // Deactivate existing allowance of same type if exists
+
+        // Check for duplicate (unique constraint: employee_id, allowance_type, effective_date)
+        $duplicate = EmployeeAllowance::where('employee_id', $employee->id)
+            ->where('allowance_type', $allowanceType)
+            ->whereDate('effective_date', $effectiveDate)
+            ->first();
+        if ($duplicate) {
+            throw ValidationException::withMessages([
+                'allowance_type' => 'This employee already has this allowance type for the selected effective date.'
+            ]);
+        }
+
+        // Deactivate existing allowance of same type if exists (but not for same effective date)
         EmployeeAllowance::where('employee_id', $employee->id)
             ->where('allowance_type', $allowanceType)
             ->where('is_active', true)
+            ->whereDate('effective_date', '!=', $effectiveDate)
             ->update([
                 'is_active' => false,
                 'end_date' => $effectiveDate,
