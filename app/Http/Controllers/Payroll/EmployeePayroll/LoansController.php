@@ -208,21 +208,13 @@ class LoansController extends Controller
                 'remarks' => $validated['remarks'] ?? null,
             ];
             $loan = $this->loanManagementService->createLoan($employee, $loanData, auth()->user());
-            return response()->json([
-                'success' => true,
-                'message' => 'Loan created successfully',
-                'data' => [
-                    'id' => $loan->id,
-                    'loan_number' => $loan->loan_number ?? null,
-                    'status' => $loan->status ?? null,
-                ],
-            ], 201);
+            // Inertia expects a redirect, not JSON, for POST
+            return redirect()->route('payroll.loans.index')
+                ->with('success', 'Loan created successfully');
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create loan',
-                'error' => $e->getMessage(),
-            ], 500);
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Failed to create loan: ' . $e->getMessage());
         }
     }
 
