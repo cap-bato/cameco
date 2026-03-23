@@ -131,7 +131,7 @@ export default function CreateRequest({ employees = [], leaveTypes = [], leaveVa
 
         // Check balance sufficiency first
         if (!balanceCheck.isSufficient) {
-            form.setErrors({ leave_policy_id: balanceCheck.message || 'Insufficient balance for this leave type.' });
+            form.setError('leave_policy_id', balanceCheck.message || 'Insufficient balance for this leave type.');
             return;
         }
 
@@ -145,7 +145,9 @@ export default function CreateRequest({ employees = [], leaveTypes = [], leaveVa
         }
 
         if (Object.keys(errs).length > 0) {
-            form.setErrors(errs);
+            Object.entries(errs).forEach(([field, message]) => {
+                form.setError(field as keyof typeof form.data, message);
+            });
             return;
         }
 
