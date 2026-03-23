@@ -69,14 +69,9 @@ class PayrollPeriodsSeeder extends Seeder
             $paymentDate = $periodEnd->copy()->addDays(2);
             $periodNumber = sprintf('%s-%02d-1H', $periodStart->year, $periodStart->month);
 
-            // Determine status logic
-            $isMarch = ($periodStart->month === 3 && $periodStart->year === $now->year);
-            if ($isMarch) {
-                $status = 'approved';
-            } else {
-                $status = 'completed';
-            }
-            $progress = ($status === 'completed' || $status === 'approved') ? 100 : 0;
+            // Set all periods to 'completed' for consistent payslip release
+            $status = 'completed';
+            $progress = 100;
             $periods[] = [
                 'period_number' => $periodNumber,
                 'period_name' => $periodNumber, // Use period_number as name for demo
@@ -106,13 +101,14 @@ class PayrollPeriodsSeeder extends Seeder
             $periodEnd2 = $periodStart->copy()->endOfMonth();
             $paymentDate2 = $periodEnd2->copy()->addDays(2);
             $periodNumber2 = sprintf('%s-%02d-2H', $periodStart->year, $periodStart->month);
-            // For March, 2H should be 'draft', others 'completed'
-            if ($isMarch) {
+            // Set 2nd half of March to 'draft', others to 'completed'
+            if ($periodStart2->month === 3 && $periodStart2->year === $now->year) {
                 $status2 = 'draft';
+                $progress2 = 0;
             } else {
                 $status2 = 'completed';
+                $progress2 = 100;
             }
-            $progress2 = ($status2 === 'completed' || $status2 === 'approved') ? 100 : 0;
             $periods[] = [
                 'period_number' => $periodNumber2,
                 'period_name' => $periodNumber2, // Use period_number as name for demo

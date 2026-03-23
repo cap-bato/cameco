@@ -370,12 +370,16 @@ class PayrollCalculationController extends Controller
     private function dbStatusToCalcStatus(string $status): string
     {
         return match ($status) {
-            'draft', 'active'                                                    => 'pending',
-            'calculating'                                                         => 'processing',
-            'calculated', 'under_review', 'pending_approval', 'approved',
-            'finalized', 'processing_payment', 'completed'                       => 'completed',
-            'cancelled'                                                           => 'cancelled',
-            default                                                               => 'pending',
+            'draft', 'active'          => 'pending',
+            'calculating'              => 'processing',
+            'calculated'               => 'completed',
+            'under_review',
+            'pending_approval'         => 'reviewing',
+            'approved'                 => 'approved',
+            'finalized', 'completed',
+            'processing_payment'       => 'finalized',
+            'cancelled'                => 'cancelled',
+            default                    => 'pending',
         };
     }
 
@@ -384,12 +388,14 @@ class PayrollCalculationController extends Controller
         return match ($status) {
             'pending'    => ['draft', 'active'],
             'processing' => ['calculating'],
-            'completed'  => ['calculated', 'under_review', 'pending_approval', 'approved', 'finalized', 'processing_payment', 'completed'],
+            'completed'  => ['calculated'],
+            'reviewing'  => ['under_review', 'pending_approval'],
+            'approved'   => ['approved'],
+            'finalized'  => ['finalized', 'processing_payment', 'completed'],
             'cancelled'  => ['cancelled'],
             default      => [],
         };
     }
-
     private function dbTypeToCalcType(string $type): string
     {
         return match ($type) {

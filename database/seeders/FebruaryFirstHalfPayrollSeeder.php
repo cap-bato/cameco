@@ -128,7 +128,7 @@ class FebruaryFirstHalfPayrollSeeder extends Seeder
             'period_month'         => '2026-02',
             'period_year'          => 2026,
             'period_type'          => 'regular',
-            'status'               => 'active',
+            'status'               => 'completed',
             'timekeeping_data_locked' => false,
             'leave_data_locked'    => false,
             'total_employees'      => $employees->count(),

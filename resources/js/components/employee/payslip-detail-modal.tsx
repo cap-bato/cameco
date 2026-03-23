@@ -93,11 +93,6 @@ export function PayslipDetailModal({
         window.print();
     };
 
-    const handleDownload = () => {
-        // TODO: Implement PDF download
-        alert('PDF download will be available soon');
-    };
-
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
@@ -275,13 +270,6 @@ export function PayslipDetailModal({
                         >
                             <Printer className="mr-2 h-4 w-4" />
                             Print
-                        </Button>
-                        <Button
-                            onClick={handleDownload}
-                            className="flex-1 bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700"
-                        >
-                            <Download className="mr-2 h-4 w-4" />
-                            Download PDF
                         </Button>
                     </div>
                 </div>

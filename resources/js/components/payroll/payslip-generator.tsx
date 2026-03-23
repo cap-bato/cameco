@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Mail, Globe, Printer, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { FileText, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -44,20 +44,19 @@ export function PayslipGenerator({
     isLoading = false,
 }: PayslipGeneratorProps) {
     const [periodId, setPeriodId] = useState<string>('');
-    const [distributionMethod, setDistributionMethod] = useState<'email' | 'portal' | 'print'>('email');
     const [regenerate, setRegenerate] = useState(false);
     const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
     const [generationScope, setGenerationScope] = useState<'all' | 'selected'>('all');
+    const [distributionMethod, setDistributionMethod] = useState<'email' | 'portal' | 'print' | 'sms'>('portal');
 
+    // Reset form when dialog closes
     const handleGenerate = () => {
-        if (!periodId) {
-            return;
-        }
+        if (!periodId) return;
 
         const data: PayslipGenerationRequest = {
             period_id: Number(periodId),
-            distribution_method: distributionMethod,
             regenerate,
+            distribution_method: distributionMethod,
         };
 
         if (generationScope === 'selected' && selectedEmployees.length > 0) {
@@ -66,7 +65,7 @@ export function PayslipGenerator({
 
         onGenerate(data);
     };
-
+    
     const handleEmployeeSelection = (employeeId: number, checked: boolean) => {
         if (checked) {
             setSelectedEmployees([...selectedEmployees, employeeId]);
@@ -87,7 +86,13 @@ export function PayslipGenerator({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl">
+            <DialogContent 
+                className="max-w-2xl"
+                onCloseAutoFocus={(e) => {
+                    e.preventDefault();
+                    document.body.focus();
+                }}
+>
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <FileText className="h-5 w-5" />
@@ -127,50 +132,25 @@ export function PayslipGenerator({
                     </div>
 
                     {/* Distribution Method */}
-                    <div className="space-y-3">
-                        <Label>Distribution Method *</Label>
-                        <RadioGroup
+                    <div className="space-y-2">
+                        <Label htmlFor="distribution-method">Distribution Method *</Label>
+                        <Select
                             value={distributionMethod}
-                            onValueChange={(value: string) => setDistributionMethod(value as 'email' | 'portal' | 'print')}
+                            onValueChange={(value) =>
+                                setDistributionMethod(value as 'email' | 'portal' | 'print' | 'sms')
+                            }
                             disabled={isLoading}
                         >
-                            <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-gray-50">
-                                <RadioGroupItem value="email" id="email" />
-                                <Label htmlFor="email" className="flex flex-1 cursor-pointer items-center gap-2">
-                                    <Mail className="h-4 w-4 text-blue-600" />
-                                    <div className="flex-1">
-                                        <div className="font-medium">Email</div>
-                                        <div className="text-xs text-gray-600">
-                                            Send payslips to employee email addresses
-                                        </div>
-                                    </div>
-                                </Label>
-                            </div>
-
-                            <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-gray-50">
-                                <RadioGroupItem value="portal" id="portal" />
-                                <Label htmlFor="portal" className="flex flex-1 cursor-pointer items-center gap-2">
-                                    <Globe className="h-4 w-4 text-green-600" />
-                                    <div className="flex-1">
-                                        <div className="font-medium">Employee Portal</div>
-                                        <div className="text-xs text-gray-600">
-                                            Make available for download in employee portal
-                                        </div>
-                                    </div>
-                                </Label>
-                            </div>
-
-                            <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-gray-50">
-                                <RadioGroupItem value="print" id="print" />
-                                <Label htmlFor="print" className="flex flex-1 cursor-pointer items-center gap-2">
-                                    <Printer className="h-4 w-4 text-gray-600" />
-                                    <div className="flex-1">
-                                        <div className="font-medium">Print Queue</div>
-                                        <div className="text-xs text-gray-600">Add to print queue for hard copies</div>
-                                    </div>
-                                </Label>
-                            </div>
-                        </RadioGroup>
+                            <SelectTrigger id="distribution-method">
+                                <SelectValue placeholder="Select distribution method" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="email">Email</SelectItem>
+                                <SelectItem value="portal">Employee Portal</SelectItem>
+                                <SelectItem value="print">Print</SelectItem>
+                                <SelectItem value="sms">SMS</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     {/* Generation Scope */}

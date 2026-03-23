@@ -1575,7 +1575,7 @@ export interface PayslipGenerationResponse {
  */
 export interface PayslipDistributionRequest {
     payslip_ids: number[];
-    distribution_method: 'email' | 'portal' | 'print' | 'sms';
+    distribution_method: 'portal'; // hardcoded, no longer a user choice
     email_subject?: string;
     email_message?: string;
 }

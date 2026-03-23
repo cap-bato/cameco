@@ -14,7 +14,7 @@ use Inertia\Inertia;
 
 class PayrollReviewController extends Controller
 {
-    private const REVIEWABLE_STATUSES = ['calculated', 'approved'];
+    private const REVIEWABLE_STATUSES = ['calculated', 'approved', 'completed', 'finalized'];
 
     /**
      * Display payroll review and approval page
@@ -84,8 +84,8 @@ class PayrollReviewController extends Controller
 
             PayrollApprovalHistory::create([
                 'payroll_period_id' => $periodId,
-                'approval_step'     => 'approved',
-                'action'            => 'approved',
+                'approval_step'     => 'hr_manager_approve', // must match enum in migration
+                'action'            => 'approve',
                 'status_from'       => $prevStatus,
                 'status_to'         => $nextStatus,
                 'user_id'           => auth()->id(),
@@ -174,7 +174,7 @@ class PayrollReviewController extends Controller
             PayrollApprovalHistory::create([
                 'payroll_period_id' => $periodId,
                 'approval_step'     => 'locked',
-                'action'            => 'locked',
+                'action'            => 'lock', // must match enum
                 'status_from'       => $prevStatus,
                 'status_to'         => 'finalized',
                 'user_id'           => auth()->id(),

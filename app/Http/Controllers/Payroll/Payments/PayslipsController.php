@@ -23,99 +23,205 @@ use App\Models\Department;
  */
 class PayslipsController extends Controller
 {
-    public function index(Request $request)
-    {
-        $payslips = Payslip::with(['employee.profile', 'employee.department', 'employee.position', 'payrollPayment.payrollPeriod', 'generatedBy'])
-            ->when($request->search, fn($q, $s) => $q->whereHas('employee', fn($eq) =>
-                $eq->where('employee_number', 'ilike', "%{$s}%")
-                    ->orWhereHas('profile', fn($pq) =>
-                        $pq->where('first_name', 'ilike', "%{$s}%")
-                           ->orWhere('last_name', 'ilike', "%{$s}%")
-                    )
-            ))
-            ->when($request->period_id, fn($q, $id) => $q->whereHas('payrollPayment', fn($pq) =>
-                $pq->where('payroll_period_id', $id)
-            ))
-            ->when($request->department_id, fn($q, $id) => $q->whereHas('employee', fn($eq) =>
-                $eq->where('department_id', $id)
-            ))
-            ->when($request->status && $request->status !== 'all', fn($q, $s) => $q->where('status', $s))
-            ->when($request->distribution_method && $request->distribution_method !== 'all', fn($q, $m) =>
-                $q->where('distribution_method', $m)
-            )
-            ->when($request->date_from, fn($q, $d) => $q->whereDate('created_at', '>=', $d))
-            ->when($request->date_to, fn($q, $d) => $q->whereDate('created_at', '<=', $d))
-            ->latest()
-            ->paginate(50)
-            ->through(fn($p) => $this->formatPayslip($p));
+public function index(Request $request)
+{
+    $payslips = Payslip::with(['employee.profile', 'employee.department', 'employee.position', 'payrollPayment.payrollPeriod', 'generatedBy'])
+        ->when($request->search, fn($q, $s) => $q->whereHas('employee', fn($eq) =>
+            $eq->where('employee_number', 'ilike', "%{$s}%")
+                ->orWhereHas('profile', fn($pq) =>
+                    $pq->where('first_name', 'ilike', "%{$s}%")
+                       ->orWhere('last_name', 'ilike', "%{$s}%")
+                )
+        ))
+        ->when($request->period_id, fn($q, $id) => $q->whereHas('payrollPayment', fn($pq) =>
+            $pq->where('payroll_period_id', $id)
+        ))
+        ->when($request->department_id, fn($q, $id) => $q->whereHas('employee', fn($eq) =>
+            $eq->where('department_id', $id)
+        ))
+        ->when($request->status && $request->status !== 'all', fn($q, $s) => $q->where('status', $s))
+        ->when($request->date_from, fn($q, $d) => $q->whereDate('created_at', '>=', $d))
+        ->when($request->date_to, fn($q, $d) => $q->whereDate('created_at', '<=', $d))
+        ->latest()
+        ->paginate(50)
+        ->through(fn($p) => $this->formatPayslip($p));
 
-        $summary = [
-            'total_payslips' => Payslip::count(),
-            'draft' => Payslip::where('status', 'draft')->count(),
-            'generated' => Payslip::where('status', 'generated')->count(),
-            'distributed' => Payslip::where('status', 'distributed')->count(),
-            'acknowledged' => Payslip::where('status', 'acknowledged')->count(),
-            'total_distribution_email' => Payslip::where('distribution_method', 'email')->count(),
-            'total_distribution_portal' => Payslip::where('distribution_method', 'portal')->count(),
-            'total_distribution_print' => Payslip::where('distribution_method', 'print')->count(),
-            'total_distribution_sms' => Payslip::where('distribution_method', 'sms')->count(),
-        ];
+    $summary = [
+        'total_payslips'           => Payslip::count(),
+        'draft'                    => Payslip::where('status', 'draft')->count(),
+        'generated'                => Payslip::where('status', 'generated')->count(),
+        'distributed'              => Payslip::where('status', 'distributed')->count(),
+        'acknowledged'             => Payslip::where('status', 'acknowledged')->count(),
+        'total_distribution_portal'=> Payslip::where('distribution_method', 'portal')->count(),
+    ];
 
-        return Inertia::render('Payroll/Payments/Payslips/Index', [
-            'payslips' => $payslips,
-            'summary' => $summary,
-            'filters' => $request->only(['search', 'period_id', 'department_id', 'status', 'distribution_method', 'date_from', 'date_to']),
-            'periods' => PayrollPeriod::select('id', 'period_name', 'period_start', 'period_end', 'payment_date')->orderByDesc('payment_date')->get(),
-            'departments' => Department::select('id', 'name')->orderBy('name')->get(),
-            'distributionMethods' => [
-                ['id' => 'email', 'name' => 'Email'],
-                ['id' => 'portal', 'name' => 'Self-Service Portal'],
-                ['id' => 'print', 'name' => 'Printed'],
-                ['id' => 'sms', 'name' => 'SMS'],
-            ],
+    return Inertia::render('Payroll/Payments/Payslips/Index', [
+        'payslips'    => $payslips,
+        'summary'     => $summary,
+        'filters'     => $request->only(['search', 'period_id', 'department_id', 'status', 'date_from', 'date_to']),
+        'periods'     => PayrollPeriod::select('id', 'period_name', 'period_start', 'period_end', 'payment_date')->orderByDesc('payment_date')->get(),
+        'departments' => Department::select('id', 'name')->orderBy('name')->get(),
+    ]);
+}
+
+public function distribute(Request $request)
+{
+    $validated = $request->validate([
+        'payslip_ids'   => 'required|array',
+        'payslip_ids.*' => 'integer|exists:payslips,id',
+    ]);
+
+    try {
+        Payslip::whereIn('id', $validated['payslip_ids'])
+            ->update([
+                'status'            => 'distributed',
+                'distribution_method' => 'portal',
+                'distributed_at'    => now(),
+            ]);
+
+        $count = count($validated['payslip_ids']);
+        return back()->with('success', "{$count} payslip(s) released to the employee portal successfully.");
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('Payslip distribution failed', [
+            'error' => $e->getMessage(),
         ]);
+        return back()->with('error', 'Failed to distribute payslips: ' . $e->getMessage());
     }
-
-    public function generate(Request $request)
-    {
-        $validated = $request->validate([
-        'period_id'      => 'required|integer',
+}
+public function generate(Request $request)
+{
+    $validated = $request->validate([
+        'period_id'      => 'required|integer|exists:payroll_periods,id',
         'employee_ids'   => 'nullable|array',
         'employee_ids.*' => 'integer',
         'regenerate'     => 'nullable|boolean',
-        ]);
+    ]);
 
-        try {
-            // Mock generation
-                $generatedCount = isset($validated['employee_ids']) && count($validated['employee_ids']) > 0
-                ? count($validated['employee_ids']) 
-                : 25;
+    try {
+        $period = PayrollPeriod::findOrFail($validated['period_id']);
 
-            return back()->with('success', "{$generatedCount} payslips generated successfully.");
-        } catch (\Exception $e) {
-            return back()->with('error', 'Failed to generate payslips: ' . $e->getMessage());
+        // Base query: only finalized/calculated employee payroll records
+        $query = \App\Models\EmployeePayrollCalculation::where('payroll_period_id', $period->id)
+            ->whereIn('calculation_status', ['calculated', 'adjusted', 'approved', 'locked']);
+
+        if (!empty($validated['employee_ids'])) {
+            $query->whereIn('employee_id', $validated['employee_ids']);
         }
-    }
 
-    public function distribute(Request $request)
-    {
-        $validated = $request->validate([
-            'payslip_ids' => 'required|array',
-            'payslip_ids.*' => 'integer',
-            'distribution_method' => 'required|in:email,portal,print,sms',
-            'email_subject' => 'nullable|string',
-            'email_message' => 'nullable|string',
-        ]);
+        $calculations = $query->get();
 
-        try {
-            $sentCount = count($validated['payslip_ids']);
-            $method = ucfirst($validated['distribution_method']);
-
-            return back()->with('success', "{$sentCount} payslips distributed via {$method} successfully.");
-        } catch (\Exception $e) {
-            return back()->with('error', 'Failed to distribute payslips: ' . $e->getMessage());
+        if ($calculations->isEmpty()) {
+            return back()->with('error', 'No finalized payroll calculations found for this period. Run and finalize payroll calculations first.');
         }
+
+        $generated = 0;
+        $skipped   = 0;
+
+        foreach ($calculations as $calc) {
+            // Skip if payslip already exists and regenerate is not requested
+            $exists = Payslip::where('employee_id', $calc->employee_id)
+                ->whereHas('payrollPayment', fn($q) => $q->where('payroll_period_id', $period->id))
+                ->exists();
+
+            if ($exists && !($validated['regenerate'] ?? false)) {
+                $skipped++;
+                continue;
+            }
+
+            // Find or create a PayrollPayment record for this period
+// Find or create a PayrollPayment record for this period
+$defaultPaymentMethodId = \App\Models\PaymentMethod::where('is_enabled', true)
+    ->orderBy('sort_order')
+    ->value('id');
+
+if (!$defaultPaymentMethodId) {
+    throw new \Exception('No enabled payment method found. Please configure a payment method first.');
+}
+
+$payment = \App\Models\PayrollPayment::firstOrCreate(
+    [
+        'payroll_period_id' => $period->id,
+        'employee_id'       => $calc->employee_id,
+    ],
+    [
+        'period_start'      => $period->period_start,
+        'period_end'        => $period->period_end,
+        'payment_date'      => $period->payment_date ?? now(),
+        'payment_method_id' => $defaultPaymentMethodId,
+        'status'            => 'pending',
+        'gross_pay'         => (float) $calc->gross_pay,
+        'net_pay'           => (float) $calc->net_pay,
+        'total_deductions'  => (float) $calc->total_deductions,
+        'created_by'        => auth()->id(),
+    ]
+);
+
+            // Build earnings_data from calculation
+            $earningsData = [
+                'basic_pay'          => (float) $calc->basic_pay,
+                'overtime_pay'       => (float) $calc->total_overtime_pay,
+                'allowances'         => (float) $calc->total_allowances,
+                'other_allowances'   => (float) $calc->other_allowances,
+            ];
+
+            // Build deductions_data from calculation
+            $deductionsData = [
+                'sss_contribution'        => (float) $calc->sss_contribution,
+                'philhealth_contribution' => (float) $calc->philhealth_contribution,
+                'pagibig_contribution'    => (float) $calc->pagibig_contribution,
+                'withholding_tax'         => (float) $calc->withholding_tax,
+                'total_loan_deductions'   => (float) $calc->total_loan_deductions,
+                'tardiness_deduction'     => (float) $calc->tardiness_deduction,
+                'miscellaneous_deductions'=> (float) $calc->miscellaneous_deductions,
+            ];
+
+            // Upsert the payslip
+Payslip::updateOrCreate(
+    [
+        'payroll_payment_id' => $payment->id,
+        'employee_id'        => $calc->employee_id,
+    ],
+    [
+        'payroll_period_id'   => $period->id,
+        'payslip_number'      => 'PS-' . $period->id . '-' . str_pad($calc->employee_id, 5, '0', STR_PAD_LEFT),
+        'employee_number'     => $calc->employee_number,
+        'employee_name'       => $calc->employee_name,
+        'department'          => $calc->department,
+        'position'            => $calc->position,
+        'period_start'        => $period->period_start,
+        'period_end'          => $period->period_end,
+        'payment_date'        => $period->payment_date ?? now(),
+        'total_earnings'      => (float) $calc->gross_pay,
+        'total_deductions'    => (float) $calc->total_deductions,
+        'net_pay'             => (float) $calc->net_pay,
+        'earnings_data'       => $earningsData,
+        'deductions_data'     => $deductionsData,
+        'status'              => 'generated',
+        'distribution_method' => 'portal',
+        // Add file_path for NOT NULL constraint
+        'file_path'           => 'payslips/' . $period->id . '/' . $calc->employee_number . '.pdf',
+        'generated_by'        => auth()->id(),
+    ]
+);
+            $generated++;
+        }
+
+        $message = "{$generated} payslip(s) generated successfully.";
+        if ($skipped > 0) {
+            $message .= " {$skipped} skipped (already exist). Enable 'Regenerate' to overwrite.";
+        }
+
+        return back()->with('success', $message);
+
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('Payslip generation failed', [
+            'period_id' => $validated['period_id'],
+            'error'     => $e->getMessage(),
+            'trace'     => $e->getTraceAsString(),
+        ]);
+        return back()->with('error', 'Failed to generate payslips: ' . $e->getMessage());
     }
+}
 
 public function preview(int $payslipId)
 {
@@ -126,26 +232,25 @@ public function preview(int $payslipId)
         'payrollPayment.payrollPeriod',
     ])->findOrFail($payslipId);
 
-    $employee = $payslip->employee;
-    $period   = $payslip->payrollPayment?->payrollPeriod;
+    $employee     = $payslip->employee;
+    $period       = $payslip->payrollPayment?->payrollPeriod;
+    $earningsData = $payslip->earnings_data ?? [];
+    $deductData   = $payslip->deductions_data ?? [];
 
-    // Build earnings breakdown from payslip columns
     $earnings = array_filter([
-        ['name' => 'Basic Salary',      'amount' => (float) $payslip->basic_salary],
-        ['name' => 'Overtime Pay',      'amount' => (float) $payslip->overtime_pay],
-        ['name' => 'Night Differential','amount' => (float) $payslip->night_differential],
-        ['name' => 'Holiday Pay',       'amount' => (float) $payslip->holiday_pay],
-        ['name' => 'Allowances',        'amount' => (float) $payslip->allowances],
-        ['name' => 'Other Earnings',    'amount' => (float) $payslip->other_earnings],
+        ['name' => 'Basic Salary',    'amount' => (float) ($earningsData['basic_pay'] ?? 0)],
+        ['name' => 'Overtime Pay',    'amount' => (float) ($earningsData['overtime_pay'] ?? 0)],
+        ['name' => 'Allowances',      'amount' => (float) ($earningsData['allowances'] ?? 0)],
+        ['name' => 'Other Earnings',  'amount' => (float) ($earningsData['other_allowances'] ?? 0)],
     ], fn($e) => $e['amount'] > 0);
 
     $deductions = array_filter([
-        ['name' => 'SSS Contribution',       'amount' => (float) $payslip->sss_contribution],
-        ['name' => 'PhilHealth Contribution', 'amount' => (float) $payslip->philhealth_contribution],
-        ['name' => 'Pag-IBIG Contribution',  'amount' => (float) $payslip->pagibig_contribution],
-        ['name' => 'Withholding Tax',        'amount' => (float) $payslip->withholding_tax],
-        ['name' => 'Loans',                  'amount' => (float) $payslip->loans],
-        ['name' => 'Other Deductions',       'amount' => (float) $payslip->other_deductions],
+        ['name' => 'SSS Contribution',        'amount' => (float) ($deductData['sss_contribution'] ?? 0)],
+        ['name' => 'PhilHealth Contribution', 'amount' => (float) ($deductData['philhealth_contribution'] ?? 0)],
+        ['name' => 'Pag-IBIG Contribution',   'amount' => (float) ($deductData['pagibig_contribution'] ?? 0)],
+        ['name' => 'Withholding Tax',         'amount' => (float) ($deductData['withholding_tax'] ?? 0)],
+        ['name' => 'Loans',                   'amount' => (float) ($deductData['total_loan_deductions'] ?? 0)],
+        ['name' => 'Other Deductions',        'amount' => (float) (($deductData['tardiness_deduction'] ?? 0) + ($deductData['miscellaneous_deductions'] ?? 0))],
     ], fn($d) => $d['amount'] > 0);
 
     $ytdDeductions = ((float) ($payslip->ytd_tax ?? 0))
@@ -159,7 +264,7 @@ public function preview(int $payslipId)
         'employee_name'    => $employee?->full_name ?? $payslip->employee_name,
         'position'         => $employee?->position?->title ?? $payslip->position ?? 'Unknown',
         'department'       => $employee?->department?->name ?? $payslip->department ?? 'Unknown',
-        'period_name'      => $period?->period_name ?? $payslip->period_name ?? 'N/A',
+        'period_name'      => $period?->period_name ?? 'N/A',
         'period_start'     => $payslip->period_start->format('Y-m-d'),
         'period_end'       => $payslip->period_end->format('Y-m-d'),
         'pay_date'         => $payslip->payment_date->format('Y-m-d'),
@@ -314,13 +419,11 @@ public function preview(int $payslipId)
         ];
 
         $statuses = ['pending', 'generated', 'sent', 'acknowledged', 'failed'];
-        $distributionMethods = ['email', 'portal', 'printed'];
 
         $payslips = [];
         foreach ($employees as $index => $employee) {
             $statusIndex = $index % count($statuses);
             $status = $statuses[$statusIndex];
-            $distributionMethod = $distributionMethods[$index % count($distributionMethods)];
 
             $basicSalary = rand(15000, 45000);
             $overtime = rand(1000, 5000);

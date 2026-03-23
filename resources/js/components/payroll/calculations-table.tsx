@@ -57,7 +57,7 @@ interface StatusConfig {
     icon?: React.ReactNode;
 }
 
-const statusConfigMap: Record<PayrollCalculation['status'], StatusConfig> = {
+const statusConfigMap: Record<string, StatusConfig> = {
     pending: {
         label: 'Pending',
         variant: 'secondary',
@@ -69,7 +69,22 @@ const statusConfigMap: Record<PayrollCalculation['status'], StatusConfig> = {
         icon: <Loader2 className="h-3 w-3 animate-spin" />,
     },
     completed: {
-        label: 'Completed',
+        label: 'Calculated',
+        variant: 'default',
+        icon: <CheckCircle className="h-3 w-3" />,
+    },
+    reviewing: {
+        label: 'Under Review',
+        variant: 'outline',
+        icon: <AlertCircle className="h-3 w-3" />,
+    },
+    approved: {
+        label: 'Approved',
+        variant: 'default',
+        icon: <CheckCircle className="h-3 w-3" />,
+    },
+    finalized: {
+        label: 'Finalized',
         variant: 'default',
         icon: <CheckCircle className="h-3 w-3" />,
     },
@@ -123,10 +138,10 @@ function getCalculationTypeLabel(type: PayrollCalculation['calculation_type']): 
     return labels[type] || type;
 }
 
-function getAvailableActions(status: PayrollCalculation['status']): string[] {
+function getAvailableActions(status: string): string[] {
     const actions: string[] = ['view'];
 
-    if (status === 'failed' || status === 'completed') {
+    if (status === 'failed' || status === 'completed' || status === 'approved' || status === 'finalized') {
         actions.push('recalculate');
     }
 
@@ -140,6 +155,7 @@ function getAvailableActions(status: PayrollCalculation['status']): string[] {
 
     return actions;
 }
+
 
 // ============================================================================
 // CalculationRow Component (with real-time polling)

@@ -290,11 +290,6 @@ export default function PayrollReviewPage({
                                 Send Back for Recalculation
                             </Button>
                         )}
-
-                        <Button onClick={handleDownloadPayslips} variant="outline" className="gap-2">
-                            <Download className="h-4 w-4" />
-                            Generate Payslips
-                        </Button>
                     </div>
                 </div>
 

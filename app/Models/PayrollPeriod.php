@@ -367,7 +367,7 @@ class PayrollPeriod extends Model
      */
     public function canApprove(): bool
     {
-        return in_array($this->status, ['under_review', 'pending_approval']);
+        return in_array($this->status, ['calculated', 'under_review', 'pending_approval']);
     }
 
     /**
@@ -458,7 +458,7 @@ class PayrollPeriod extends Model
      */
     public function approve($userId): bool
     {
-        if (!in_array($this->status, ['under_review', 'pending_approval'])) {
+    if (!in_array($this->status, ['calculated', 'under_review', 'pending_approval'])) {
             throw new \Exception('Only periods under review can be approved');
         }
 
