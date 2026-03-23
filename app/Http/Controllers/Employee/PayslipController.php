@@ -470,23 +470,43 @@ class PayslipController extends Controller
      * Build allowances array from earnings data JSON.
      * 
      * Extracts allowances from earnings_data and transforms to SalaryComponent[].
+     * Includes helpful descriptions for employees to understand each allowance.
      * 
      * @param array $earningsData
      * @return array
      */
     private function buildAllowancesArray(array $earningsData): array
     {
+        $allowanceDescriptions = [
+            'rice_subsidy' => 'Monthly rice allowance for employee household consumption',
+            'transportation' => 'Transportation or commute allowance',
+            'telephone' => 'Telephone/communication allowance',
+            'laundry' => 'Uniform/laundry allowance',
+            'meal' => 'Meal allowance',
+            'hazard' => 'Hazard pay for dangerous work conditions',
+            'night_diff' => 'Additional pay for night shift work',
+            'holiday_pay' => 'Payment for holidays worked',
+            'overtime_pay' => 'Payment for hours worked beyond regular schedule',
+            'allowance' => 'Additional allowance',
+            'other_allowance' => 'Other supplementary allowance',
+        ];
+
         $allowances = [];
 
         if (isset($earningsData['allowances']) && is_numeric($earningsData['allowances'])) {
             $allowances[] = [
                 'name'   => 'Allowances',
+                'description' => 'Various allowances and supplementary benefits',
                 'amount' => (float) $earningsData['allowances'],
             ];
         }
 
         if (!empty($earningsData['other_allowances']) && $earningsData['other_allowances'] > 0) {
-            $allowances[] = ['name' => 'Other Allowances', 'amount' => (float) $earningsData['other_allowances']];
+            $allowances[] = [
+                'name' => 'Other Allowances',
+                'description' => 'Additional allowances not classified elsewhere',
+                'amount' => (float) $earningsData['other_allowances']
+            ];
         }
 
         // If earnings_data has an 'allowances' sub-array/object, normalize to indexed SalaryComponent[].
@@ -495,16 +515,22 @@ class PayslipController extends Controller
 
             foreach ($earningsData['allowances'] as $key => $allowance) {
                 if (is_array($allowance)) {
+                    $description = $allowanceDescriptions[strtolower(str_replace([' ', '_'], '_', $allowance['name'] ?? ''))] 
+                                ?? 'Additional allowance component';
                     $normalizedAllowances[] = [
-                        'name'   => $allowance['name'] ?? (is_string($key) ? $key : 'Allowance'),
+                        'name'   => $allowance['name'] ?? 'Allowance',
+                        'description' => $description,
                         'amount' => (float) ($allowance['amount'] ?? 0),
                     ];
                     continue;
                 }
 
                 // Handle key-value map format, e.g. {"Rice Subsidy": 1500}
+                $description = $allowanceDescriptions[strtolower(str_replace([' ', '_'], '_', $key))] 
+                            ?? 'Additional allowance component';
                 $normalizedAllowances[] = [
                     'name'   => is_string($key) ? $key : 'Allowance',
+                    'description' => $description,
                     'amount' => (float) $allowance,
                 ];
             }
@@ -518,7 +544,8 @@ class PayslipController extends Controller
     /**
      * Build deductions array from deductions data JSON.
      * 
-     * Extracts deductions and maps to human-readable labels.
+     * Extracts deductions and maps to human-readable labels with descriptions.
+     * Includes helpful tooltips for employees, HR, and payroll staff.
      * 
      * @param array $deductionsData
      * @return array
@@ -526,33 +553,106 @@ class PayslipController extends Controller
     private function buildDeductionsArray(array $deductionsData): array
     {
         $labelMap = [
-            'sss_contribution'        => 'SSS',
-            'sss'                     => 'SSS',
-            'philhealth_contribution' => 'PhilHealth',
-            'philhealth'              => 'PhilHealth',
-            'pagibig_contribution'    => 'Pag-IBIG',
-            'pagibig'                 => 'Pag-IBIG',
-            'withholding_tax'         => 'Withholding Tax',
-            'tax'                     => 'Withholding Tax',
-            'total_loan_deductions'   => 'Loan Deductions',
-            'loan'                    => 'Loan Deductions',
-            'advance'                 => 'Salary Advance',
-            'leave'                   => 'Leave Deduction',
-            'attendance'              => 'Attendance Deduction',
-            'tardiness_deduction'     => 'Tardiness',
-            'miscellaneous_deductions'=> 'Other Deductions',
-            'other'                   => 'Other Deductions',
+            'sss_contribution'        => [
+                'name' => 'SSS (Social Security System)',
+                'description' => 'Government social security contribution for retirement, disability, and death benefits',
+                'category' => 'government'
+            ],
+            'sss'                     => [
+                'name' => 'SSS (Social Security System)',
+                'description' => 'Government social security contribution for retirement, disability, and death benefits',
+                'category' => 'government'
+            ],
+            'philhealth_contribution' => [
+                'name' => 'PhilHealth',
+                'description' => 'Government health insurance contribution for you and your dependents',
+                'category' => 'government'
+            ],
+            'philhealth'              => [
+                'name' => 'PhilHealth',
+                'description' => 'Government health insurance contribution for you and your dependents',
+                'category' => 'government'
+            ],
+            'pagibig_contribution'    => [
+                'name' => 'Pag-IBIG (Home Development Mutual Fund)',
+                'description' => 'Government housing and savings fund contribution for home loans and retirement',
+                'category' => 'government'
+            ],
+            'pagibig'                 => [
+                'name' => 'Pag-IBIG (Home Development Mutual Fund)',
+                'description' => 'Government housing and savings fund contribution for home loans and retirement',
+                'category' => 'government'
+            ],
+            'withholding_tax'         => [
+                'name' => 'Income Tax Withheld',
+                'description' => 'Income tax automatically deducted and remitted to the Bureau of Internal Revenue (BIR)',
+                'category' => 'tax'
+            ],
+            'tax'                     => [
+                'name' => 'Income Tax Withheld',
+                'description' => 'Income tax automatically deducted and remitted to the Bureau of Internal Revenue (BIR)',
+                'category' => 'tax'
+            ],
+            'total_loan_deductions'   => [
+                'name' => 'Loan Amortization',
+                'description' => 'Monthly payment for company loans or salary loans',
+                'category' => 'loan'
+            ],
+            'loan'                    => [
+                'name' => 'Loan Amortization',
+                'description' => 'Monthly payment for company loans or salary loans',
+                'category' => 'loan'
+            ],
+            'advance'                 => [
+                'name' => 'Salary Advance Repayment',
+                'description' => 'Repayment of salary advances received from the company',
+                'category' => 'advance'
+            ],
+            'leave'                   => [
+                'name' => 'Unpaid Leave Deduction',
+                'description' => 'Salary reduction for approved unpaid leaves (leaves without pay)',
+                'category' => 'leave'
+            ],
+            'attendance'              => [
+                'name' => 'Attendance Deduction',
+                'description' => 'Deduction due to absences or incomplete work days',
+                'category' => 'attendance'
+            ],
+            'tardiness_deduction'     => [
+                'name' => 'Tardiness Deduction',
+                'description' => 'Deduction for late arrivals during the pay period',
+                'category' => 'attendance'
+            ],
+            'miscellaneous_deductions'=> [
+                'name' => 'Other Deductions',
+                'description' => 'Additional deductions not classified in standard categories',
+                'category' => 'other'
+            ],
+            'other'                   => [
+                'name' => 'Other Deductions',
+                'description' => 'Additional deductions not classified in standard categories',
+                'category' => 'other'
+            ],
         ];
 
         $deductions = [];
         $seenLabels = [];
-        foreach ($labelMap as $key => $label) {
+        foreach ($labelMap as $key => $details) {
             if (!empty($deductionsData[$key]) && $deductionsData[$key] > 0) {
-                if (isset($seenLabels[$label])) {
-                    $deductions[$seenLabels[$label]]['amount'] += (float) $deductionsData[$key];
+                $name = is_array($details) ? $details['name'] : $details;
+                $description = is_array($details) ? ($details['description'] ?? '') : '';
+                $category = is_array($details) ? ($details['category'] ?? 'other') : 'other';
+                
+                if (isset($seenLabels[$name])) {
+                    $deductions[$seenLabels[$name]]['amount'] += (float) $deductionsData[$key];
                 } else {
-                    $seenLabels[$label] = count($deductions);
-                    $deductions[] = ['name' => $label, 'amount' => (float) $deductionsData[$key]];
+                    $seenLabels[$name] = count($deductions);
+                    $deductions[] = [
+                        'name' => $name,
+                        'description' => $description,
+                        'category' => $category,
+                        'amount' => (float) $deductionsData[$key]
+                    ];
                 }
             }
         }
