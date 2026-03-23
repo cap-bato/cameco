@@ -92,6 +92,7 @@ class AllowanceDeductionService
         // Create new allowance
         $allowance = EmployeeAllowance::create([
             'employee_id' => $employee->id,
+            'salary_component_id' => $data['salary_component_id'] ?? null,
             'allowance_type' => $allowanceType,
             'allowance_name' => $data['allowance_name'] ?? ucwords(str_replace('_', ' ', $allowanceType)),
             'amount' => (float) $data['amount'],
@@ -179,6 +180,7 @@ class AllowanceDeductionService
         // Create new deduction
         $deduction = EmployeeDeduction::create([
             'employee_id' => $employee->id,
+            'salary_component_id' => $data['salary_component_id'] ?? null,
             'deduction_type' => $deductionType,
             'deduction_name' => $data['deduction_name'] ?? ucwords(str_replace('_', ' ', $deductionType)),
             'amount' => (float) $data['amount'],
