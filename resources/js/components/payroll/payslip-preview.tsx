@@ -35,7 +35,7 @@ export function PayslipPreview({ open, onOpenChange, data, onDownload }: Payslip
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+            <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto p-0">
                 {/* Professional Header */}
                 <div className="sticky top-0 z-10 bg-gradient-to-r from-blue-900 to-blue-800 px-6 py-4 text-white flex items-center justify-between border-b-4 border-blue-700">
                     <div className="flex items-center gap-3">
