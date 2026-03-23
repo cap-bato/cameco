@@ -98,9 +98,18 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
 
   // Sync form when initialData changes (e.g. opening in edit mode)
   useEffect(() => {
-    setFormData(initialData || DEFAULT_FORM);
+    // If only one component, auto-select it
+    if (!initialData && components.length === 1) {
+      setFormData({
+        ...DEFAULT_FORM,
+        salary_component_id: components[0].id,
+        amount: getDefaultAmount(components[0]),
+      });
+    } else {
+      setFormData(initialData || DEFAULT_FORM);
+    }
     setErrors({});
-  }, [initialData, isOpen]);
+  }, [initialData, isOpen, components]);
 
   const selectedComponent = components.find((c) => c.id === formData.salary_component_id);
   const selectedEmployee = employees.find((e) => e.id === formData.employee_id);

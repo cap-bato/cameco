@@ -15,6 +15,7 @@ class EmployeeAllowance extends Model
 
     protected $fillable = [
         'employee_id',
+        'salary_component_id',
         'allowance_type',
         'allowance_name',
         'amount',
