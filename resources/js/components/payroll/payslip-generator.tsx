@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Mail, Globe, Printer, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { FileText, Globe, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -134,18 +134,6 @@ export function PayslipGenerator({
                             onValueChange={(value: string) => setDistributionMethod(value as 'email' | 'portal' | 'print')}
                             disabled={isLoading}
                         >
-                            <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-gray-50">
-                                <RadioGroupItem value="email" id="email" />
-                                <Label htmlFor="email" className="flex flex-1 cursor-pointer items-center gap-2">
-                                    <Mail className="h-4 w-4 text-blue-600" />
-                                    <div className="flex-1">
-                                        <div className="font-medium">Email</div>
-                                        <div className="text-xs text-gray-600">
-                                            Send payslips to employee email addresses
-                                        </div>
-                                    </div>
-                                </Label>
-                            </div>
 
                             <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-gray-50">
                                 <RadioGroupItem value="portal" id="portal" />
@@ -156,17 +144,6 @@ export function PayslipGenerator({
                                         <div className="text-xs text-gray-600">
                                             Make available for download in employee portal
                                         </div>
-                                    </div>
-                                </Label>
-                            </div>
-
-                            <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-gray-50">
-                                <RadioGroupItem value="print" id="print" />
-                                <Label htmlFor="print" className="flex flex-1 cursor-pointer items-center gap-2">
-                                    <Printer className="h-4 w-4 text-gray-600" />
-                                    <div className="flex-1">
-                                        <div className="font-medium">Print Queue</div>
-                                        <div className="text-xs text-gray-600">Add to print queue for hard copies</div>
                                     </div>
                                 </Label>
                             </div>
