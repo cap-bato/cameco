@@ -235,7 +235,7 @@
         <!-- Professional Header -->
         <div class="header">
             <div class="header-left">
-                <div class="company-name">CAMECO CORPORATION</div>
+                <div class="company-name">CATHAY METAL CORPORATION</div>
                 <div class="company-info">Professional Employee Payslip</div>
             </div>
             <div class="header-right">
