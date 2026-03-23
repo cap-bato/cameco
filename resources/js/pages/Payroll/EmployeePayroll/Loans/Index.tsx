@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
@@ -37,6 +38,7 @@ export default function LoansPage({
     departments?: Array<{ id: number; name: string }>;
 }) {
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const { toast } = useToast();
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [selectedLoan, setSelectedLoan] = useState<EmployeeLoan | null>(null);
     const [selectedLoanPayments, setSelectedLoanPayments] = useState<LoanPayment[]>([]);
@@ -170,9 +172,19 @@ export default function LoansPage({
                 onSuccess: () => {
                     setIsFormOpen(false);
                     setSelectedLoan(null);
+                    toast({
+                        title: 'Loan updated',
+                        description: 'The loan was updated successfully.',
+                        variant: 'default',
+                    });
                 },
                 onError: (errors) => {
                     console.error('Failed to update loan:', errors);
+                    toast({
+                        title: 'Update failed',
+                        description: 'Could not update the loan. Please check the form and try again.',
+                        variant: 'destructive',
+                    });
                 },
             });
         } else {
@@ -180,9 +192,19 @@ export default function LoansPage({
                 onSuccess: () => {
                     setIsFormOpen(false);
                     setSelectedLoan(null);
+                    toast({
+                        title: 'Loan created',
+                        description: 'The loan was created successfully.',
+                        variant: 'default',
+                    });
                 },
                 onError: (errors) => {
                     console.error('Failed to create loan:', errors);
+                    toast({
+                        title: 'Creation failed',
+                        description: 'Could not create the loan. Please check the form and try again.',
+                        variant: 'destructive',
+                    });
                 },
             });
         }

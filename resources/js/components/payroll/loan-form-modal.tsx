@@ -24,11 +24,12 @@ interface LoanFormModalProps {
     isLoading?: boolean;
 }
 
-const LOAN_TYPES: Array<{ value: 'sss' | 'pagibig' | 'company' | 'cash_advance'; label: string }> = [
-    { value: 'sss', label: 'SSS Loan' },
-    { value: 'pagibig', label: 'Pag-IBIG Loan' },
-    { value: 'company', label: 'Company Loan' },
-    { value: 'cash_advance', label: 'Cash Advance' },
+const LOAN_TYPES: Array<{ value: string; label: string }> = [
+    { value: 'sss_loan', label: 'SSS Loan' },
+    { value: 'pagibig_loan', label: 'Pag-IBIG Loan' },
+    { value: 'company_loan', label: 'Company Loan' },
+    { value: 'emergency_loan', label: 'Emergency Loan' },
+    { value: 'housing_loan', label: 'Housing Loan' },
 ];
 
 export function LoanFormModal({
@@ -99,7 +100,20 @@ export function LoanFormModal({
             return;
         }
 
-        onSubmit(formData);
+        // Map frontend fields to backend API fields
+        const payload = {
+            employee_id: formData.employee_id,
+            loan_type: formData.loan_type,
+            amount: formData.principal_amount, // backend expects 'amount'
+            interest_rate: formData.interest_rate,
+            number_of_months: formData.number_of_installments, // backend expects 'number_of_months'
+            start_date: formData.start_date,
+            reason: formData.reason,
+            remarks: formData.remarks,
+            approved_by: formData.approved_by,
+        };
+
+        onSubmit(payload);
         onClose();
     };
 
@@ -146,7 +160,7 @@ export function LoanFormModal({
                                 setFormData({
                                     ...formData,
                                     loan_type: value as EmployeeLoanFormData['loan_type'],
-                                    interest_rate: ['sss', 'pagibig'].includes(value) ? 0 : undefined,
+                                    interest_rate: ['sss_loan', 'pagibig_loan'].includes(value) ? 0 : undefined,
                                 })
                             }
                         >
@@ -186,7 +200,7 @@ export function LoanFormModal({
                     </div>
 
                     {/* Interest Rate (only for non-govt loans) */}
-                    {['company', 'cash_advance'].includes(formData.loan_type) && (
+                    {['company_loan', 'emergency_loan', 'housing_loan'].includes(formData.loan_type) && (
                         <div className="space-y-2">
                             <Label htmlFor="interest_rate">Interest Rate (%)</Label>
                             <Input

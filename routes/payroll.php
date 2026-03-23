@@ -117,9 +117,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
             ->middleware('permission:payroll.loans.view')
             ->name('loans.index');
 
-        // Loan CRUD and payment routes can be enabled via feature flag once
-        // LoansController and LoanManagementService are fully aligned.
-        if (config('features.enable_loan_crud_routes')) {
+        // LoansController and LoanManagementService are fully aligned. 
             Route::post('/loans', [LoansController::class, 'store'])
                 ->middleware('permission:payroll.loans.create')
                 ->name('loans.store');
@@ -141,7 +139,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
             Route::get('/loans/{id}/payments', [LoansController::class, 'getPayments'])
                 ->middleware('permission:payroll.loans.view')
                 ->name('loans.payments');
-        }
+
         Route::get('/advances', [AdvancesController::class, 'index'])->name('advances.index');
         Route::post('/advances', [AdvancesController::class, 'store'])->name('advances.store');
         Route::post('/advances/{id}/approve', [AdvancesController::class, 'approve'])->name('advances.approve');

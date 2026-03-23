@@ -186,40 +186,35 @@ class LoansController extends Controller
     {
         $validated = $request->validate([
             'employee_id' => 'required|integer|exists:employees,id',
-            'loan_type' => 'required|in:sss,pagibig,company',
-            'principal_amount' => 'required|numeric|min:0',
-            'interest_rate' => 'nullable|numeric|min:0|max:100',
-            'number_of_installments' => 'required|integer|min:1',
-            'monthly_amortization' => 'required|numeric|min:0',
+            'loan_type' => 'required|string',
+            'amount' => 'required|numeric|min:0.01',
+            'interest_rate' => 'nullable|numeric|min:0',
+            'number_of_months' => 'required|integer|min:1',
             'start_date' => 'required|date',
+            'reason' => 'nullable|string',
+            'remarks' => 'nullable|string',
             'approved_by' => 'nullable|integer|exists:users,id',
         ]);
 
         try {
             $employee = Employee::findOrFail($validated['employee_id']);
-            
             $loanData = [
                 'loan_type' => $validated['loan_type'],
-                'principal_amount' => $validated['principal_amount'],
+                'amount' => $validated['amount'],
                 'interest_rate' => $validated['interest_rate'] ?? 0,
-                'number_of_installments' => $validated['number_of_installments'],
-                'monthly_amortization' => $validated['monthly_amortization'],
+                'number_of_months' => $validated['number_of_months'],
                 'start_date' => $validated['start_date'],
+                'reason' => $validated['reason'] ?? null,
+                'remarks' => $validated['remarks'] ?? null,
             ];
-
             $loan = $this->loanManagementService->createLoan($employee, $loanData, auth()->user());
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Loan created successfully',
-                'data' => [
-                    'id' => $loan->id,
-                    'loan_number' => $loan->loan_number,
-                    'status' => $loan->status,
-                ],
-            ], 201);
+            // Inertia expects a redirect, not JSON, for POST
+            return redirect()->route('payroll.loans.index')
+                ->with('success', 'Loan created successfully');
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Failed to create loan: ' . $e->getMessage());
         }
     }
 
