@@ -80,6 +80,8 @@ export const BIR1601CGenerator: React.FC<BIR1601CGeneratorProps> = ({ period, pe
                         type: 'success',
                         message: 'Form 1601C generated successfully',
                     });
+                    // Refresh the BIR reports page to show updated reports
+                    router.reload({ only: ['reports', 'generated_reports'] });
                     setTimeout(() => setStatusMessage(null), 3000);
                 },
                 onError: () => {
@@ -93,9 +95,7 @@ export const BIR1601CGenerator: React.FC<BIR1601CGeneratorProps> = ({ period, pe
         );
     };
 
-    const handleDownload = () => {
-        router.get(`/payroll/government/bir/download-1601c/${periodId}`);
-    };
+
 
     return (
         <div className="space-y-6">
@@ -280,14 +280,17 @@ export const BIR1601CGenerator: React.FC<BIR1601CGeneratorProps> = ({ period, pe
                                 </>
                             )}
                         </Button>
-                        <Button
-                            variant="outline"
-                            onClick={handleDownload}
+                        <a
+                            href={`/payroll/government/bir/download-1601c/${periodId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="flex-1"
                         >
-                            <Download className="w-4 h-4 mr-2" />
-                            Download
-                        </Button>
+                            <Button variant="outline" className="w-full">
+                                <Download className="w-4 h-4 mr-2" />
+                                Download
+                            </Button>
+                        </a>
                     </div>
                 </CardContent>
             </Card>

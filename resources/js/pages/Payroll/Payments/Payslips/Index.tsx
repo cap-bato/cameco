@@ -123,37 +123,25 @@ export default function PayslipsIndex({
     };
 
     const handleDownload = (id: number) => {
-        router.get(`/payroll/payments/payslips/${id}/download`);
+        window.open(`/payroll/payments/payslips/${id}/download`, '_blank');
     };
 
     const handleEmail = (id: number) => {
         router.post(`/payroll/payments/payslips/${id}/email`);
     };
 
-    const handleView = (id: number) => {
-        // In production, this would fetch preview data via API
-        // For now, using a placeholder
-        const mockPreview: PayslipPreviewData = {
-            employee_id: id,
-            employee_number: 'EMP-001',
-            employee_name: 'Sample Employee',
-            position: 'Position',
-            department: 'Department',
-            period_name: 'October 2025',
-            period_start: '2025-10-01',
-            period_end: '2025-10-15',
-            pay_date: '2025-10-16',
-            earnings: [],
-            gross_pay: 0,
-            deductions: [],
-            total_deductions: 0,
-            net_pay: 0,
-            ytd_gross: 0,
-            ytd_deductions: 0,
-            ytd_net: 0,
-        };
-        setPreviewData(mockPreview);
-        setIsPreviewOpen(true);
+    const handleView = async (id: number) => {
+        try {
+            const response = await fetch(`/payroll/payments/payslips/${id}/preview`, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!response.ok) throw new Error('Failed to fetch preview');
+            const data: PayslipPreviewData = await response.json();
+            setPreviewData(data);
+            setIsPreviewOpen(true);
+        } catch (error) {
+            console.error('Preview error:', error);
+        }
     };
 
     const handlePrint = (id: number) => {

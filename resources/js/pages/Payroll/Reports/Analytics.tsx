@@ -199,14 +199,17 @@ export default function LaborCostAnalytics({
 
                 {/* Tab Content */}
                 <div className="mt-6">
-                    {activeTab === 'overview' && (
+                {activeTab === 'overview' && (
+                    <div className="space-y-6">
+                        {/* hide YoY on overview */}
                         <CostTrendCharts
                             monthlyTrends={cost_trend_data}
                             departmentComparisons={department_comparisons}
                             componentBreakdown={component_breakdown}
-                            yoyComparisons={yoy_comparisons}
+                            yoyComparisons={[]}
                         />
-                    )}
+                    </div>
+                )}
 
                     {activeTab === 'cost_trends' && (
                         <CostTrendCharts

@@ -98,10 +98,9 @@ export function PhilHealthRF1Generator({
         );
     };
 
-    const handleDownload = (reportId: string | number) => {
-        router.get(`/payroll/government/philhealth/download-rf1/${reportId}`, {}, { preserveScroll: true });
-    };
-
+const handleDownload = (reportId: string | number) => {
+    window.open(`/payroll/government/philhealth/download-rf1/${reportId}`, '_blank');
+};
     const handleSubmit = (reportId: string | number) => {
         setIsSubmitting(true);
         router.post(

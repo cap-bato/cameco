@@ -245,12 +245,6 @@ export default function DocumentRequestForm({
                                 </p>
                             </div>
                             <div>
-                                <h4 className="font-semibold text-sm">Payslip</h4>
-                                <p className="text-sm text-gray-600">
-                                    Detailed salary statement for a specific month. Shows gross pay, deductions, and net pay. Required for many administrative processes.
-                                </p>
-                            </div>
-                            <div>
                                 <h4 className="font-semibold text-sm">BIR Form 2316</h4>
                                 <p className="text-sm text-gray-600">
                                     Tax form from the Bureau of Internal Revenue showing your annual compensation and tax withholdings. Required for personal income tax filing.

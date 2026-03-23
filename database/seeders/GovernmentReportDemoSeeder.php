@@ -43,7 +43,7 @@ class GovernmentReportDemoSeeder extends Seeder
                 $fileName = strtolower($agency['agency'] . '_' . $agency['report_type'] . '_' . $period->period_month . '.' . $agency['file_type']);
                 $filePath = 'reports/demo/' . $fileName;
 
-                GovernmentReport::create([
+                $report = GovernmentReport::create([
                     'payroll_period_id' => $period->id,
                     'agency'            => $agency['agency'],
                     'report_type'       => $agency['report_type'],
@@ -62,6 +62,18 @@ class GovernmentReportDemoSeeder extends Seeder
                     'created_at'        => now(),
                     'updated_at'        => now(),
                 ]);
+
+                // Create placeholder file for demo BIR reports
+                if ($agency['agency'] === 'bir') {
+                    $absPath = base_path('storage/app/' . $filePath);
+                    $dir = dirname($absPath);
+                    if (!is_dir($dir)) {
+                        mkdir($dir, 0777, true);
+                    }
+                    if (!file_exists($absPath)) {
+                        file_put_contents($absPath, "This is a demo placeholder for {$fileName}\n");
+                    }
+                }
                 $total++;
             }
         }

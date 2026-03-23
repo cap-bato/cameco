@@ -123,12 +123,22 @@ class SystemHealthService
     /**
      * Get server health metrics
      */
-    public function getServerHealthMetrics(): array
+    /**
+     * Get server health metrics (uptime = oldest log in period, fallback to OS uptime)
+     */
+    public function getServerHealthMetrics(int $days = 7): array
     {
         $cpuUsage = $this->getCpuUsage();
         $memoryUsage = $this->getMemoryUsage();
         $loadAverage = $this->getLoadAverage();
-        $uptime = $this->getUptime();
+
+        // Use uptime from oldest health log in period, fallback to OS uptime
+        $oldestLog = $this->repository->getHealthLogs($days)->first();
+        if ($oldestLog && isset($oldestLog->uptime_seconds)) {
+            $uptime = $oldestLog->uptime_seconds;
+        } else {
+            $uptime = $this->getUptime();
+        }
 
         return [
             'cpu_usage' => $cpuUsage,

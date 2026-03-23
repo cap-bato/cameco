@@ -180,11 +180,7 @@ export default function SSSIndex({
 
     const handleDownloadContributions = () => {
         if (currentPeriod) {
-            router.get(
-                `/payroll/government/sss/download-contributions/${currentPeriod.id}`,
-                {},
-                { preserveScroll: true }
-            );
+            window.open(`/payroll/government/sss/download-contributions/${currentPeriod.id}`, '_blank');
         }
     };
 

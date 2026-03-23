@@ -20,9 +20,9 @@ class HealthController extends Controller
     public function index(Request $request): Response
     {
         $days = $request->input('days', 7); // Default to 7 days
-        
+
         $data = [
-            'currentMetrics' => $this->healthService->getServerHealthMetrics(),
+            'currentMetrics' => $this->healthService->getServerHealthMetrics($days),
             'databaseMetrics' => $this->healthService->getDatabaseMetrics(),
             'cacheMetrics' => $this->healthService->getCacheMetrics(),
             'queueMetrics' => $this->healthService->getQueueMetrics(),

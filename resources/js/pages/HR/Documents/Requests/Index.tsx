@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,19 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     FileText,
@@ -116,26 +129,10 @@ function getPriorityBadge(priority: string) {
 
 function getStatusBadge(status: string, processedBy?: string | null) {
     const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-        pending: {
-            color: 'bg-yellow-100 text-yellow-800',
-            icon: <Clock className="h-3 w-3" />,
-            label: 'Pending',
-        },
-        processing: {
-            color: 'bg-blue-100 text-blue-800',
-            icon: <FileText className="h-3 w-3" />,
-            label: 'Processing',
-        },
-        completed: {
-            color: 'bg-green-100 text-green-800',
-            icon: <CheckCircle className="h-3 w-3" />,
-            label: 'Completed',
-        },
-        rejected: {
-            color: 'bg-red-100 text-red-800',
-            icon: <XCircle className="h-3 w-3" />,
-            label: 'Rejected',
-        },
+        pending: { color: 'bg-yellow-100 text-yellow-800', icon: <Clock className="h-3 w-3" />, label: 'Pending' },
+        processing: { color: 'bg-blue-100 text-blue-800', icon: <FileText className="h-3 w-3" />, label: 'Processing' },
+        completed: { color: 'bg-green-100 text-green-800', icon: <CheckCircle className="h-3 w-3" />, label: 'Completed' },
+        rejected: { color: 'bg-red-100 text-red-800', icon: <XCircle className="h-3 w-3" />, label: 'Rejected' },
     };
 
     const config = statusConfig[status] || statusConfig.pending;
@@ -170,15 +167,20 @@ function truncateText(text: string, maxLength: number): string {
 // Main Component
 // ============================================================================
 
-export default function RequestsIndex({ requests: initialRequests, statistics: initialStats, filters: initialFilters }: RequestsIndexProps) {
-    // Mock data fallback
+export default function RequestsIndex({
+    requests: initialRequests,
+    statistics: initialStats,
+    filters: initialFilters,
+}: RequestsIndexProps) {
     const mockRequests = useMemo(() => initialRequests || [], [initialRequests]);
-    const mockStats = useMemo(() => initialStats || { pending: 0, processing: 0, completed: 0, rejected: 0 }, [initialStats]);
+    const mockStats = useMemo(
+        () => initialStats || { pending: 0, processing: 0, completed: 0, rejected: 0 },
+        [initialStats]
+    );
 
-    // State
     const { toast } = useToast();
     const [requests, setRequests] = useState<DocumentRequest[]>(mockRequests);
-    const [statistics, setStatistics] = useState(initialStats || { pending: 0, processing: 0, completed: 0, rejected: 0 });
+    const [statistics, setStatistics] = useState(mockStats);
     const [selectedRequests, setSelectedRequests] = useState<number[]>([]);
     const [searchTerm, setSearchTerm] = useState(initialFilters?.search || '');
     const [statusFilter, setStatusFilter] = useState(initialFilters?.status || 'all');
@@ -188,44 +190,39 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<DocumentRequest | null>(null);
 
-    // Fetch requests from API
+    // Bulk approve confirm
+    const [bulkApproveOpen, setBulkApproveOpen] = useState(false);
+
+    // Bulk reject dialog
+    const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
+    const [bulkRejectReason, setBulkRejectReason] = useState('');
+    const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
+
     const fetchRequests = useCallback(async () => {
         try {
             const response = await fetch('/hr/documents/requests', {
-                method: 'GET',
                 headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const result = await response.json();
             setRequests(result.data || mockRequests);
             setStatistics(result.meta || mockStats);
         } catch (error) {
             console.error('Failed to fetch requests:', error);
-            // Fallback to mock data
             setRequests(mockRequests);
             setStatistics(mockStats);
-            toast({
-                title: 'Loading fallback data',
-                description: 'Using cached request data',
-                variant: 'default',
-            });
         }
-    }, [mockRequests, mockStats, toast]);
+    }, [mockRequests, mockStats]);
 
-    // Initialize data on mount
     useEffect(() => {
         fetchRequests();
     }, [fetchRequests]);
 
-    // Filter logic
     const filteredRequests = requests.filter((request) => {
         if (statusFilter !== 'all' && request.status !== statusFilter) return false;
         if (documentTypeFilter !== 'all' && request.document_type !== documentTypeFilter) return false;
@@ -242,20 +239,15 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
         return true;
     });
 
-    // Sort: urgent priority first, then by request date
     const sortedRequests = [...filteredRequests].sort((a, b) => {
         if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
         if (a.priority !== 'urgent' && b.priority === 'urgent') return 1;
         return new Date(b.requested_at).getTime() - new Date(a.requested_at).getTime();
     });
 
-    // Handlers
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            const pendingIds = sortedRequests
-                .filter((r) => r.status === 'pending')
-                .map((r) => r.id);
-            setSelectedRequests(pendingIds);
+            setSelectedRequests(sortedRequests.filter((r) => r.status === 'pending').map((r) => r.id));
         } else {
             setSelectedRequests([]);
         }
@@ -279,90 +271,69 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
         setIsDetailsModalOpen(true);
     };
 
-    const handleRefresh = () => {
-        fetchRequests();
-    };
-
-    const handleBulkApprove = async (sendEmail = true) => {
-        if (selectedRequests.length === 0) return;
-        if (!confirm(`Approve ${selectedRequests.length} request(s)?`)) return;
-
-        try {
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            const resp = await fetch('/hr/documents/requests/bulk-approve', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': csrfToken,
+    // Bulk approve — uses Inertia router (CSRF handled automatically)
+    const confirmBulkApprove = () => {
+        setIsBulkSubmitting(true);
+        router.post(
+            '/hr/documents/requests/bulk-approve',
+            { request_ids: selectedRequests, send_email: true },
+            {
+                onSuccess: () => {
+                    toast({ title: 'Success', description: 'Bulk approve completed' });
+                    setSelectedRequests([]);
+                    setBulkApproveOpen(false);
+                    fetchRequests();
                 },
-                body: JSON.stringify({ request_ids: selectedRequests, send_email: sendEmail }),
-            });
-
-            if (!resp.ok) throw new Error('Bulk approve failed');
-            toast({ title: 'Success', description: 'Bulk approve completed' });
-            setSelectedRequests([]);
-            fetchRequests();
-        } catch (error) {
-            console.error(error);
-            toast({ title: 'Error', description: 'Bulk approve failed', variant: 'destructive' });
-        }
+                onError: () => {
+                    toast({ title: 'Error', description: 'Bulk approve failed', variant: 'destructive' });
+                },
+                onFinish: () => setIsBulkSubmitting(false),
+            }
+        );
     };
 
-    const handleBulkReject = async () => {
-        if (selectedRequests.length === 0) return;
-        const reason = prompt('Provide a rejection reason for selected requests:');
-        if (!reason || reason.trim().length < 10) {
-            toast({ title: 'Cancelled', description: 'Rejection reason is required (min 10 chars)', variant: 'default' });
+    // Bulk reject — uses Inertia router (CSRF handled automatically)
+    const confirmBulkReject = () => {
+        if (bulkRejectReason.trim().length < 10) {
+            toast({
+                title: 'Validation error',
+                description: 'Rejection reason must be at least 10 characters.',
+                variant: 'default',
+            });
             return;
         }
-        if (!confirm(`Reject ${selectedRequests.length} request(s)?`)) return;
-
-        try {
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            const resp = await fetch('/hr/documents/requests/bulk-reject', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': csrfToken,
+        setIsBulkSubmitting(true);
+        router.post(
+            '/hr/documents/requests/bulk-reject',
+            { request_ids: selectedRequests, rejection_reason: bulkRejectReason.trim(), send_email: true },
+            {
+                onSuccess: () => {
+                    toast({ title: 'Success', description: 'Bulk reject completed' });
+                    setSelectedRequests([]);
+                    setBulkRejectOpen(false);
+                    setBulkRejectReason('');
+                    fetchRequests();
                 },
-                body: JSON.stringify({ request_ids: selectedRequests, rejection_reason: reason, send_email: true }),
-            });
-
-            if (!resp.ok) throw new Error('Bulk reject failed');
-            toast({ title: 'Success', description: 'Bulk reject completed' });
-            setSelectedRequests([]);
-            fetchRequests();
-        } catch (error) {
-            console.error(error);
-            toast({ title: 'Error', description: 'Bulk reject failed', variant: 'destructive' });
-        }
+                onError: () => {
+                    toast({ title: 'Error', description: 'Bulk reject failed', variant: 'destructive' });
+                },
+                onFinish: () => setIsBulkSubmitting(false),
+            }
+        );
     };
 
     const handleDownloadDocument = async (request: DocumentRequest) => {
         if (!request.generated_document_path) {
-            toast({
-                title: 'Error',
-                description: 'Document path not available',
-                variant: 'destructive',
-            });
+            toast({ title: 'Error', description: 'Document path not available', variant: 'destructive' });
             return;
         }
 
         try {
             const response = await fetch(request.generated_document_path, {
-                headers: {
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to download document');
-            }
+            if (!response.ok) throw new Error('Failed to download document');
 
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
@@ -374,17 +345,10 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
 
-            toast({
-                title: 'Success',
-                description: 'Document downloaded successfully',
-            });
+            toast({ title: 'Success', description: 'Document downloaded successfully' });
         } catch (error) {
             console.error('Download error:', error);
-            toast({
-                title: 'Error',
-                description: 'Failed to download document',
-                variant: 'destructive',
-            });
+            toast({ title: 'Error', description: 'Failed to download document', variant: 'destructive' });
         }
     };
 
@@ -393,15 +357,6 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
         setStatusFilter('all');
         setDocumentTypeFilter('all');
         setPriorityFilter('all');
-    };
-
-    const handleQuickFilter = (filter: 'urgent' | 'pending' | 'my-assignments') => {
-        if (filter === 'urgent') {
-            setPriorityFilter('urgent');
-        } else if (filter === 'pending') {
-            setStatusFilter('pending');
-        }
-        // 'my-assignments' would need backend support
     };
 
     return (
@@ -417,16 +372,10 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                             Process employee document requests for COE, payslips, and other documents
                         </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleRefresh}
-                        >
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Refresh
-                        </Button>
-                    </div>
+                    <Button variant="outline" size="sm" onClick={fetchRequests}>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh
+                    </Button>
                 </div>
 
                 {/* Statistics Cards */}
@@ -441,7 +390,6 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                             <p className="text-xs text-gray-600">Requires immediate attention</p>
                         </CardContent>
                     </Card>
-
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Processing</CardTitle>
@@ -452,7 +400,6 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                             <p className="text-xs text-gray-600">Being handled by HR staff</p>
                         </CardContent>
                     </Card>
-
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Completed Today</CardTitle>
@@ -463,7 +410,6 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                             <p className="text-xs text-gray-600">Successfully processed</p>
                         </CardContent>
                     </Card>
-
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Rejected This Week</CardTitle>
@@ -483,7 +429,6 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                     </CardHeader>
                     <CardContent>
                         <div className="grid gap-4 md:grid-cols-5">
-                            {/* Search */}
                             <div className="relative">
                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                                 <Input
@@ -493,12 +438,8 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                                     className="pl-8"
                                 />
                             </div>
-
-                            {/* Status Filter */}
                             <Select value={statusFilter} onValueChange={setStatusFilter}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Status" />
-                                </SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Statuses</SelectItem>
                                     <SelectItem value="pending">Pending</SelectItem>
@@ -507,12 +448,8 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                                     <SelectItem value="rejected">Rejected</SelectItem>
                                 </SelectContent>
                             </Select>
-
-                            {/* Document Type Filter */}
                             <Select value={documentTypeFilter} onValueChange={setDocumentTypeFilter}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Document Type" />
-                                </SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder="Document Type" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Types</SelectItem>
                                     <SelectItem value="Certificate of Employment">Certificate of Employment</SelectItem>
@@ -523,12 +460,8 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                                     <SelectItem value="Employment Contract">Employment Contract</SelectItem>
                                 </SelectContent>
                             </Select>
-
-                            {/* Priority Filter */}
                             <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Priority" />
-                                </SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Priorities</SelectItem>
                                     <SelectItem value="urgent">Urgent</SelectItem>
@@ -536,27 +469,13 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                                     <SelectItem value="normal">Normal</SelectItem>
                                 </SelectContent>
                             </Select>
-
-                            {/* Clear Filters */}
-                            <Button variant="outline" onClick={handleClearFilters}>
-                                Clear Filters
-                            </Button>
+                            <Button variant="outline" onClick={handleClearFilters}>Clear Filters</Button>
                         </div>
-
-                        {/* Quick Filters */}
                         <div className="flex gap-2 mt-4">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleQuickFilter('urgent')}
-                            >
+                            <Button variant="outline" size="sm" onClick={() => setPriorityFilter('urgent')}>
                                 Urgent Only
                             </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleQuickFilter('pending')}
-                            >
+                            <Button variant="outline" size="sm" onClick={() => setStatusFilter('pending')}>
                                 Pending Approval
                             </Button>
                         </div>
@@ -572,20 +491,13 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                                     {selectedRequests.length} request(s) selected
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Button size="sm" variant="outline" onClick={() => handleBulkApprove(true)}>
+                                    <Button size="sm" variant="outline" onClick={() => setBulkApproveOpen(true)}>
                                         Approve Selected
                                     </Button>
-                                    <Button size="sm" variant="destructive" onClick={handleBulkReject}>
+                                    <Button size="sm" variant="destructive" onClick={() => setBulkRejectOpen(true)}>
                                         Reject Selected
                                     </Button>
-                                    <Button size="sm" variant="outline">
-                                        Export Selected
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => setSelectedRequests([])}
-                                    >
+                                    <Button size="sm" variant="ghost" onClick={() => setSelectedRequests([])}>
                                         Clear Selection
                                     </Button>
                                 </div>
@@ -598,20 +510,14 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                 <Card>
                     <CardHeader>
                         <CardTitle>Requests ({sortedRequests.length})</CardTitle>
-                        <CardDescription>
-                            View and process employee document requests
-                        </CardDescription>
+                        <CardDescription>View and process employee document requests</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {sortedRequests.length === 0 ? (
                             <div className="text-center py-12">
                                 <FileQuestion className="mx-auto h-12 w-12 text-gray-400" />
-                                <h3 className="mt-2 text-sm font-semibold text-gray-900">
-                                    No requests found
-                                </h3>
-                                <p className="mt-1 text-sm text-gray-500">
-                                    Try adjusting your filters or search criteria
-                                </p>
+                                <h3 className="mt-2 text-sm font-semibold text-gray-900">No requests found</h3>
+                                <p className="mt-1 text-sm text-gray-500">Try adjusting your filters or search criteria</p>
                             </div>
                         ) : (
                             <div className="overflow-x-auto">
@@ -623,39 +529,20 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                                                     checked={
                                                         selectedRequests.length > 0 &&
                                                         selectedRequests.length ===
-                                                            sortedRequests.filter((r) => r.status === 'pending')
-                                                                .length
+                                                            sortedRequests.filter((r) => r.status === 'pending').length
                                                     }
                                                     onCheckedChange={handleSelectAll}
                                                 />
                                             </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                Request ID
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                Employee
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                Department
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                Document Type
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                Purpose
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                Priority
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                Request Date
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                Status
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                Actions
-                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Request ID</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Employee</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Document Type</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purpose</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Request Date</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y bg-white">
@@ -675,10 +562,7 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                                                         <Checkbox
                                                             checked={selectedRequests.includes(request.id)}
                                                             onCheckedChange={(checked) =>
-                                                                handleSelectRequest(
-                                                                    request.id,
-                                                                    checked as boolean
-                                                                )
+                                                                handleSelectRequest(request.id, checked as boolean)
                                                             }
                                                         />
                                                     )}
@@ -696,37 +580,24 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                                                         >
                                                             {request.employee_name}
                                                         </Link>
-                                                        <span className="text-xs text-gray-500">
-                                                            {request.employee_number}
-                                                        </span>
+                                                        <span className="text-xs text-gray-500">{request.employee_number}</span>
                                                     </div>
                                                 </td>
-                                                <td className="px-4 py-4 text-sm">
-                                                    {request.department}
-                                                </td>
+                                                <td className="px-4 py-4 text-sm">{request.department}</td>
                                                 <td className="px-4 py-4">
                                                     <div className="flex items-center gap-2">
                                                         <FileText className="h-4 w-4 text-gray-500" />
-                                                        <span className="font-medium text-sm">
-                                                            {request.document_type}
-                                                        </span>
+                                                        <span className="font-medium text-sm">{request.document_type}</span>
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-4 text-sm max-w-xs">
-                                                    <span title={request.purpose}>
-                                                        {truncateText(request.purpose, 50)}
-                                                    </span>
+                                                    <span title={request.purpose}>{truncateText(request.purpose, 50)}</span>
                                                 </td>
-                                                <td className="px-4 py-4">
-                                                    {getPriorityBadge(request.priority)}
-                                                </td>
+                                                <td className="px-4 py-4">{getPriorityBadge(request.priority)}</td>
                                                 <td className="px-4 py-4 text-sm">
                                                     <div
                                                         className="flex flex-col"
-                                                        title={format(
-                                                            new Date(request.requested_at),
-                                                            'PPpp'
-                                                        )}
+                                                        title={format(new Date(request.requested_at), 'PPpp')}
                                                     >
                                                         <span>{getRelativeTime(request.requested_at)}</span>
                                                     </div>
@@ -744,43 +615,30 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                                                         <DropdownMenuContent align="end">
                                                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                                             <DropdownMenuSeparator />
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleViewDetails(request)}
-                                                            >
+                                                            <DropdownMenuItem onClick={() => handleViewDetails(request)}>
                                                                 <Eye className="mr-2 h-4 w-4" />
                                                                 View Details
                                                             </DropdownMenuItem>
-                                                            {(request.status === 'pending' ||
-                                                                request.status === 'processing') && (
+                                                            {(request.status === 'pending' || request.status === 'processing') && (
                                                                 <PermissionGate permission="hr.documents.view">
-                                                                    <DropdownMenuItem
-                                                                        onClick={() =>
-                                                                            handleProcessRequest(request)
-                                                                        }
-                                                                    >
+                                                                    <DropdownMenuItem onClick={() => handleProcessRequest(request)}>
                                                                         <Settings className="mr-2 h-4 w-4" />
                                                                         Process Request
                                                                     </DropdownMenuItem>
                                                                 </PermissionGate>
                                                             )}
-                                                            {request.status === 'completed' &&
-                                                                request.generated_document_path && (
-                                                                    <DropdownMenuItem
-                                                                        onClick={() => handleDownloadDocument(request)}
-                                                                    >
-                                                                        <Download className="mr-2 h-4 w-4" />
-                                                                        Download Document
-                                                                    </DropdownMenuItem>
-                                                                )}
-                                                            {request.status === 'rejected' &&
-                                                                request.rejection_reason && (
-                                                                    <DropdownMenuItem
-                                                                        onClick={() => handleViewDetails(request)}
-                                                                    >
-                                                                        <AlertCircle className="mr-2 h-4 w-4" />
-                                                                        View Rejection Reason
-                                                                    </DropdownMenuItem>
-                                                                )}
+                                                            {request.status === 'completed' && request.generated_document_path && (
+                                                                <DropdownMenuItem onClick={() => handleDownloadDocument(request)}>
+                                                                    <Download className="mr-2 h-4 w-4" />
+                                                                    Download Document
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                            {request.status === 'rejected' && request.rejection_reason && (
+                                                                <DropdownMenuItem onClick={() => handleViewDetails(request)}>
+                                                                    <AlertCircle className="mr-2 h-4 w-4" />
+                                                                    View Rejection Reason
+                                                                </DropdownMenuItem>
+                                                            )}
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </td>
@@ -799,22 +657,80 @@ export default function RequestsIndex({ requests: initialRequests, statistics: i
                 <>
                     <ProcessRequestModal
                         open={isProcessModalOpen}
-                        onClose={() => {
-                            setIsProcessModalOpen(false);
-                            setSelectedRequest(null);
-                        }}
+                        onClose={() => { setIsProcessModalOpen(false); setSelectedRequest(null); }}
                         request={selectedRequest}
                     />
                     <RequestDetailsModal
                         open={isDetailsModalOpen}
-                        onClose={() => {
-                            setIsDetailsModalOpen(false);
-                            setSelectedRequest(null);
-                        }}
+                        onClose={() => { setIsDetailsModalOpen(false); setSelectedRequest(null); }}
                         request={selectedRequest}
                     />
                 </>
             )}
+
+            {/* Bulk Approve Confirmation */}
+            <AlertDialog open={bulkApproveOpen} onOpenChange={setBulkApproveOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Approve {selectedRequests.length} Request(s)?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will approve all selected pending requests and notify the employees. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isBulkSubmitting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmBulkApprove} disabled={isBulkSubmitting}>
+                            {isBulkSubmitting ? 'Approving...' : 'Approve All'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Bulk Reject Dialog */}
+            <Dialog open={bulkRejectOpen} onOpenChange={(open) => !isBulkSubmitting && setBulkRejectOpen(open)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <XCircle className="h-5 w-5 text-destructive" />
+                            Reject {selectedRequests.length} Request(s)
+                        </DialogTitle>
+                        <DialogDescription>
+                            Provide a reason that will be sent to all affected employees.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 py-2">
+                        <Label htmlFor="bulk-reject-reason">
+                            Rejection Reason <span className="text-destructive">*</span>
+                        </Label>
+                        <Textarea
+                            id="bulk-reject-reason"
+                            placeholder="Provide a reason for rejecting these requests..."
+                            rows={4}
+                            value={bulkRejectReason}
+                            onChange={(e) => setBulkRejectReason(e.target.value)}
+                            disabled={isBulkSubmitting}
+                            className="resize-none"
+                        />
+                        <p className="text-xs text-muted-foreground">Minimum 10 characters.</p>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => { setBulkRejectOpen(false); setBulkRejectReason(''); }}
+                            disabled={isBulkSubmitting}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={confirmBulkReject}
+                            disabled={bulkRejectReason.trim().length < 10 || isBulkSubmitting}
+                        >
+                            {isBulkSubmitting ? 'Rejecting...' : 'Reject All'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }

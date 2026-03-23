@@ -136,18 +136,6 @@ export function NavPayroll() {
 
     const reportsItems = [
         {
-            title: 'Payroll Register',
-            icon: ClipboardList,
-            href: '/payroll/reports/register',
-            enabled: true,
-        },
-        {
-            title: 'Government Reports',
-            icon: Building2,
-            href: '/payroll/reports/government',
-            enabled: true,
-        },
-        {
             title: 'Analytics',
             icon: BarChart3,
             href: '/payroll/reports/analytics',

@@ -84,18 +84,7 @@ export const BIRReportsList: React.FC<BIRReportsListProps> = ({
         return kb > 1024 ? `${(kb / 1024).toFixed(2)} MB` : `${kb.toFixed(2)} KB`;
     };
 
-    const handleDownload = (report: GeneratedBIRReport) => {
-        setIsDownloading(report.id.toString());
-        router.get(
-            `/payroll/government/bir/download/${report.id}`,
-            {},
-            {
-                onFinish: () => {
-                    setIsDownloading(null);
-                },
-            }
-        );
-    };
+    // Download handled by anchor tag for browser compatibility
 
     const handleViewDetails = (report: GeneratedBIRReport) => {
         setSelectedReport(report);
@@ -170,17 +159,17 @@ export const BIRReportsList: React.FC<BIRReportsListProps> = ({
                                                 </p>
                                             </div>
                                             <div className="flex gap-2 pt-2">
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => handleDownload(report)}
-                                                    disabled={isDownloading === report.id.toString()}
+                                                <a
+                                                    href={`/payroll/government/bir/download/${report.id}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{ flex: 1 }}
                                                 >
-                                                    <Download className="w-3 h-3 mr-1" />
-                                                    {isDownloading === report.id.toString()
-                                                        ? 'Downloading...'
-                                                        : 'Download'}
-                                                </Button>
+                                                    <Button size="sm" variant="outline" className="w-full">
+                                                        <Download className="w-3 h-3 mr-1" />
+                                                        Download
+                                                    </Button>
+                                                </a>
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
@@ -260,24 +249,15 @@ export const BIRReportsList: React.FC<BIRReportsListProps> = ({
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">
                                                     {report.file_name && (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            onClick={() => handleDownload({
-                                                                id: report.id,
-                                                                report_type: report.type,
-                                                                period: report.period_name,
-                                                                file_name: report.file_name || '',
-                                                                file_path: report.file_name || '',
-                                                                file_size: report.file_size || 0,
-                                                                generated_at: report.generated_at || '',
-                                                                submitted: !!report.submitted_at,
-                                                                submission_status: 'pending',
-                                                                rejection_reason: null,
-                                                            })}
+                                                        <a
+                                                            href={`/payroll/government/bir/download/${report.id}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
                                                         >
-                                                            <Download className="w-4 h-4" />
-                                                        </Button>
+                                                            <Button size="sm" variant="ghost">
+                                                                <Download className="w-4 h-4" />
+                                                            </Button>
+                                                        </a>
                                                     )}
                                                     {report.status === 'generated' && !report.submitted_at && (
                                                         <Button
@@ -355,15 +335,17 @@ export const BIRReportsList: React.FC<BIRReportsListProps> = ({
                             Close
                         </Button>
                         {selectedReport && (
-                            <Button
-                                onClick={() => {
-                                    handleDownload(selectedReport);
-                                    setShowDetails(false);
-                                }}
+                            <a
+                                href={`/payroll/government/bir/download/${selectedReport.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => setShowDetails(false)}
                             >
-                                <Download className="w-4 h-4 mr-2" />
-                                Download
-                            </Button>
+                                <Button>
+                                    <Download className="w-4 h-4 mr-2" />
+                                    Download
+                                </Button>
+                            </a>
                         )}
                     </DialogFooter>
                 </DialogContent>

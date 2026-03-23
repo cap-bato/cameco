@@ -19,7 +19,7 @@ import {
     Search,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-// import { router } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
 
 interface BIR2316GeneratorProps {
     period?: BIRPeriod;
@@ -32,8 +32,12 @@ interface BIR2316GeneratorProps {
  * Certificate of Compensation Income Withheld on Wages
 import { BIRPeriod, BIR2316Certificate } from '@/types/bir-pages';
  */
-export const BIR2316Generator: React.FC<BIR2316GeneratorProps> = ({ certificates = [] }) => {
+export const BIR2316Generator: React.FC<BIR2316GeneratorProps> = ({ certificates = [], periodId }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [generateError, setGenerateError] = useState<string | null>(null);
+    const [generateSuccess, setGenerateSuccess] = useState(false);
+    // Inertia router is now imported at the top
 
     // Use real certificates from props (default empty array)
     const filteredCertificates = certificates.filter((cert) =>
@@ -174,14 +178,61 @@ export const BIR2316Generator: React.FC<BIR2316GeneratorProps> = ({ certificates
                 <Card>
                     <CardContent className="pt-6">
                         <div className="flex flex-col md:flex-row gap-3">
-                            <Button disabled className="flex-1">
-                                Generate (Coming Soon)
+                            <Button
+                                onClick={async () => {
+                                    setIsGenerating(true);
+                                    setGenerateError(null);
+                                    setGenerateSuccess(false);
+                                    try {
+                                        await router.post(
+                                            `/payroll/government/bir/generate-2316/${encodeURIComponent((periodId || '').toString())}`,
+                                            {},
+                                            {
+                                                onSuccess: () => {
+                                                    setGenerateSuccess(true);
+                                                    setTimeout(() => setGenerateSuccess(false), 4000);
+                                                    // Refresh the page to show new certificates
+                                                    router.reload({ only: ['bir_2316_certificates'] });
+                                                },
+                                                onError: (errors: any) => {
+                                                    setGenerateError(errors || 'Failed to generate certificates');
+                                                },
+                                                onFinish: () => setIsGenerating(false),
+                                            }
+                                        );
+                                    } catch (err: any) {
+                                        setGenerateError(err?.message || 'Failed to generate certificates');
+                                        setIsGenerating(false);
+                                    }
+                                }}
+                                disabled={isGenerating}
+                                className="flex-1"
+                            >
+                                {isGenerating ? 'Generating...' : 'Generate'}
                             </Button>
-                            <Button variant="outline" disabled className="flex-1">
+                            <a
+                                href={`/payroll/government/bir/download-2316/${encodeURIComponent((periodId || '').toString())}`}
+                                className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                download
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ textAlign: 'center', textDecoration: 'none' }}
+                            >
                                 <Download className="w-4 h-4 mr-2" />
                                 Download Certificates
-                            </Button>
+                            </a>
                         </div>
+                        {/* Generation status messages */}
+                        {generateError && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 p-3 mt-4">
+                                <p className="text-sm text-red-800">{generateError}</p>
+                            </div>
+                        )}
+                        {generateSuccess && (
+                            <div className="rounded-lg border border-green-200 bg-green-50 p-3 mt-4">
+                                <p className="text-sm text-green-800">✓ Certificates generated successfully</p>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 

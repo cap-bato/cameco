@@ -43,8 +43,8 @@ export function PayslipGenerator({
     employees,
     isLoading = false,
 }: PayslipGeneratorProps) {
-    const [periodId, setPeriodId] = useState<number | null>(null);
-    const [distributionMethod, setDistributionMethod] = useState<'email' | 'portal' | 'printed'>('email');
+    const [periodId, setPeriodId] = useState<string>('');
+    const [distributionMethod, setDistributionMethod] = useState<'email' | 'portal' | 'print'>('email');
     const [regenerate, setRegenerate] = useState(false);
     const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
     const [generationScope, setGenerationScope] = useState<'all' | 'selected'>('all');
@@ -55,7 +55,7 @@ export function PayslipGenerator({
         }
 
         const data: PayslipGenerationRequest = {
-            period_id: periodId,
+            period_id: Number(periodId),
             distribution_method: distributionMethod,
             regenerate,
         };
@@ -83,7 +83,7 @@ export function PayslipGenerator({
         }
     };
 
-    const selectedPeriod = periods.find((p) => p.id === periodId);
+    const selectedPeriod = periods.find((p) => p.id === Number(periodId));
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -103,8 +103,8 @@ export function PayslipGenerator({
                     <div className="space-y-2">
                         <Label htmlFor="period">Payroll Period *</Label>
                         <Select
-                            value={periodId?.toString()}
-                            onValueChange={(value) => setPeriodId(Number(value))}
+                            value={periodId}
+                            onValueChange={(value) => setPeriodId(value)}
                             disabled={isLoading}
                         >
                             <SelectTrigger id="period">
@@ -131,7 +131,7 @@ export function PayslipGenerator({
                         <Label>Distribution Method *</Label>
                         <RadioGroup
                             value={distributionMethod}
-                            onValueChange={(value: string) => setDistributionMethod(value as 'email' | 'portal' | 'printed')}
+                            onValueChange={(value: string) => setDistributionMethod(value as 'email' | 'portal' | 'print')}
                             disabled={isLoading}
                         >
                             <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-gray-50">
@@ -161,8 +161,8 @@ export function PayslipGenerator({
                             </div>
 
                             <div className="flex items-center space-x-2 rounded-lg border p-3 hover:bg-gray-50">
-                                <RadioGroupItem value="printed" id="printed" />
-                                <Label htmlFor="printed" className="flex flex-1 cursor-pointer items-center gap-2">
+                                <RadioGroupItem value="print" id="print" />
+                                <Label htmlFor="print" className="flex flex-1 cursor-pointer items-center gap-2">
                                     <Printer className="h-4 w-4 text-gray-600" />
                                     <div className="flex-1">
                                         <div className="font-medium">Print Queue</div>

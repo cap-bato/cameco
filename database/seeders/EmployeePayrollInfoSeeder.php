@@ -97,6 +97,55 @@ class EmployeePayrollInfoSeeder extends Seeder
             $created++;
         }
 
+        // Explicitly ensure payroll info for special employees
+        $specialEmployeeNumbers = [
+            'EMP-HR-0001', // HR Manager
+            'EMP-HR-0002', // HR Staff
+            'PAY-2025-001', // Payroll Officer
+            'EMP-OA-0001', // Office Admin
+            'EMP-SA-0001', // Superadmin
+        ];
+        foreach ($specialEmployeeNumbers as $i => $empNum) {
+            $employee = \App\Models\Employee::where('employee_number', $empNum)->first();
+            if ($employee && !EmployeePayrollInfo::where('employee_id', $employee->id)->where('is_active', true)->whereNull('end_date')->exists()) {
+                $preset = self::SALARY_PRESETS[$i % count(self::SALARY_PRESETS)];
+                EmployeePayrollInfo::create([
+                    'employee_id' => $employee->id,
+                    'salary_type' => 'monthly',
+                    'basic_salary' => $preset['basic_salary'],
+                    'daily_rate' => $preset['daily_rate'],
+                    'hourly_rate' => $preset['hourly_rate'],
+                    'payment_method' => 'cash',
+                    'tax_status' => 'S',
+                    'rdo_code' => '055',
+                    'withholding_tax_exemption' => 0,
+                    'is_tax_exempt' => false,
+                    'is_substituted_filing' => false,
+                    'sss_number' => sprintf('33-%07d-%d', $employee->id * 1000 + $i, mt_rand(0, 9)),
+                    'philhealth_number' => sprintf('%012d', $employee->id * 100000 + $i),
+                    'pagibig_number' => sprintf('%012d', $employee->id * 200000 + $i),
+                    'tin_number' => sprintf('%09d-%03d', $employee->id * 1000000, mt_rand(0, 999)),
+                    'sss_bracket' => $this->sss($preset['basic_salary']),
+                    'is_sss_voluntary' => false,
+                    'philhealth_is_indigent' => false,
+                    'pagibig_employee_rate' => 2.00,
+                    'bank_name' => null,
+                    'bank_code' => null,
+                    'bank_account_number' => null,
+                    'bank_account_name' => null,
+                    'is_entitled_to_rice' => true,
+                    'is_entitled_to_uniform' => false,
+                    'is_entitled_to_laundry' => false,
+                    'is_entitled_to_medical' => true,
+                    'effective_date' => '2026-01-01',
+                    'end_date' => null,
+                    'is_active' => true,
+                    'created_by' => $creator->id,
+                ]);
+                $created++;
+            }
+        }
+
         $this->command->info("  -> Created: {$created}, Skipped: {$skipped}");
     }
 

@@ -208,8 +208,8 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::get('/payments/payslips', [PayslipsController::class, 'index'])->name('payslips.index');
         Route::post('/payments/payslips/generate', [PayslipsController::class, 'generate'])->name('payslips.generate');
         Route::post('/payments/payslips/distribute', [PayslipsController::class, 'distribute'])->name('payslips.distribute');
-        Route::get('/payments/payslips/{id}/preview', [PayslipsController::class, 'preview'])->name('payslips.preview');
-        Route::get('/payments/payslips/{id}/download', [PayslipsController::class, 'download'])->name('payslips.download');
+        Route::get('/payments/payslips/{id}/preview',  [PayslipsController::class, 'preview'])->name('payslips.preview');
+    Route::get('/payments/payslips/{id}/download', [PayslipsController::class, 'download'])->name('payslips.download');
         Route::post('/payments/payslips/{id}/email', [PayslipsController::class, 'email'])->name('payslips.email');
         Route::get('/payments/payslips/{id}/print', [PayslipsController::class, 'print'])->name('payslips.print');
         Route::post('/payments/payslips/bulk-download', [PayslipsController::class, 'bulkDownload'])->name('payslips.bulk-download');
