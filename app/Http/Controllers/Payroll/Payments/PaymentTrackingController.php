@@ -29,9 +29,11 @@ class PaymentTrackingController extends Controller
         // Apply filters conditionally
         $query = $allPaymentsQuery
             ->when($request->search, function ($q, $search) {
-                return $q->whereHas('employee', function ($emp) use ($search) {
-                    $emp->whereRaw("CONCAT(profile_data->>'first_name', ' ', profile_data->>'last_name') ILIKE ?", ["%{$search}%"])
-                        ->orWhere('employee_number', 'ILIKE', "%{$search}%");
+                return $q->whereHas('employee.profile', function ($profile) use ($search) {
+                    $profile->whereRaw("CONCAT(first_name, ' ', last_name) ILIKE ?", ["%{$search}%"]);
+                })
+                ->orWhereHas('employee', function ($emp) use ($search) {
+                    $emp->where('employee_number', 'ILIKE', "%{$search}%");
                 });
             })
             ->when($request->period_id && $request->period_id !== 'all', function ($q, $periodId) {
