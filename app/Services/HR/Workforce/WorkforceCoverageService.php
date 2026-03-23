@@ -471,20 +471,25 @@ class WorkforceCoverageService
     }
 
     /**
-     * Calculate coverage percentage if a specific employee takes leave
-     * Used by leave approval system to check if coverage threshold is met
+     * Calculate coverage percentage with proportional impact for half-day leaves
+     * 
+     * Uses SUM of days_requested instead of COUNT of employees for accurate coverage
+     * calculations. Half-day leaves (0.5 days) count as 0.5 impact, full-day leaves
+     * (1.0 day) count as 1.0 impact. This ensures proper proportional impact on coverage.
      * 
      * @param int $departmentId
      * @param Carbon|string $startDate
      * @param Carbon|string $endDate
      * @param int $employeeId
+     * @param float $daysRequested Decimal days (e.g., 0.5 for half-day, 1.0 for full-day)
      * @return float Coverage percentage (0-100)
      */
     public function calculateCoverageWithLeave(
         int $departmentId,
         $startDate,
         $endDate,
-        int $employeeId
+        int $employeeId,
+        float $daysRequested = 1.0
     ): float {
         $start = $startDate instanceof Carbon ? $startDate : Carbon::parse($startDate);
         $end = $endDate instanceof Carbon ? $endDate : Carbon::parse($endDate);
@@ -504,27 +509,28 @@ class WorkforceCoverageService
             return 0;
         }
 
-        // Count employees already on leave during this period
-        $employeesOnLeave = DB::table('leave_requests')
-            ->where('department_id', $departmentId)
-            ->where('status', 'approved')
+        // Calculate total employee-days on leave using SUM of days_requested
+        // This provides proportional impact: 0.5 for half-day, 1.0 for full-day
+        $employeeDaysOnLeave = DB::table('leave_requests')
+            ->join('employees', 'leave_requests.employee_id', '=', 'employees.id')
+            ->where('employees.department_id', $departmentId)
+            ->where('leave_requests.status', 'approved')
             ->where(function ($query) use ($start, $end) {
-                $query->whereBetween('start_date', [$start, $end])
-                    ->orWhereBetween('end_date', [$start, $end])
+                $query->whereBetween('leave_requests.start_date', [$start, $end])
+                    ->orWhereBetween('leave_requests.end_date', [$start, $end])
                     ->orWhere(function ($q) use ($start, $end) {
-                        $q->where('start_date', '<=', $start)
-                          ->where('end_date', '>=', $end);
+                        $q->where('leave_requests.start_date', '<=', $start)
+                          ->where('leave_requests.end_date', '>=', $end);
                     });
             })
-            ->distinct('employee_id')
-            ->count('employee_id');
+            ->sum('leave_requests.days_requested');
 
-        // Add 1 for the employee requesting leave
-        $employeesOnLeave += 1;
+        // Add the requesting employee's proportional days
+        $totalEmployeeDaysOnLeave = (float)$employeeDaysOnLeave + $daysRequested;
 
-        // Calculate coverage
-        $availableEmployees = $totalEmployees - $employeesOnLeave;
-        $coveragePercentage = ($availableEmployees / $totalEmployees) * 100;
+        // Calculate coverage: (TotalEmployees - EmployeeDaysOnLeave) / TotalEmployees * 100
+        $availableEmployeeEquivalents = $totalEmployees - $totalEmployeeDaysOnLeave;
+        $coveragePercentage = ($availableEmployeeEquivalents / $totalEmployees) * 100;
 
         return round($coveragePercentage, 2);
     }

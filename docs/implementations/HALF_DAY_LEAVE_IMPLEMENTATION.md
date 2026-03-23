@@ -325,38 +325,38 @@ This approach:
 **Objective:** Ensure all validation rules and business logic support half-day leaves under Sick Leave.
 
 ### Task 5.1: Update Advance Notice Validation
-- [ ] **File:** `app/Services/HR/Leave/LeaveApprovalService.php` (or validation location)
-- [ ] **Review:**
+- [x] **File:** `app/Services/HR/Leave/LeaveApprovalService.php` (or validation location)
+- [x] **Review:**
   - Advance notice rules should apply equally to half-day leaves
   - Half-day leave still counts toward minimum advance notice
   - No special exceptions needed
 
-- [ ] **Validate:** Half-day requests must meet advance notice requirements
+- [x] **Validate:** Half-day requests must meet advance notice requirements
 
 ### Task 5.2: Update Balance Validation Logic
-- [ ] **File:** Backend validation in controllers (already implemented, verify)
-- [ ] **Verify:**
+- [x] **File:** Backend validation in controllers (already implemented, verify)
+- [x] **Verify:**
   - Half-day requests check balance for 0.5 days minimum
   - Cannot request more than remaining balance (including partial)
   - Emergency leave exceptions apply to half-days too
 
-- [ ] **Validate:** Insufficient balance errors show correct amount (0.5)
+- [x] **Validate:** Insufficient balance errors show correct amount (0.5)
 
 ### Task 5.3: Update Auto-Approval Rules
-- [ ] **File:** `app/Services/HR/Leave/LeaveApprovalService.php`
-- [ ] **Verify:**
+- [x] **File:** `app/Services/HR/Leave/LeaveApprovalService.php`
+- [x] **Verify:**
   - Half-day leaves (0.5 days) qualify for auto-approval (≤2 days threshold)
   - Logic: `$request->days_requested <= 2` covers half-days
 
-- [ ] **Validate:** Half-day leaves are auto-approved when conditions met
+- [x] **Validate:** Half-day leaves are auto-approved when conditions met
 
 ### Task 5.4: Update Coverage Calculation Service
-- [ ] **File:** `app/Services/HR/Workforce/WorkforceCoverageService.php`
-- [ ] **Changes:**
+- [x] **File:** `app/Services/HR/Workforce/WorkforceCoverageService.php`
+- [x] **Changes:**
   - Coverage impact for half-day should be proportional (50% impact vs full day)
   - Review: Does service already handle decimal days correctly? (Yes, likely)
 
-- [ ] **Validate:** Coverage percentage calculations are accurate for 0.5 days
+- [x] **Validate:** Coverage percentage calculations are accurate for 0.5 days
 
 ---
 
