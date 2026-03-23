@@ -99,3 +99,90 @@ When working on a GitHub issue:
 Two GitHub Actions workflows run on push/PR to `main`/`develop`:
 - **lint.yml** — PHP Pint, Prettier, ESLint
 - **tests.yml** — Full PHPUnit suite (PHP 8.4, Node 22, xdebug coverage)
+
+## Work Log
+
+### Phase 4, Task 4.2 — Employee Create Leave Request Page ✅ COMPLETE
+**Date:** December 19, 2024  
+
+**Objective:** Update the Employee Create Leave Request page to support leave request variants (full day, half-day AM, half-day PM) for Sick Leave.
+
+**Implementation:**
+1. Added `LeaveVariant` interface to type the variant data
+2. Added `leaveVariants` prop to `CreateRequestProps` and destructured in component
+3. Created `selectedVariant` state and integrated into days calculation logic
+4. Added conditional rendering of Leave Duration selector (only shows for Sick Leave)
+5. Implemented variant options: Full Day (1.0 days), Half Day AM (0.5 days), Half Day PM (0.5 days)
+6. Added help text explaining half-day leave impact
+7. Updated form submission to include variant data for half-day requests
+8. Verified `leaveVariants` passed from Employee LeaveController
+
+**Files Modified:**
+- [resources/js/pages/Employee/Leave/CreateRequest.tsx](resources/js/pages/Employee/Leave/CreateRequest.tsx)
+
+**Verification Script:** [verify-phase4-task4-2.php](verify-phase4-task4-2.php) — All 12 checks passed ✅
+
+---
+
+### Phase 4, Task 4.3 — Leave Balances Display Pages ✅ COMPLETE
+**Date:** December 19, 2024  
+
+**Objective:** Update Employee and HR leave balances display pages to show variant information for half-day leave requests.
+
+**Implementation:**
+
+**Employee Leave Balances Page:**
+1. Added condition to detect Sick Leave (SL code)
+2. Added clarification note: "Includes full day and half-day options"
+3. Explains half-day AM/PM options with 0.5 day deduction
+4. Displayed with visual indicator (💡) for better visibility
+
+**HR Leave Requests Page:**
+1. Updated `LeaveRequest` interface to include `leave_type_variant` property
+2. Created `getVariantLabel()` helper function to map variant codes to readable labels
+3. Created `formatLeaveTypeWithVariant()` function to display "Leave Type (Variant)"
+4. Updated table display to show variant in parentheses
+
+**HR Leave Request Detail Modal:**
+1. Updated modal interface to include `leave_type_variant` property
+2. Added variant formatting helper functions
+3. Updated modal display to show variant information alongside leave type
+
+**Files Modified:**
+- [resources/js/pages/Employee/Leave/Balances.tsx](resources/js/pages/Employee/Leave/Balances.tsx)
+- [resources/js/pages/HR/Leave/Requests.tsx](resources/js/pages/HR/Leave/Requests.tsx)
+- [resources/js/components/hr/leave-request-action-modal.tsx](resources/js/components/hr/leave-request-action-modal.tsx)
+
+**Verification Script:** [verify-phase4-task4-3.php](verify-phase4-task4-3.php) — All 10 checks passed ✅
+
+---
+
+### Half-Day Leave UX Fix — Single Day Selection Only ✅ COMPLETE
+**Date:** December 19, 2024  
+
+**Issue Identified:** 
+When users selected a half-day variant (AM or PM), they could still set different start and end dates, allowing illogical requests like "half-day AM on Monday and half-day PM on Friday" spanning multiple days.
+
+**Solution Implemented:**
+Enforced single-day selection when half-day variant is active across all leave request pages.
+
+**HR Leave CreateRequest Page:**
+1. Added `isHalfDayVariant` computed flag to detect half-day selection
+2. Added `useEffect` to automatically sync end_date to start_date when variant changes
+3. Updated label from "Start Date" to "Leave Date" when half-day selected
+4. Hidden the end date input field when half-day variant is active
+5. Added visual indicator showing variant (Half Day AM or PM) with day count
+6. Added helper text: "Half-day leave is for a single day only"
+
+**Employee Leave CreateRequest Page:**
+1. Added auto-sync `useEffect`: when selectedVariant is half-day, endDate = startDate
+2. Dynamic labels: "Leave Date" instead of "Start Date" for half-day requests
+3. Conditional rendering: end date input hidden for half-day variants
+4. Visual display of variant with days (0.5 days)
+5. Helper text explaining single-day nature of half-day leave
+
+**Files Modified:**
+- [resources/js/pages/HR/Leave/CreateRequest.tsx](resources/js/pages/HR/Leave/CreateRequest.tsx)
+- [resources/js/pages/Employee/Leave/CreateRequest.tsx](resources/js/pages/Employee/Leave/CreateRequest.tsx)
+
+**Verification Script:** [verify-half-day-single-date.php](verify-half-day-single-date.php) — All 12 checks passed ✅

@@ -43,15 +43,15 @@ class LeaveApprovalService
             return false;
         }
 
-        $duration = $this->calculateDuration($leaveRequest->start_date, $leaveRequest->end_date);
-        if ($duration < 1 || $duration > 2) {
+        // Use days_requested (including 0.5 for half-days) instead of calendar days
+        if (!$leaveRequest->isAutoApprovable()) {
             return false;
         }
 
         if (!$this->balanceService->hasSufficientBalance(
             $leaveRequest->employee_id,
             $leaveRequest->leave_policy_id,
-            $duration
+            $leaveRequest->days_requested
         )) {
             return false;
         }
@@ -87,7 +87,8 @@ class LeaveApprovalService
             $department->id,
             $leaveRequest->start_date,
             $leaveRequest->end_date,
-            $employee->id
+            $employee->id,
+            $leaveRequest->days_requested
         );
 
         $minCoverage = $department->min_coverage_percentage ?? 75.00;
@@ -110,18 +111,19 @@ class LeaveApprovalService
      */
     public function getApprovalRouteForRequest(LeaveRequest $leaveRequest): array
     {
-        $duration = $this->calculateDuration($leaveRequest->start_date, $leaveRequest->end_date);
+        // Use days_requested (including 0.5 for half-days) instead of calendar days
         $isHRManager = $leaveRequest->employee->user?->hasRole('HR Manager') ?? false;
 
-        if ($duration >= 1 && $duration <= 2) {
-            // Short leave that wasn't auto-approved — needs HR Manager
+        if ($leaveRequest->isAutoApprovable()) {
+            // Short leave (1-2 days) that wasn't auto-approved — needs HR Manager
             return [
                 'route' => 'manager',
                 'required_approvers' => ['HR Manager'],
             ];
         }
 
-        if ($duration >= 3 && $duration <= 5) {
+        if ($leaveRequest->requiresManagerApproval() && !$leaveRequest->requiresAdminApproval()) {
+            // Medium leave (3-5 days)
             if ($isHRManager) {
                 return [
                     'route' => 'admin',
@@ -160,10 +162,10 @@ class LeaveApprovalService
      */
     public function determineApprovalRoute(LeaveRequest $leaveRequest): array
     {
-        $duration = $this->calculateDuration($leaveRequest->start_date, $leaveRequest->end_date);
+        // Use days_requested (including 0.5 for half-days) instead of calendar days
         $isHRManager = $leaveRequest->employee->user?->hasRole('HR Manager') ?? false;
 
-        if ($duration >= 1 && $duration <= 2) {
+        if ($leaveRequest->isAutoApprovable()) {
             if ($this->canAutoApprove($leaveRequest)) {
                 return [
                     'route' => 'auto',
@@ -179,7 +181,7 @@ class LeaveApprovalService
             ];
         }
 
-        if ($duration >= 3 && $duration <= 5) {
+        if ($leaveRequest->requiresManagerApproval() && !$leaveRequest->requiresAdminApproval()) {
             if ($isHRManager) {
                 return [
                     'route' => 'admin',
@@ -324,7 +326,8 @@ class LeaveApprovalService
                 $leaveRequest->employee->department_id,
                 $leaveRequest->start_date,
                 $leaveRequest->end_date,
-                $leaveRequest->employee_id
+                $leaveRequest->employee_id,
+                $leaveRequest->days_requested
             );
 
             $leaveRequest->update([
@@ -334,11 +337,11 @@ class LeaveApprovalService
                 'manager_approved_at' => now(),
             ]);
 
-            $duration = $this->calculateDuration($leaveRequest->start_date, $leaveRequest->end_date);
+            // Use days_requested (including 0.5 for half-days) instead of calendar days
             $this->balanceService->deductBalance(
                 $leaveRequest->employee_id,
                 $leaveRequest->leave_policy_id,
-                $duration
+                $leaveRequest->days_requested
             );
         });
 

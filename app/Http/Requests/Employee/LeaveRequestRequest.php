@@ -72,6 +72,12 @@ class LeaveRequestRequest extends FormRequest
                 'max:5120', // 5MB in kilobytes
             ],
 
+            // Leave type variant (for Sick Leave only)
+            'leave_type_variant' => [
+                'nullable',
+                'in:half_am,half_pm',
+            ],
+
             // Contact information during leave (optional)
             'contact_during_leave' => [
                 'nullable',
@@ -159,6 +165,24 @@ class LeaveRequestRequest extends FormRequest
     {
         $validator->after(function ($validator) {
             // Additional cross-field validation
+            
+            // Validate variant is only used with Sick Leave
+            if ($this->has('leave_policy_id') && $this->has('leave_type_variant')) {
+                $policy = \App\Models\LeavePolicy::find($this->input('leave_policy_id'));
+                $variant = $this->input('leave_type_variant');
+                
+                if ($variant && $policy && $policy->code !== 'SL') {
+                    $validator->errors()->add(
+                        'leave_type_variant',
+                        'Leave variants (Half Day AM/PM) are only available for Sick Leave. Please change the leave type or remove the variant selection.'
+                    );
+                }
+                
+                if (!$variant && $policy && $policy->code === 'SL') {
+                    // Variant is optional but provide hint when SL is selected
+                    // No validation error needed, variant is nullable
+                }
+            }
             
             // Validate minimum advance notice (3 days minimum, except emergency/sick leave)
             if ($this->has('start_date') && $this->has('leave_policy_id')) {

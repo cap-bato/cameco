@@ -23,6 +23,7 @@ interface LeaveRequest {
     employee_number: string;
     department: string;
     leave_type: string;
+    leave_type_variant?: string | null;
     policy_days?: number | null;
     start_date: string;
     end_date: string;
@@ -54,6 +55,22 @@ const breadcrumbs = [
     { title: 'Leave Management', href: '#' },
     { title: 'Requests', href: '/hr/leave/requests' },
 ];
+
+function getVariantLabel(variant: string | null | undefined): string {
+    const labels: Record<string, string> = {
+        'half_am': 'Half Day AM',
+        'half_pm': 'Half Day PM',
+    };
+    return labels[variant || ''] || '';
+}
+
+function formatLeaveTypeWithVariant(leaveType: string, variant: string | null | undefined): string {
+    const variantLabel = getVariantLabel(variant);
+    if (variantLabel) {
+        return `${leaveType} (${variantLabel})`;
+    }
+    return leaveType;
+}
 
 function getStatusColor(status: string): string {
     const colorMap: Record<string, string> = {
@@ -242,7 +259,7 @@ export default function LeaveRequests({ requests, meta }: LeaveRequestsProps) {
                                                         <td className="py-2 px-2 font-medium">{request.employee_name || 'N/A'}</td>
                                                         <td className="py-2 px-2">
                                                             <div className="flex flex-col">
-                                                                <span>{request.leave_type || 'N/A'}</span>
+                                                                <span>{formatLeaveTypeWithVariant(request.leave_type || 'N/A', request.leave_type_variant)}</span>
                                                                 <small className="text-xs text-muted-foreground">{Number(request.days_requested) === 1 ? `${request.days_requested} day` : `${request.days_requested} days`}</small>
                                                             </div>
                                                         </td>

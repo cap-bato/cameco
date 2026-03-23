@@ -23,6 +23,10 @@ class StoreLeaveRequestRequest extends FormRequest
             'end_date' => 'required|date|after_or_equal:start_date',
             'reason' => 'required|string|max:1000',
             'hr_notes' => 'required|string|max:1000',
+            // Leave type variant (for Sick Leave only)
+            'leave_type_variant' => 'nullable|in:half_am,half_pm',
+            // Auto-approve flag - HR staff can auto-approve when creating
+            'auto_approve' => 'nullable|boolean',
         ];
     }
 
@@ -32,5 +36,29 @@ class StoreLeaveRequestRequest extends FormRequest
         if (!$this->filled('leave_policy_id') && $this->filled('leave_type_id')) {
             $this->merge([ 'leave_policy_id' => $this->input('leave_type_id') ]);
         }
+    }
+
+    /**
+     * Configure the validator instance.
+     * 
+     * Validates variant constraints:
+     * - Variant only allowed with Sick Leave (SL policy code)
+     */
+    public function withValidator($validator)
+    {
+        $validator->after(function ($validator) {
+            // Validate variant is only used with Sick Leave
+            if ($this->has('leave_policy_id') && $this->has('leave_type_variant')) {
+                $policy = \App\Models\LeavePolicy::find($this->input('leave_policy_id'));
+                $variant = $this->input('leave_type_variant');
+                
+                if ($variant && $policy && $policy->code !== 'SL') {
+                    $validator->errors()->add(
+                        'leave_type_variant',
+                        'Leave variants (Half Day AM/PM) are only available for Sick Leave. Please change the leave type or remove the variant selection.'
+                    );
+                }
+            }
+        });
     }
 }

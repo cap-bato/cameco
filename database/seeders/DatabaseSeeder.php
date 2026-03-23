@@ -167,6 +167,7 @@ class DatabaseSeeder extends Seeder
         // ── STAGE 16: Workforce & scheduling ──────────────────────────────
         $this->call([
             WorkforceSeeder::class,
+            WorkForceCoverageSeeder::class,
         ]);
 
         if (class_exists(OffboardingSeeder::class)) {

@@ -79,12 +79,15 @@ class LeaveRequestSeeder extends Seeder
             if ($faker->boolean(60)) {
                 $policy = $policies['SL'] ?? $policies->first();
                 $sickStart = $baseDate->copy()->addDays(rand(10, 40));
+                // Randomly assign variant to Sick Leave (75% full day, 25% half day)
+                $variant = $faker->boolean(25) ? $faker->randomElement(['half_am', 'half_pm']) : null;
                 LeaveRequest::create([
                     'employee_id' => $employee->id,
                     'leave_policy_id' => $policy->id,
                     'start_date' => $sickStart,
                     'end_date' => $sickStart->copy()->addDays(2),
                     'days_requested' => 3,
+                    'leave_type_variant' => $variant,
                     'reason' => $hasAccount ? 'Medical leave due to flu.' : 'Fever and doctor-recommended rest.',
                     'status' => $hasAccount ? 'approved' : 'pending',
                     'submitted_by' => $employee->user_id ?? 1,
