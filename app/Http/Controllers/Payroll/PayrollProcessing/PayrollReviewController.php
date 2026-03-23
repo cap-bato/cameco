@@ -82,8 +82,8 @@ class PayrollReviewController extends Controller
 
             PayrollApprovalHistory::create([
                 'payroll_period_id' => $periodId,
-                'approval_step'     => 'approved',
-                'action'            => 'approve', // must match enum
+                'approval_step'     => 'hr_manager_approve', // must match enum in migration
+                'action'            => 'approve',
                 'status_from'       => $prevStatus,
                 'status_to'         => $nextStatus,
                 'user_id'           => auth()->id(),
