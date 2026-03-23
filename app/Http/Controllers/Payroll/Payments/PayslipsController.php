@@ -280,7 +280,7 @@ public function preview(int $payslipId)
 }
     public function download(int $payslipId)
     {
-        $payslip = Payslip::findOrFail($payslipId);
+        $payslip = Payslip::with(['employee.profile', 'employee.department', 'employee.position'])->findOrFail($payslipId);
 
         // If a stored PDF exists, stream it directly
         if ($payslip->file_path && \Storage::exists($payslip->file_path)) {
@@ -291,11 +291,86 @@ public function preview(int $payslipId)
             );
         }
 
+        // Transform payslip data for PDF view
+        $payslipData = [
+            'pay_period_start' => $payslip->period_start?->format('M d, Y') ?? $payslip->period_start,
+            'pay_period_end' => $payslip->period_end?->format('M d, Y') ?? $payslip->period_end,
+            'pay_date' => $payslip->payment_date?->format('M d, Y') ?? $payslip->payment_date,
+            'basic_salary' => (float) ($payslip->earnings_data['basic_pay'] ?? 0),
+            'allowances' => $this->buildAllowancesForPdf($payslip->earnings_data ?? []),
+            'gross_pay' => (float) $payslip->total_earnings,
+            'deductions' => $this->buildDeductionsForPdf($payslip->deductions_data ?? []),
+            'net_pay' => (float) $payslip->net_pay,
+            'year_to_date_gross' => (float) $payslip->year_to_date_gross ?? 0,
+            'year_to_date_deductions' => (float) $payslip->year_to_date_deductions ?? 0,
+            'year_to_date_net' => (float) $payslip->year_to_date_net ?? 0,
+        ];
+
+        $employeeData = [
+            'full_name' => $payslip->employee?->profile?->full_name ?? $payslip->employee_name,
+            'employee_number' => $payslip->employee?->employee_number ?? $payslip->employee_number,
+            'department' => $payslip->employee?->department?->name ?? $payslip->department,
+            'position' => $payslip->employee?->position?->title ?? $payslip->position,
+        ];
+
         // Fallback: generate PDF on the fly with DomPDF
-        // composer require barryvdh/laravel-dompdf
-        $pdf = \PDF::loadView('payroll.payslips.pdf', ['payslip' => $payslip]);
+        $pdf = \PDF::loadView('payslips.pdf', [
+            'payslip' => $payslipData,
+            'employee' => $employeeData,
+        ]);
 
         return $pdf->download("Payslip-{$payslip->payslip_number}.pdf");
+    }
+
+    /**
+     * Build allowances array for PDF view.
+     */
+    private function buildAllowancesForPdf(array $earningsData): array
+    {
+        $allowances = [];
+
+        if (!empty($earningsData['allowances']) && is_array($earningsData['allowances'])) {
+            foreach ($earningsData['allowances'] as $name => $amount) {
+                if ((float) $amount > 0) {
+                    $allowances[] = [
+                        'name' => ucwords(str_replace('_', ' ', $name)),
+                        'amount' => (float) $amount,
+                    ];
+                }
+            }
+        }
+
+        return $allowances;
+    }
+
+    /**
+     * Build deductions array for PDF view.
+     */
+    private function buildDeductionsForPdf(array $deductionsData): array
+    {
+        $deductions = [];
+
+        $labelMap = [
+            'sss_contribution' => 'SSS (Social Security System)',
+            'philhealth_contribution' => 'PhilHealth',
+            'pagibig_contribution' => 'Pag-IBIG',
+            'withholding_tax' => 'Income Tax Withheld',
+            'total_loan_deductions' => 'Loans',
+            'tardiness_deduction' => 'Tardiness',
+            'miscellaneous_deductions' => 'Other Deductions',
+        ];
+
+        foreach ($labelMap as $key => $label) {
+            $amount = (float) ($deductionsData[$key] ?? 0);
+            if ($amount > 0) {
+                $deductions[] = [
+                    'name' => $label,
+                    'amount' => $amount,
+                ];
+            }
+        }
+
+        return $deductions;
     }
 
     public function email(int $payslipId)
