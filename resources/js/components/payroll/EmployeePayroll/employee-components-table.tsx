@@ -80,6 +80,7 @@ const getComponentTypeBadgeColor = (type: string) => {
   return colors[type] || 'bg-gray-100 text-gray-800';
 };
 
+
 export const EmployeeComponentsTable: React.FC<EmployeeComponentsTableProps> = ({
   data,
   onEdit,
@@ -150,8 +151,8 @@ export const EmployeeComponentsTable: React.FC<EmployeeComponentsTableProps> = (
                   {employee.first_name} {employee.last_name}
                 </TableCell>
                 <TableCell className="text-sm text-gray-600">{employee.employee_number}</TableCell>
-                <TableCell>{employee.department}</TableCell>
-                <TableCell className="text-sm text-gray-600">{employee.position}</TableCell>
+                <TableCell>{employee.department || <span className="text-gray-400">No Department</span>}</TableCell>
+                <TableCell className="text-sm text-gray-600">{employee.position || <span className="text-gray-400">No Position</span>}</TableCell>
                 <TableCell className="text-right font-medium text-green-600">
                   +{formatCurrency(employee.total_allowances)}
                 </TableCell>
