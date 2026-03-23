@@ -101,9 +101,14 @@ class PayrollPeriodsSeeder extends Seeder
             $periodEnd2 = $periodStart->copy()->endOfMonth();
             $paymentDate2 = $periodEnd2->copy()->addDays(2);
             $periodNumber2 = sprintf('%s-%02d-2H', $periodStart->year, $periodStart->month);
-            // Set all periods to 'completed' for consistent payslip release
-            $status2 = 'completed';
-            $progress2 = 100;
+            // Set 2nd half of March to 'draft', others to 'completed'
+            if ($periodStart2->month === 3 && $periodStart2->year === $now->year) {
+                $status2 = 'draft';
+                $progress2 = 0;
+            } else {
+                $status2 = 'completed';
+                $progress2 = 100;
+            }
             $periods[] = [
                 'period_number' => $periodNumber2,
                 'period_name' => $periodNumber2, // Use period_number as name for demo
