@@ -290,7 +290,12 @@ class LeaveRequestController extends Controller
         $endDate = \Carbon\Carbon::parse($validated['end_date']);
         // compute absolute difference (in case dates are accidentally swapped) and include both
         // start and end dates (+1)
-        $daysRequested = (int) ($endDate->diffInDays($startDate, true) + 1);
+        // For Half Day AM/PM Leave, always count as 0.5 days regardless of dates
+        if ($policy->code === 'HAM' || $policy->code === 'HPM') {
+            $daysRequested = 0.5;
+        } else {
+            $daysRequested = (int) ($endDate->diffInDays($startDate, true) + 1);
+        }
 
         // STEP 3.5: Check leave balance (prevent filing when remaining is 0) unless policy is Emergency
         $year = $startDate->year;

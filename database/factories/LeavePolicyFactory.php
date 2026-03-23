@@ -11,7 +11,7 @@ class LeavePolicyFactory extends Factory
 
     public function definition(): array
     {
-        $codes = ['VL','SL','EL','ML','PL','BL','SP'];
+        $codes = ['VL','SL','EL','ML','PL','BL','SP','HAM','HPM'];
         $code = $this->faker->unique()->randomElement($codes);
         $names = [
             'VL' => 'Vacation Leave',
@@ -20,7 +20,9 @@ class LeavePolicyFactory extends Factory
             'ML' => 'Maternity/Paternity Leave',
             'PL' => 'Privilege Leave',
             'BL' => 'Bereavement Leave',
-            'SP' => 'Special Leave'
+            'SP' => 'Special Leave',
+            'HAM' => 'Half Day AM Leave',
+            'HPM' => 'Half Day PM Leave'
         ];
 
         return [

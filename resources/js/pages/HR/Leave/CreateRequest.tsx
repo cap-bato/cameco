@@ -58,6 +58,12 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
     // Calculate days requested
     const calculateDaysRequested = (): number => {
         try {
+            // For Half Day AM/PM Leave, always count as 0.5 days
+            const selectedLeaveType = leaveTypes.find(t => t.id === form.data.leave_policy_id);
+            if (selectedLeaveType?.code === 'HAM' || selectedLeaveType?.code === 'HPM') {
+                return 0.5;
+            }
+
             const start = new Date(form.data.start_date);
             const end = new Date(form.data.end_date);
             
