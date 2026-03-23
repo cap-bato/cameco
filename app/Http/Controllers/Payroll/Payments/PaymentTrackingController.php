@@ -112,6 +112,12 @@ class PaymentTrackingController extends Controller
 
         // Update related payslip status to 'distributed' if exists
         $payslip = $payment->payslip;
+        if (!$payslip) {
+            // Fallback: find payslip by employee and period
+            $payslip = \App\Models\Payslip::where('employee_id', $payment->employee_id)
+                ->where('payroll_period_id', $payment->payroll_period_id)
+                ->first();
+        }
         if ($payslip) {
             $payslip->status = 'distributed';
             $payslip->distributed_at = now();
@@ -140,6 +146,12 @@ class PaymentTrackingController extends Controller
 
             // Update related payslip status to 'distributed' if exists
             $payslip = $payment->payslip;
+            if (!$payslip) {
+                // Fallback: find payslip by employee and period
+                $payslip = \App\Models\Payslip::where('employee_id', $payment->employee_id)
+                    ->where('payroll_period_id', $payment->payroll_period_id)
+                    ->first();
+            }
             if ($payslip) {
                 $payslip->status = 'distributed';
                 $payslip->distributed_at = now();
