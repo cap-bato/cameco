@@ -5,6 +5,7 @@ namespace App\Services\HR\Workforce;
 use App\Models\Department;
 use App\Models\ShiftAssignment;
 use App\Models\Employee;
+use App\Models\LeaveRequest;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -58,40 +59,76 @@ class WorkforceCoverageService
 
     /**
      * Get coverage data for a specific date
+     * 
+     * Uses the workforce_coverage_cache table for accurate coverage percentages.
+     * Falls back to calculating from actual employee counts if cache is unavailable.
      */
     public function getCoverageForDate(Carbon $date, ?int $departmentId = null): array
     {
-        $query = ShiftAssignment::whereDate('date', $date)
-            ->where('status', 'scheduled');
+        // Try to use the cache first
+        $cacheQuery = DB::table('workforce_coverage_cache')
+            ->whereDate('date', $date);
 
         if ($departmentId) {
-            $query->where('department_id', $departmentId);
+            $cacheQuery->where('department_id', $departmentId);
         }
 
-        $assignments = $query->get();
-        $assignedStaff = $assignments->count();
-        $overtimeStaff = $assignments->where('is_overtime', true)->count();
-        $conflictedStaff = $assignments->where('has_conflict', true)->count();
-        $hasScheduleData = $assignedStaff > 0;
+        $cacheData = $cacheQuery->first();
 
-        // Determine coverage status based on typical 10-person requirement
-        $targetStaff = 10;
-        $coveragePercentage = ($assignedStaff / $targetStaff) * 100;
-        $status = $hasScheduleData
-            ? $this->determineCoverageStatus($coveragePercentage)
-            : 'unavailable';
+        if ($cacheData) {
+            // Use cached coverage percentage (0-100, already calculated correctly)
+            $coveragePercentage = $cacheData->coverage_percentage;
+            $availableStaff = $cacheData->employees_available;
+            $totalStaff = $cacheData->total_employees;
+            $hasScheduleData = true;
+        } else {
+            // Fallback: Calculate from actual employee and leave data
+            if (!$departmentId) {
+                $departmentId = Employee::where('status', 'active')->value('department_id') ?? 1;
+            }
+
+            $totalStaff = Employee::where('department_id', $departmentId)
+                ->where('status', 'active')
+                ->count();
+
+            if ($totalStaff == 0) {
+                return [
+                    'date' => $date->toDateString(),
+                    'day_name' => $date->format('l'),
+                    'assigned_staff' => 0,
+                    'target_staff' => 0,
+                    'coverage_percentage' => 0.0,
+                    'coverage_status' => 'unavailable',
+                    'has_schedule_data' => false,
+                    'overtime_staff' => 0,
+                    'conflicted_staff' => 0,
+                    'by_shift_type' => [],
+                ];
+            }
+
+            $availableStaff = $totalStaff - \App\Models\LeaveRequest::where('status', 'approved')
+                ->whereDate('start_date', '<=', $date)
+                ->whereDate('end_date', '>=', $date)
+                ->whereIn('employee_id', Employee::where('department_id', $departmentId)->pluck('id'))
+                ->count();
+
+            $coveragePercentage = ($availableStaff / $totalStaff) * 100;
+            $hasScheduleData = true;
+        }
+
+        $status = $this->determineCoverageStatus($coveragePercentage);
 
         return [
             'date' => $date->toDateString(),
             'day_name' => $date->format('l'),
-            'assigned_staff' => $assignedStaff,
-            'target_staff' => $targetStaff,
+            'assigned_staff' => $availableStaff,
+            'target_staff' => $totalStaff,
             'coverage_percentage' => round($coveragePercentage, 1),
             'coverage_status' => $status,
             'has_schedule_data' => $hasScheduleData,
-            'overtime_staff' => $overtimeStaff,
-            'conflicted_staff' => $conflictedStaff,
-            'by_shift_type' => $this->getShiftTypeCoverage($assignments),
+            'overtime_staff' => 0,
+            'conflicted_staff' => 0,
+            'by_shift_type' => [],
         ];
     }
 
@@ -104,22 +141,42 @@ class WorkforceCoverageService
         $coverage = [];
 
         foreach ($departments as $dept) {
-            $assignments = ShiftAssignment::whereDate('date', $date)
+            // Try cache first
+            $cacheData = DB::table('workforce_coverage_cache')
                 ->where('department_id', $dept->id)
-                ->where('status', 'scheduled')
-                ->get();
+                ->whereDate('date', $date)
+                ->first();
 
-            $staffCount = $assignments->count();
-            $targetStaff = 5; // Default target per department
+            if ($cacheData) {
+                $staffCount = $cacheData->employees_available;
+                $totalStaff = $cacheData->total_employees;
+                $coveragePercentage = $cacheData->coverage_percentage;
+            } else {
+                $totalStaff = Employee::where('department_id', $dept->id)
+                    ->where('status', 'active')
+                    ->count();
+
+                if ($totalStaff == 0) {
+                    continue;
+                }
+
+                $staffCount = $totalStaff - \App\Models\LeaveRequest::where('status', 'approved')
+                    ->whereDate('start_date', '<=', $date)
+                    ->whereDate('end_date', '>=', $date)
+                    ->whereIn('employee_id', Employee::where('department_id', $dept->id)->pluck('id'))
+                    ->count();
+
+                $coveragePercentage = ($staffCount / $totalStaff) * 100;
+            }
 
             $coverage[] = [
                 'department_id' => $dept->id,
                 'department_name' => $dept->name,
                 'assigned_staff' => $staffCount,
-                'target_staff' => $targetStaff,
-                'coverage_percentage' => round(($staffCount / $targetStaff) * 100, 1),
-                'status' => $this->determineCoverageStatus(($staffCount / $targetStaff) * 100),
-                'shift_types' => $this->getShiftTypeCoverage($assignments),
+                'target_staff' => $totalStaff,
+                'coverage_percentage' => round($coveragePercentage, 1),
+                'status' => $this->determineCoverageStatus($coveragePercentage),
+                'shift_types' => [],
             ];
         }
 
@@ -147,15 +204,25 @@ class WorkforceCoverageService
                 $query->where('department_id', $departmentId);
             }
 
-            $assignments = $query->get();
-            $staffCount = $assignments->count();
-            $targetStaff = 3; // Default target per shift type
+            $staffCount = $query->count();
+            
+            // Get target for this shift type - count total employees with this shift assigned
+            $totalQuery = ShiftAssignment::where('shift_type', $type)
+                ->where('status', 'scheduled');
+            
+            if ($departmentId) {
+                $totalQuery->where('department_id', $departmentId);
+            }
+            
+            $totalStaff = max(1, $totalQuery->distinct('employee_id')->count()); // Fallback to 1 to avoid division by zero
+
+            $coveragePercentage = ($staffCount / $totalStaff) * 100;
 
             $coverage[$type] = [
                 'assigned_staff' => $staffCount,
-                'target_staff' => $targetStaff,
-                'coverage_percentage' => round(($staffCount / $targetStaff) * 100, 1),
-                'status' => $this->determineCoverageStatus(($staffCount / $targetStaff) * 100),
+                'target_staff' => $totalStaff,
+                'coverage_percentage' => round($coveragePercentage, 1),
+                'status' => $this->determineCoverageStatus($coveragePercentage),
             ];
         }
 
@@ -471,20 +538,25 @@ class WorkforceCoverageService
     }
 
     /**
-     * Calculate coverage percentage if a specific employee takes leave
-     * Used by leave approval system to check if coverage threshold is met
+     * Calculate coverage percentage with proportional impact for half-day leaves
+     * 
+     * Uses SUM of days_requested instead of COUNT of employees for accurate coverage
+     * calculations. Half-day leaves (0.5 days) count as 0.5 impact, full-day leaves
+     * (1.0 day) count as 1.0 impact. This ensures proper proportional impact on coverage.
      * 
      * @param int $departmentId
      * @param Carbon|string $startDate
      * @param Carbon|string $endDate
      * @param int $employeeId
+     * @param float $daysRequested Decimal days (e.g., 0.5 for half-day, 1.0 for full-day)
      * @return float Coverage percentage (0-100)
      */
     public function calculateCoverageWithLeave(
         int $departmentId,
         $startDate,
         $endDate,
-        int $employeeId
+        int $employeeId,
+        float $daysRequested = 1.0
     ): float {
         $start = $startDate instanceof Carbon ? $startDate : Carbon::parse($startDate);
         $end = $endDate instanceof Carbon ? $endDate : Carbon::parse($endDate);
@@ -504,27 +576,28 @@ class WorkforceCoverageService
             return 0;
         }
 
-        // Count employees already on leave during this period
-        $employeesOnLeave = DB::table('leave_requests')
-            ->where('department_id', $departmentId)
-            ->where('status', 'approved')
+        // Calculate total employee-days on leave using SUM of days_requested
+        // This provides proportional impact: 0.5 for half-day, 1.0 for full-day
+        $employeeDaysOnLeave = DB::table('leave_requests')
+            ->join('employees', 'leave_requests.employee_id', '=', 'employees.id')
+            ->where('employees.department_id', $departmentId)
+            ->where('leave_requests.status', 'approved')
             ->where(function ($query) use ($start, $end) {
-                $query->whereBetween('start_date', [$start, $end])
-                    ->orWhereBetween('end_date', [$start, $end])
+                $query->whereBetween('leave_requests.start_date', [$start, $end])
+                    ->orWhereBetween('leave_requests.end_date', [$start, $end])
                     ->orWhere(function ($q) use ($start, $end) {
-                        $q->where('start_date', '<=', $start)
-                          ->where('end_date', '>=', $end);
+                        $q->where('leave_requests.start_date', '<=', $start)
+                          ->where('leave_requests.end_date', '>=', $end);
                     });
             })
-            ->distinct('employee_id')
-            ->count('employee_id');
+            ->sum('leave_requests.days_requested');
 
-        // Add 1 for the employee requesting leave
-        $employeesOnLeave += 1;
+        // Add the requesting employee's proportional days
+        $totalEmployeeDaysOnLeave = (float)$employeeDaysOnLeave + $daysRequested;
 
-        // Calculate coverage
-        $availableEmployees = $totalEmployees - $employeesOnLeave;
-        $coveragePercentage = ($availableEmployees / $totalEmployees) * 100;
+        // Calculate coverage: (TotalEmployees - EmployeeDaysOnLeave) / TotalEmployees * 100
+        $availableEmployeeEquivalents = $totalEmployees - $totalEmployeeDaysOnLeave;
+        $coveragePercentage = ($availableEmployeeEquivalents / $totalEmployees) * 100;
 
         return round($coveragePercentage, 2);
     }

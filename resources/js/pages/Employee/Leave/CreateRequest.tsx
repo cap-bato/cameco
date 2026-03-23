@@ -6,6 +6,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
     Select,
     SelectContent,
     SelectItem,
@@ -30,6 +37,11 @@ import { LeaveCoverageWarning } from '@/components/employee/leave-coverage-warni
 // ============================================================================
 // Type Definitions
 // ============================================================================
+
+interface LeaveVariant {
+    code: string;
+    label: string;
+}
 
 interface LeaveType {
     id: number;
@@ -71,6 +83,7 @@ type AxiosValidationError = {
 
 interface CreateRequestProps {
     leaveTypes: LeaveType[];
+    leaveVariants: LeaveVariant[];
     employee: {
         id: number;
         employee_number: string;
@@ -86,10 +99,12 @@ interface CreateRequestProps {
 
 export default function CreateRequest({
     leaveTypes,
+    leaveVariants,
     employee,
 }: CreateRequestProps) {
     // Form state
     const [selectedLeaveType, setSelectedLeaveType] = useState<string>('');
+    const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [reason, setReason] = useState<string>('');
@@ -109,6 +124,19 @@ export default function CreateRequest({
     const [submitting, setSubmitting] = useState<boolean>(false);
     const [submitError, setSubmitError] = useState<string>('');
 
+    // Success dialog state
+    const [showSuccessDialog, setShowSuccessDialog] = useState<boolean>(false);
+    const [successDetails, setSuccessDetails] = useState<{
+        leaveType: string;
+        startDate: string;
+        endDate: string;
+        daysRequested: number;
+    } | null>(null);
+
+    // Validation error modal state
+    const [showValidationError, setShowValidationError] = useState<boolean>(false);
+    const [validationErrorMessage, setValidationErrorMessage] = useState<string>('');
+
     // Selected leave type details
     const selectedLeaveTypeData = leaveTypes?.find(
         (lt) => lt.id.toString() === selectedLeaveType
@@ -118,9 +146,19 @@ export default function CreateRequest({
     useEffect(() => {
         if (startDate && endDate) {
             try {
-                const start = parseISO(startDate);
-                const end = parseISO(endDate);
-                const days = differenceInBusinessDays(end, start) + 1;
+                // Check for variant (new approach: variant on SL)
+                let days: number;
+                if (selectedVariant && ['half_am', 'half_pm'].includes(selectedVariant)) {
+                    days = 0.5;
+                }
+                // Legacy: check for deprecated HAM/HPM policies
+                else if (selectedLeaveTypeData?.code === 'HAM' || selectedLeaveTypeData?.code === 'HPM') {
+                    days = 0.5;
+                } else {
+                    const start = parseISO(startDate);
+                    const end = parseISO(endDate);
+                    days = differenceInBusinessDays(end, start) + 1;
+                }
                 setNumberOfDays(days > 0 ? days : 0);
 
                 // Check balance
@@ -138,7 +176,16 @@ export default function CreateRequest({
             setNumberOfDays(0);
             setBalanceError('');
         }
-    }, [startDate, endDate, selectedLeaveTypeData]);
+    }, [startDate, endDate, selectedLeaveTypeData, selectedVariant]);
+
+    // Auto-set end date to match start date when half-day variant is selected
+    useEffect(() => {
+        if (selectedVariant && ['half_am', 'half_pm'].includes(selectedVariant)) {
+            if (startDate && endDate !== startDate) {
+                setEndDate(startDate);
+            }
+        }
+    }, [selectedVariant, startDate]);
 
     // Debounced coverage calculation
     const calculateCoverage = useCallback(
@@ -247,27 +294,38 @@ export default function CreateRequest({
 
         // Validation
         if (!selectedLeaveType) {
-            alert('Please select a leave type.');
+            setValidationErrorMessage('Please select a leave type.');
+            setShowValidationError(true);
             return;
         }
 
         if (!startDate || !endDate) {
-            alert('Please select start and end dates.');
+            setValidationErrorMessage('Please select start and end dates.');
+            setShowValidationError(true);
             return;
         }
 
         if (!reason.trim()) {
-            alert('Please enter a reason for your leave request.');
+            setValidationErrorMessage('Please enter a reason for your leave request.');
+            setShowValidationError(true);
+            return;
+        }
+
+        if (reason.trim().length < 10) {
+            setValidationErrorMessage('Reason must be at least 10 characters long. Please provide a more detailed explanation.');
+            setShowValidationError(true);
             return;
         }
 
         if (balanceError) {
-            alert('Cannot submit: ' + balanceError);
+            setValidationErrorMessage('Cannot submit: ' + balanceError);
+            setShowValidationError(true);
             return;
         }
 
         if (selectedLeaveTypeData?.requires_document && !uploadedDocument) {
-            alert('This leave type requires supporting documentation. Please upload a PDF file.');
+            setValidationErrorMessage('This leave type requires supporting documentation. Please upload a PDF file.');
+            setShowValidationError(true);
             return;
         }
 
@@ -280,6 +338,9 @@ export default function CreateRequest({
             formData.append('start_date', startDate);
             formData.append('end_date', endDate);
             formData.append('reason', reason);
+            if (selectedVariant && ['half_am', 'half_pm'].includes(selectedVariant)) {
+                formData.append('leave_type_variant', selectedVariant);
+            }
             if (contactDuringLeave.trim()) {
                 formData.append('contact_during_leave', contactDuringLeave);
             }
@@ -287,28 +348,62 @@ export default function CreateRequest({
                 formData.append('document', uploadedDocument);
             }
 
+            console.log('Submitting leave request with data:', {
+                leave_policy_id: selectedLeaveType,
+                start_date: startDate,
+                end_date: endDate,
+                reason: reason.substring(0, 50) + '...',
+                variant: selectedVariant || 'none',
+                has_document: !!uploadedDocument,
+                document_name: uploadedDocument?.name,
+                document_size: uploadedDocument?.size,
+            });
+
             await axios.post('/employee/leave/request', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
             });
 
-            // Redirect to leave history on success
-            router.visit('/employee/leave/history', {
-                preserveState: false,
+            // Show success dialog with details
+            const leaveTypeData = leaveTypes.find(lt => lt.id.toString() === selectedLeaveType);
+            setSuccessDetails({
+                leaveType: leaveTypeData?.name || 'Leave',
+                startDate,
+                endDate,
+                daysRequested: numberOfDays,
             });
+            setShowSuccessDialog(true);
         } catch (error: unknown) {
             console.error('Failed to submit leave request', error);
             const axiosError = error as AxiosValidationError;
+            
+            console.log('Error response:', {
+                status: axiosError.response?.status,
+                data: axiosError.response?.data,
+            });
+            
+            // Handle validation errors from backend
             const validationErrors = axiosError.response?.data?.errors;
-            const firstValidationError = validationErrors
-                ? Object.values(validationErrors).flat()[0]
-                : undefined;
+            if (validationErrors && typeof validationErrors === 'object') {
+                // Build error message from all validation errors
+                const errorMessages = Object.entries(validationErrors)
+                    .map(([field, messages]) => {
+                        const msgArray = Array.isArray(messages) ? messages : [messages];
+                        return msgArray.join(', ');
+                    })
+                    .join('\n');
+                console.log('Validation errors:', errorMessages);
+                setSubmitError(errorMessages || 'Validation failed. Please check your entries.');
+                setSubmitting(false);
+                return;
+            }
+            
             const errorMessage =
-                firstValidationError ||
                 axiosError.response?.data?.message ||
                 axiosError.response?.data?.error ||
-                'Failed to submit leave request. Please try again.';
+                `Request failed with status ${axiosError.response?.status || 'unknown'}. Please check the console for details and try again.`;
+            console.log('Final error message:', errorMessage);
             setSubmitError(errorMessage);
         } finally {
             setSubmitting(false);
@@ -395,11 +490,36 @@ export default function CreateRequest({
                                     )}
                                 </div>
 
+                                {/* Leave Duration (Variant Selector) - Only for Sick Leave */}
+                                {selectedLeaveTypeData?.code === 'SL' && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="leave_variant">
+                                            Leave Duration <span className="text-red-500">*</span>
+                                        </Label>
+                                        <Select
+                                            value={selectedVariant || 'full_day'}
+                                            onValueChange={(val) => setSelectedVariant(val === 'full_day' ? null : val)}
+                                        >
+                                            <SelectTrigger id="leave_variant">
+                                                <SelectValue placeholder="Select duration" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="full_day">Full Day (1.0 days)</SelectItem>
+                                                <SelectItem value="half_am">Half Day AM (0.5 days)</SelectItem>
+                                                <SelectItem value="half_pm">Half Day PM (0.5 days)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                                            Select whether you are taking leave for the full day or just the morning/afternoon. Half day leave counts as 0.5 days against your balance.
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Date Selection */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <Label htmlFor="start_date">
-                                            Start Date <span className="text-red-500">*</span>
+                                            {selectedVariant && ['half_am', 'half_pm'].includes(selectedVariant) ? 'Leave Date' : 'Start Date'} <span className="text-red-500">*</span>
                                         </Label>
                                         <Input
                                             id="start_date"
@@ -410,19 +530,31 @@ export default function CreateRequest({
                                             required
                                         />
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="end_date">
-                                            End Date <span className="text-red-500">*</span>
-                                        </Label>
-                                        <Input
-                                            id="end_date"
-                                            type="date"
-                                            value={endDate}
+                                    {!selectedVariant || !['half_am', 'half_pm'].includes(selectedVariant) ? (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="end_date">
+                                                End Date <span className="text-red-500">*</span>
+                                            </Label>
+                                            <Input
+                                                id="end_date"
+                                                type="date"
+                                                value={endDate}
                                             onChange={(e) => setEndDate(e.target.value)}
                                             min={startDate || format(new Date(), 'yyyy-MM-dd')}
                                             required
                                         />
-                                    </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <Label className="text-blue-600">Duration</Label>
+                                            <div className="p-3 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex items-center h-[40px]">
+                                                <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                                                    {selectedVariant === 'half_am' ? 'Half Day AM (0.5 days)' : 'Half Day PM (0.5 days)'}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">Half-day leave is for a single day only</p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Number of Days Display */}
@@ -663,6 +795,95 @@ export default function CreateRequest({
                 </div>
             </div>
         </div>
+
+        {/* Success Dialog */}
+        <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <div className="flex items-center gap-3 mb-2">
+                        <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+                        <DialogTitle>Leave Request Submitted Successfully</DialogTitle>
+                    </div>
+                    <DialogDescription>
+                        Your leave request has been submitted for approval. You will receive a notification once it has been reviewed.
+                    </DialogDescription>
+                </DialogHeader>
+
+                {successDetails && (
+                    <div className="space-y-4 py-4">
+                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 space-y-3">
+                            <div className="flex justify-between items-start">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">Leave Type</div>
+                                <div className="font-medium text-gray-900 dark:text-gray-100">{successDetails.leaveType}</div>
+                            </div>
+                            <div className="flex justify-between items-start">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">Start Date</div>
+                                <div className="font-medium text-gray-900 dark:text-gray-100">{format(parseISO(successDetails.startDate), 'MMM dd, yyyy')}</div>
+                            </div>
+                            <div className="flex justify-between items-start">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">End Date</div>
+                                <div className="font-medium text-gray-900 dark:text-gray-100">{format(parseISO(successDetails.endDate), 'MMM dd, yyyy')}</div>
+                            </div>
+                            <div className="flex justify-between items-start border-t border-green-200 dark:border-green-800 pt-3">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">Days Requested</div>
+                                <div className="font-semibold text-green-700 dark:text-green-300 text-lg">{successDetails.daysRequested} day(s)</div>
+                            </div>
+                        </div>
+
+                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                            <p className="text-xs text-blue-800 dark:text-blue-200">
+                                <span className="font-semibold">Next Steps:</span> Your request will be reviewed by your supervisor and HR manager. Check your leave history to track the status.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex gap-3 justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <Button
+                        variant="outline"
+                        onClick={() => setShowSuccessDialog(false)}
+                    >
+                        Continue Editing
+                    </Button>
+                    <Button
+                        onClick={() => {
+                            setShowSuccessDialog(false);
+                            router.visit('/employee/leave/history', {
+                                preserveState: false,
+                            });
+                        }}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                        View Leave History
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        {/* Validation Error Modal */}
+        <Dialog open={showValidationError} onOpenChange={setShowValidationError}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                            <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                        </div>
+                        <DialogTitle className="text-lg">Unable to Submit</DialogTitle>
+                    </div>
+                </DialogHeader>
+                <DialogDescription className="text-base text-gray-700 dark:text-gray-300 leading-relaxed">
+                    {validationErrorMessage}
+                </DialogDescription>
+                <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <Button
+                        onClick={() => setShowValidationError(false)}
+                        className="bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 text-white"
+                    >
+                        Understood
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
         </AppLayout>
     );
 }

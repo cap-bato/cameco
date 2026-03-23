@@ -36,6 +36,7 @@ class LeaveRequest extends Model
         'submitted_by',
         'cancelled_at',
         'cancellation_reason',
+        'leave_type_variant',
     ];
 
     protected $casts = [
@@ -50,6 +51,7 @@ class LeaveRequest extends Model
         'admin_approved_at' => 'datetime',
         'hr_processed_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'leave_type_variant' => 'string',
     ];
 
     public function leavePolicy()
@@ -143,5 +145,29 @@ class LeaveRequest extends Model
             && $this->manager_approved_at !== null
             && $this->admin_approved_at === null
             && $this->requiresAdminApproval();
+    }
+
+    /**
+     * Check if this is a half-day leave request
+     * 
+     * @return bool True if leave_type_variant is 'half_am' or 'half_pm'
+     */
+    public function isHalfDayLeave(): bool
+    {
+        return in_array($this->leave_type_variant, ['half_am', 'half_pm'], true);
+    }
+
+    /**
+     * Get human-readable label for the half-day variant
+     * 
+     * @return string|null Label like "Half Day AM", "Half Day PM", or null for full day
+     */
+    public function getHalfDayLabel(): ?string
+    {
+        return match($this->leave_type_variant) {
+            'half_am' => 'Half Day AM',
+            'half_pm' => 'Half Day PM',
+            default => null,
+        };
     }
 }

@@ -18,19 +18,27 @@ interface EmployeeBalance {
     remaining: number;
 }
 
+interface LeaveVariant {
+    code: string;
+    label: string;
+}
+
 interface CreateRequestProps {
     employees: Array<{ id: number; employee_number: string; name: string }>;
     leaveTypes: Array<{ id: number; code?: string; name: string; annual_entitlement?: number }>;
+    leaveVariants: LeaveVariant[];
 }
 
-export default function CreateRequest({ employees = [], leaveTypes = [] }: CreateRequestProps) {
+export default function CreateRequest({ employees = [], leaveTypes = [], leaveVariants = [] }: CreateRequestProps) {
     const form = useForm({
         employee_id: employees[0]?.id ?? '',
         leave_policy_id: leaveTypes[0]?.id ?? '',
+        leave_type_variant: null as string | null,
         start_date: new Date().toISOString().split('T')[0],
         end_date: new Date().toISOString().split('T')[0],
         reason: '',
         hr_notes: '',
+        auto_approve: false as boolean,
     });
 
     const [employeeBalances, setEmployeeBalances] = useState<Record<number, EmployeeBalance>>({});
@@ -58,6 +66,17 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
     // Calculate days requested
     const calculateDaysRequested = (): number => {
         try {
+            // Check for variant (new approach: variant on SL)
+            if (form.data.leave_type_variant && ['half_am', 'half_pm'].includes(form.data.leave_type_variant)) {
+                return 0.5;
+            }
+
+            // Legacy: check for deprecated HAM/HPM policies
+            const selectedLeaveType = leaveTypes.find(t => t.id === form.data.leave_policy_id);
+            if (selectedLeaveType?.code === 'HAM' || selectedLeaveType?.code === 'HPM') {
+                return 0.5;
+            }
+
             const start = new Date(form.data.start_date);
             const end = new Date(form.data.end_date);
             
@@ -96,12 +115,24 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
 
     const balanceCheck = checkBalanceSufficiency();
 
+    // Get selected leave type for variant visibility
+    const selectedLeaveType = leaveTypes.find(t => t.id === form.data.leave_policy_id);
+    const isSickLeave = selectedLeaveType?.code === 'SL';
+    const isHalfDayVariant = form.data.leave_type_variant && ['half_am', 'half_pm'].includes(form.data.leave_type_variant);
+
+    // Auto-set end_date to match start_date when half-day variant is selected
+    useEffect(() => {
+        if (isHalfDayVariant && form.data.start_date && form.data.end_date !== form.data.start_date) {
+            form.setData('end_date', form.data.start_date);
+        }
+    }, [form.data.leave_type_variant]);
+
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
 
         // Check balance sufficiency first
         if (!balanceCheck.isSufficient) {
-            form.setErrors({ leave_policy_id: balanceCheck.message || 'Insufficient balance for this leave type.' });
+            form.setError('leave_policy_id', balanceCheck.message || 'Insufficient balance for this leave type.');
             return;
         }
 
@@ -115,7 +146,9 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
         }
 
         if (Object.keys(errs).length > 0) {
-            form.setErrors(errs);
+            Object.entries(errs).forEach(([field, message]) => {
+                form.setError(field as keyof typeof form.data, message);
+            });
             return;
         }
 
@@ -218,9 +251,32 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
                                     {form.errors.leave_policy_id && <div className="text-sm text-red-500">{form.errors.leave_policy_id}</div>}
                                 </div>
 
+                                {isSickLeave && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="leave_type_variant">Leave Duration</Label>
+                                        <Select
+                                            value={form.data.leave_type_variant || 'full_day'}
+                                            onValueChange={(val) => form.setData('leave_type_variant', val === 'full_day' ? null : val)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select duration" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="full_day">Full Day (1.0 days)</SelectItem>
+                                                <SelectItem value="half_am">Half Day AM (0.5 days)</SelectItem>
+                                                <SelectItem value="half_pm">Half Day PM (0.5 days)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-muted-foreground">Half day leave counts as 0.5 days against your balance</p>
+                                        {form.errors.leave_type_variant && <div className="text-sm text-red-500">{form.errors.leave_type_variant}</div>}
+                                    </div>
+                                )}
+
                                 <div className="grid grid-cols-2 gap-2">
                                     <div className="space-y-2">
-                                        <Label htmlFor="start_date">Start Date *</Label>
+                                        <Label htmlFor="start_date">
+                                            {isHalfDayVariant ? 'Leave Date' : 'Start Date'} *
+                                        </Label>
                                         <Input
                                             id="start_date"
                                             name="start_date"
@@ -232,19 +288,33 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
                                         {form.errors.start_date && <div className="text-sm text-red-500">{form.errors.start_date}</div>}
                                     </div>
 
-                                    <div className="space-y-2">
-                                        <Label htmlFor="end_date">End Date *</Label>
-                                        <Input
-                                            id="end_date"
-                                            name="end_date"
-                                            type="date"
-                                            value={String(form.data.end_date)}
-                                            onChange={(e) => form.setData('end_date', e.target.value)}
-                                            required
-                                            min={form.data.start_date ? String(form.data.start_date) : undefined}
-                                        />
-                                        {form.errors.end_date && <div className="text-sm text-red-500">{form.errors.end_date}</div>}
-                                    </div>
+                                    {!isHalfDayVariant && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="end_date">End Date *</Label>
+                                            <Input
+                                                id="end_date"
+                                                name="end_date"
+                                                type="date"
+                                                value={String(form.data.end_date)}
+                                                onChange={(e) => form.setData('end_date', e.target.value)}
+                                                required
+                                                min={form.data.start_date ? String(form.data.start_date) : undefined}
+                                            />
+                                            {form.errors.end_date && <div className="text-sm text-red-500">{form.errors.end_date}</div>}
+                                        </div>
+                                    )}
+
+                                    {isHalfDayVariant && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="variant_info" className="text-blue-600">Duration</Label>
+                                            <div className="p-3 rounded-md bg-blue-50 border border-blue-200 flex items-center h-[40px]">
+                                                <span className="text-sm text-blue-800 font-medium">
+                                                    {form.data.leave_type_variant === 'half_am' ? 'Half Day AM (0.5 days)' : 'Half Day PM (0.5 days)'}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">Half-day leave is for a single day only</p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {daysRequested > 0 && (
@@ -289,6 +359,21 @@ export default function CreateRequest({ employees = [], leaveTypes = [] }: Creat
                                     required
                                 />
                                 {form.errors.hr_notes && <div className="text-sm text-red-500">{form.errors.hr_notes}</div>}
+                            </div>
+
+                            <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                <input
+                                    id="auto_approve"
+                                    name="auto_approve"
+                                    type="checkbox"
+                                    checked={form.data.auto_approve}
+                                    onChange={(e) => form.setData('auto_approve', e.target.checked)}
+                                    className="w-4 h-4 rounded cursor-pointer"
+                                />
+                                <Label htmlFor="auto_approve" className="cursor-pointer flex-1 m-0">
+                                    <div className="font-medium text-blue-900">Auto-approve this leave request</div>
+                                    <p className="text-xs text-blue-700 mt-1">Check this box to immediately approve the leave request. Use for same-day or urgent leave requests.</p>
+                                </Label>
                             </div>
 
                             <div className="flex items-center gap-2">

@@ -240,6 +240,12 @@ export default function LeaveBalances({
                                                             {balance.description}
                                                         </p>
                                                     )}
+                                                    {/* Clarification for Sick Leave half-day options */}
+                                                    {balance.leave_type_code === 'SL' && (
+                                                        <p className="mt-2 text-sm text-blue-600 dark:text-blue-400">
+                                                            💡 <strong>Includes full day and half-day options</strong> — When requesting Sick Leave, you can choose to take a full day (1.0 days) or a half day - morning only or afternoon only (0.5 days each).
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
 
