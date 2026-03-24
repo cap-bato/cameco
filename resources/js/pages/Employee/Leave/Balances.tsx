@@ -98,12 +98,19 @@ export default function LeaveBalances({
     employee,
     error,
 }: LeaveBalancesProps) {
-    // Calculate total statistics
+    // Helper to format leave numbers: show as integer if whole, else up to 2 decimals
+    const formatLeaveNumber = (n: number) => {
+        if (Number.isNaN(n)) return '0';
+        if (Number.isInteger(n)) return n.toString();
+        return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    };
+
+    // Only show totals for each metric in summary
     const totalStats = {
-        totalEntitled: balances.reduce((sum, b) => sum + b.total_entitled, 0),
-        totalUsed: balances.reduce((sum, b) => sum + b.used, 0),
-        totalPending: balances.reduce((sum, b) => sum + b.pending, 0),
-        totalAvailable: balances.reduce((sum, b) => sum + b.available, 0),
+        totalEntitled: formatLeaveNumber(balances.reduce((sum, b) => sum + Number(b.total_entitled), 0)),
+        totalUsed: formatLeaveNumber(balances.reduce((sum, b) => sum + Number(b.used), 0)),
+        totalPending: formatLeaveNumber(balances.reduce((sum, b) => sum + Number(b.pending), 0)),
+        totalAvailable: formatLeaveNumber(balances.reduce((sum, b) => sum + Number(b.available), 0)),
     };
 
     return (
@@ -173,27 +180,19 @@ export default function LeaveBalances({
                         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-900/10">
                                 <p className="text-sm text-blue-600 dark:text-blue-400">Total Entitled</p>
-                                <p className="mt-2 text-2xl font-bold text-blue-800 dark:text-blue-200">
-                                    {totalStats.totalEntitled} days
-                                </p>
+                                <p className="mt-2 text-3xl font-bold text-blue-800 dark:text-blue-200">{totalStats.totalEntitled} days</p>
                             </div>
                             <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-900/10">
                                 <p className="text-sm text-red-600 dark:text-red-400">Used</p>
-                                <p className="mt-2 text-2xl font-bold text-red-800 dark:text-red-200">
-                                    {totalStats.totalUsed} days
-                                </p>
+                                <p className="mt-2 text-3xl font-bold text-red-800 dark:text-red-200">{totalStats.totalUsed} days</p>
                             </div>
                             <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900 dark:bg-yellow-900/10">
                                 <p className="text-sm text-yellow-600 dark:text-yellow-400">Pending</p>
-                                <p className="mt-2 text-2xl font-bold text-yellow-800 dark:text-yellow-200">
-                                    {totalStats.totalPending} days
-                                </p>
+                                <p className="mt-2 text-3xl font-bold text-yellow-800 dark:text-yellow-200">{totalStats.totalPending} days</p>
                             </div>
                             <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-900/10">
                                 <p className="text-sm text-green-600 dark:text-green-400">Available</p>
-                                <p className="mt-2 text-2xl font-bold text-green-800 dark:text-green-200">
-                                    {totalStats.totalAvailable} days
-                                </p>
+                                <p className="mt-2 text-3xl font-bold text-green-800 dark:text-green-200">{totalStats.totalAvailable} days</p>
                             </div>
                         </div>
                     </CardContent>
@@ -241,6 +240,12 @@ export default function LeaveBalances({
                                                             {balance.description}
                                                         </p>
                                                     )}
+                                                    {/* Clarification for Sick Leave half-day options */}
+                                                    {balance.leave_type_code === 'SL' && (
+                                                        <p className="mt-2 text-sm text-blue-600 dark:text-blue-400">
+                                                            💡 <strong>Includes full day and half-day options</strong> — When requesting Sick Leave, you can choose to take a full day (1.0 days) or a half day - morning only or afternoon only (0.5 days each).
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -249,25 +254,25 @@ export default function LeaveBalances({
                                                 <div>
                                                     <p className="text-xs text-gray-600 dark:text-gray-400">Total Entitled</p>
                                                     <p className="mt-1 text-xl font-bold text-gray-900 dark:text-white">
-                                                        {balance.total_entitled}
+                                                        {formatLeaveNumber(balance.total_entitled)}
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-xs text-gray-600 dark:text-gray-400">Used</p>
                                                     <p className="mt-1 text-xl font-bold text-red-600 dark:text-red-400">
-                                                        {balance.used}
+                                                        {formatLeaveNumber(balance.used)}
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-xs text-gray-600 dark:text-gray-400">Pending</p>
                                                     <p className="mt-1 text-xl font-bold text-yellow-600 dark:text-yellow-400">
-                                                        {balance.pending}
+                                                        {formatLeaveNumber(balance.pending)}
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-xs text-gray-600 dark:text-gray-400">Available</p>
                                                     <p className="mt-1 text-xl font-bold text-green-600 dark:text-green-400">
-                                                        {balance.available}
+                                                        {formatLeaveNumber(balance.available)}
                                                     </p>
                                                 </div>
                                             </div>
@@ -370,7 +375,6 @@ export default function LeaveBalances({
                         </div>
                     </CardContent>
                 </Card>
-            </div>
             </div>
         </AppLayout>
     );

@@ -12,12 +12,12 @@ interface AlternativeDate {
     start_date: string;
     end_date: string;
     coverage_percentage: number;
-    status: 'optimal' | 'acceptable' | 'warning' | 'critical';
+    status: 'optimal' | 'acceptable' | 'warning' | 'critical' | 'unavailable';
 }
 
 interface LeaveCoverageWarningProps {
     coveragePercentage: number;
-    status: 'optimal' | 'acceptable' | 'warning' | 'critical';
+    status: 'optimal' | 'acceptable' | 'warning' | 'critical' | 'unavailable';
     message: string;
     alternativeDates?: AlternativeDate[];
     teamMembersOnLeave?: Array<{
@@ -56,6 +56,12 @@ const coverageConfig = {
         color: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
         icon: '🔴',
         cardBorder: 'border-red-200 dark:border-red-800',
+    },
+    unavailable: {
+        label: 'Coverage Unavailable',
+        color: 'bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-700',
+        icon: '⚪',
+        cardBorder: 'border-slate-200 dark:border-slate-700',
     },
 };
 
@@ -119,6 +125,9 @@ export function LeaveCoverageWarning({
                             )}
                             {status === 'critical' && (
                                 <p>Your requested dates severely impact department staffing. Please consider alternative dates to improve approval chances.</p>
+                            )}
+                            {status === 'unavailable' && (
+                                <p>Staffing schedules have not been published yet for these dates, so the system cannot calculate department coverage right now.</p>
                             )}
                         </div>
                     </div>

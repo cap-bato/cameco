@@ -335,7 +335,7 @@ class SalaryComponentSeeder extends Seeder
             // ============================================
             [
                 'name' => 'Loan Deduction',
-                'code' => 'LOAN_DEDUCTION',
+                'code' => 'loan_deduction',
                 'component_type' => 'deduction',
                 'category' => 'loan',
                 'calculation_method' => 'fixed_amount',

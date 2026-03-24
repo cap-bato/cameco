@@ -67,7 +67,7 @@ export default function TwoFactor({
                             />
 
                             <div className="relative inline">
-                                <Form {...disable.form()}>
+                                <Form method="post" action={disable.url()}>
                                     {({ processing }) => (
                                         <Button
                                             variant="destructive"
@@ -99,12 +99,7 @@ export default function TwoFactor({
                                         Continue Setup
                                     </Button>
                                 ) : (
-                                    <Form
-                                        {...enable.form()}
-                                        onSuccess={() =>
-                                            setShowSetupModal(true)
-                                        }
-                                    >
+                                    <Form method="post" action={enable.url()} onSuccess={() => setShowSetupModal(true)}>
                                         {({ processing }) => (
                                             <Button
                                                 type="submit"

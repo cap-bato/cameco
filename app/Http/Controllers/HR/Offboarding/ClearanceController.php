@@ -217,10 +217,11 @@ class ClearanceController extends Controller
             $user = $this->getCurrentUser();
 
             // Mark item as having issues
+
             $item->markAsHavingIssues($validated['issue_description']);
 
             // Send notification to HR and employee
-            $this->offboardingService->notifyClearanceIssue($item, $user);
+            $this->offboardingService->notifyClearanceIssueReported($item, $validated['issue_description']);
 
             DB::commit();
 

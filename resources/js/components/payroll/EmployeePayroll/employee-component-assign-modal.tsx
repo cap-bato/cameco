@@ -1,21 +1,10 @@
-import React, { useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import React, { useState, useEffect } from 'react';
+
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -61,6 +50,7 @@ interface EmployeeComponentAssignModalProps {
   initialData?: EmployeeComponentAssignmentFormData;
   isLoading?: boolean;
   mode?: 'create' | 'edit';
+  submitError?: string | null;
 }
 
 const FREQUENCY_OPTIONS = [
@@ -71,6 +61,19 @@ const FREQUENCY_OPTIONS = [
   { value: 'annually', label: 'Annually' },
   { value: 'one_time', label: 'One-Time' },
 ];
+
+const DEFAULT_FORM: EmployeeComponentAssignmentFormData = {
+  employee_id: null,
+  salary_component_id: null,
+  amount: '',
+  percentage: '',
+  units: '',
+  frequency: 'per_payroll',
+  effective_date: new Date().toISOString().split('T')[0],
+  end_date: '',
+  is_prorated: false,
+  requires_attendance: true,
+};
 
 const getDefaultAmount = (component: SalaryComponent | undefined): string => {
   if (!component?.default_amount) return '';
@@ -86,24 +89,27 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
   initialData,
   isLoading = false,
   mode = 'create',
+  submitError,
 }) => {
-  const [formData, setFormData] = useState<EmployeeComponentAssignmentFormData>(() =>
-    initialData || {
-      employee_id: null,
-      salary_component_id: null,
-      amount: '',
-      percentage: '',
-      units: '',
-      frequency: 'per_payroll',
-      effective_date: new Date().toISOString().split('T')[0],
-      end_date: '',
-      is_prorated: false,
-      requires_attendance: true,
-    }
+  const [formData, setFormData] = useState<EmployeeComponentAssignmentFormData>(
+    initialData || DEFAULT_FORM
   );
-
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Sync form when initialData changes (e.g. opening in edit mode)
+  useEffect(() => {
+    // If only one component, auto-select it
+    if (!initialData && components.length === 1) {
+      setFormData({
+        ...DEFAULT_FORM,
+        salary_component_id: components[0].id,
+        amount: getDefaultAmount(components[0]),
+      });
+    } else {
+      setFormData(initialData || DEFAULT_FORM);
+    }
+    setErrors({});
+  }, [initialData, isOpen, components]);
 
   const selectedComponent = components.find((c) => c.id === formData.salary_component_id);
   const selectedEmployee = employees.find((e) => e.id === formData.employee_id);
@@ -114,28 +120,24 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
     if (!formData.employee_id) {
       newErrors.employee_id = 'Employee is required';
     }
-
     if (!formData.salary_component_id) {
       newErrors.salary_component_id = 'Component is required';
     }
-
-    // At least one of amount, percentage, or units must be filled
     if (!formData.amount && !formData.percentage && !formData.units) {
       newErrors.amount = 'Please enter amount, percentage, or units';
     }
-
     if (formData.amount && isNaN(parseFloat(formData.amount))) {
       newErrors.amount = 'Amount must be a valid number';
     }
-
-    if (formData.percentage && (isNaN(parseFloat(formData.percentage)) || parseFloat(formData.percentage) > 100)) {
+    if (
+      formData.percentage &&
+      (isNaN(parseFloat(formData.percentage)) || parseFloat(formData.percentage) > 100)
+    ) {
       newErrors.percentage = 'Percentage must be between 0 and 100';
     }
-
     if (!formData.effective_date) {
       newErrors.effective_date = 'Effective date is required';
     }
-
     if (formData.end_date && formData.end_date <= formData.effective_date) {
       newErrors.end_date = 'End date must be after effective date';
     }
@@ -146,30 +148,13 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitError(null);
 
     if (!validateForm()) {
       return;
     }
 
-    try {
-      await onSubmit(formData);
-      setFormData({
-        employee_id: null,
-        salary_component_id: null,
-        amount: '',
-        percentage: '',
-        units: '',
-        frequency: 'per_payroll',
-        effective_date: new Date().toISOString().split('T')[0],
-        end_date: '',
-        is_prorated: false,
-        requires_attendance: true,
-      });
-      onClose();
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'An error occurred');
-    }
+    // Delegate to parent — parent owns submitError state
+    await onSubmit(formData);
   };
 
   return (
@@ -198,15 +183,8 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
               <Select
                 value={formData.employee_id?.toString() || ''}
                 onValueChange={(value) => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    employee_id: value ? parseInt(value) : null,
-                  }));
-                  setErrors((prev) => {
-                    const newErrors = { ...prev };
-                    delete newErrors.employee_id;
-                    return newErrors;
-                  });
+                  setFormData((prev) => ({ ...prev, employee_id: value ? parseInt(value) : null }));
+                  setErrors((prev) => { const e = { ...prev }; delete e.employee_id; return e; });
                 }}
                 disabled={isLoading || mode === 'edit'}
               >
@@ -221,7 +199,9 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
                   ))}
                 </SelectContent>
               </Select>
-              {errors.employee_id && <p className="text-xs text-red-600 mt-1">{errors.employee_id}</p>}
+              {errors.employee_id && (
+                <p className="text-xs text-red-600 mt-1">{errors.employee_id}</p>
+              )}
               {selectedEmployee && (
                 <p className="text-xs text-gray-600 mt-1">
                   {selectedEmployee.department} • {selectedEmployee.position}
@@ -240,11 +220,7 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
                     salary_component_id: value ? parseInt(value) : null,
                     amount: getDefaultAmount(components.find((c) => c.id === parseInt(value))),
                   }));
-                  setErrors((prev) => {
-                    const newErrors = { ...prev };
-                    delete newErrors.salary_component_id;
-                    return newErrors;
-                  });
+                  setErrors((prev) => { const e = { ...prev }; delete e.salary_component_id; return e; });
                 }}
                 disabled={isLoading}
               >
@@ -283,11 +259,7 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
                 value={formData.amount}
                 onChange={(e) => {
                   setFormData((prev) => ({ ...prev, amount: e.target.value }));
-                  setErrors((prev) => {
-                    const newErrors = { ...prev };
-                    delete newErrors.amount;
-                    return newErrors;
-                  });
+                  setErrors((prev) => { const err = { ...prev }; delete err.amount; return err; });
                 }}
                 disabled={isLoading}
               />
@@ -306,15 +278,13 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
                 value={formData.percentage}
                 onChange={(e) => {
                   setFormData((prev) => ({ ...prev, percentage: e.target.value }));
-                  setErrors((prev) => {
-                    const newErrors = { ...prev };
-                    delete newErrors.percentage;
-                    return newErrors;
-                  });
+                  setErrors((prev) => { const err = { ...prev }; delete err.percentage; return err; });
                 }}
                 disabled={isLoading}
               />
-              {errors.percentage && <p className="text-xs text-red-600 mt-1">{errors.percentage}</p>}
+              {errors.percentage && (
+                <p className="text-xs text-red-600 mt-1">{errors.percentage}</p>
+              )}
             </div>
 
             <div>
@@ -340,7 +310,7 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
                 onValueChange={(value) =>
                   setFormData((prev) => ({
                     ...prev,
-                    frequency: value as 'per_payroll' | 'monthly' | 'quarterly' | 'semi_annual' | 'annually' | 'one_time',
+                    frequency: value as EmployeeComponentAssignmentFormData['frequency'],
                   }))
                 }
                 disabled={isLoading}
@@ -366,11 +336,7 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
                 value={formData.effective_date}
                 onChange={(e) => {
                   setFormData((prev) => ({ ...prev, effective_date: e.target.value }));
-                  setErrors((prev) => {
-                    const newErrors = { ...prev };
-                    delete newErrors.effective_date;
-                    return newErrors;
-                  });
+                  setErrors((prev) => { const err = { ...prev }; delete err.effective_date; return err; });
                 }}
                 disabled={isLoading}
               />
@@ -387,15 +353,13 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
                 value={formData.end_date}
                 onChange={(e) => {
                   setFormData((prev) => ({ ...prev, end_date: e.target.value }));
-                  setErrors((prev) => {
-                    const newErrors = { ...prev };
-                    delete newErrors.end_date;
-                    return newErrors;
-                  });
+                  setErrors((prev) => { const err = { ...prev }; delete err.end_date; return err; });
                 }}
                 disabled={isLoading}
               />
-              {errors.end_date && <p className="text-xs text-red-600 mt-1">{errors.end_date}</p>}
+              {errors.end_date && (
+                <p className="text-xs text-red-600 mt-1">{errors.end_date}</p>
+              )}
             </div>
           </div>
 
@@ -432,7 +396,7 @@ export const EmployeeComponentAssignModal: React.FC<EmployeeComponentAssignModal
 
           {/* Actions */}
           <div className="flex gap-3 justify-end pt-4">
-            <Button variant="outline" onClick={onClose} disabled={isLoading}>
+            <Button variant="outline" type="button" onClick={onClose} disabled={isLoading}>
               Cancel
             </Button>
             <Button type="submit" disabled={isLoading}>

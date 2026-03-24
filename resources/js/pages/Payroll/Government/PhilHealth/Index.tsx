@@ -169,15 +169,14 @@ export default function PhilHealthIndex({
         });
     };
 
-    const handleDownloadContributions = () => {
-        if (currentPeriod) {
-            router.get(
-                `/payroll/government/philhealth/download-contributions/${currentPeriod.id}`,
-                {},
-                { preserveScroll: true }
-            );
-        }
-    };
+const handleDownloadContributions = () => {
+    if (currentPeriod) {
+        window.open(
+            `/payroll/government/philhealth/download-contributions/${currentPeriod.id}`,
+            '_blank'
+        );
+    }
+};
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>

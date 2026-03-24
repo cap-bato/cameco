@@ -95,6 +95,15 @@ Route::middleware(['auth', 'verified', EnsureEmployee::class])
             Route::get('/history', [\App\Http\Controllers\Employee\LeaveController::class, 'history'])
                 ->middleware('permission:employee.leave.view-history')
                 ->name('history');
+
+            // View a specific leave request (redirects back to history context)
+            Route::get('/request/{id}', [\App\Http\Controllers\Employee\LeaveController::class, 'show'])
+                ->middleware('permission:employee.leave.view-history')
+                ->name('request.show');
+
+            // Backward-compatible alias for older links
+            Route::get('/requests/{id}', [\App\Http\Controllers\Employee\LeaveController::class, 'show'])
+                ->middleware('permission:employee.leave.view-history');
             
             // Show leave request form
             Route::get('/request', [\App\Http\Controllers\Employee\LeaveController::class, 'create'])

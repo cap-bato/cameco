@@ -105,16 +105,15 @@ class RfidBadgeController extends Controller
 
             // Get all active employees
             $allActiveEmployees = Employee::where('status', 'active')
-                ->with(['department', 'rfidCardMappings' => fn($q) => $q->where('is_active', true)])
-                ->orderBy('first_name')
-                ->orderBy('last_name')
+                ->with(['department', 'position', 'rfidCardMappings' => fn($q) => $q->where('is_active', true)])
+                ->orderBy('employee_number')
                 ->get()
                 ->map(fn($emp) => [
                     'id' => $emp->id,
                     'name' => $emp->full_name,
                     'employee_id' => $emp->employee_number,
                     'department' => $emp->department?->name ?? 'N/A',
-                    'position' => $emp->position,
+                    'position' => $emp->position?->title ?? 'N/A',
                     'hire_date' => $emp->hire_date?->format('Y-m-d'),
                     'photo' => $emp->photo_url,
                 ]);
@@ -122,15 +121,15 @@ class RfidBadgeController extends Controller
             // Get employees without active badges
             $employeesWithoutActiveBadges = Employee::where('status', 'active')
                 ->whereDoesntHave('rfidCardMappings', fn($q) => $q->where('is_active', true))
-                ->orderBy('first_name')
-                ->orderBy('last_name')
+                ->with(['department', 'position'])
+                ->orderBy('employee_number')
                 ->get()
                 ->map(fn($emp) => [
                     'id' => $emp->id,
                     'name' => $emp->full_name,
                     'employee_id' => $emp->employee_number,
                     'department' => $emp->department?->name ?? 'N/A',
-                    'position' => $emp->position,
+                    'position' => $emp->position?->title ?? 'N/A',
                     'hire_date' => $emp->hire_date?->format('Y-m-d'),
                     'photo' => $emp->photo_url,
                 ]);
@@ -204,11 +203,10 @@ class RfidBadgeController extends Controller
         try {
             // Get all active employees with their current badge status
             $employees = Employee::where('status', 'active')
-                ->with(['department', 'rfidCardMappings' => function ($query) {
+                ->with(['department', 'position', 'rfidCardMappings' => function ($query) {
                     $query->where('is_active', true);
                 }])
-                ->orderBy('first_name')
-                ->orderBy('last_name')
+                ->orderBy('employee_number')
                 ->get()
                 ->map(function ($employee) {
                     $activeBadge = $employee->rfidCardMappings->first();
@@ -218,7 +216,7 @@ class RfidBadgeController extends Controller
                         'name' => $employee->full_name,
                         'employee_id' => $employee->employee_number,
                         'department' => $employee->department?->name ?? 'N/A',
-                        'position' => $employee->position ?? 'N/A',
+                        'position' => $employee->position?->title ?? 'N/A',
                         'photo' => $employee->photo_url ?? null,
                         'badge' => $activeBadge ? [
                             'card_uid' => $activeBadge->card_uid,
@@ -271,7 +269,7 @@ class RfidBadgeController extends Controller
         // Validate badge data
         $validated = $request->validate([
             'employee_id' => 'required|integer|exists:employees,id',
-            'card_uid' => 'required|string|regex:/^[0-9A-Fa-f:]+$/|unique:rfid_card_mappings,card_uid',
+            'card_uid' => 'required|string|regex:/^[0-9A-Fa-f:-]+$/|unique:rfid_card_mappings,card_uid',
             'card_type' => 'required|in:mifare,desfire,em4100',
             'expires_at' => 'nullable|date|after:today',
             'notes' => 'nullable|string|max:1000',
@@ -354,7 +352,7 @@ class RfidBadgeController extends Controller
             return redirect()->route('hr.timekeeping.badges.index')
                 ->with('success', 'Badge issued successfully to ' . $badge->employee->full_name);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
             Log::error('Badge issuance failed', [
                 'employee_id' => $validated['employee_id'] ?? null,
@@ -365,7 +363,7 @@ class RfidBadgeController extends Controller
 
             return back()
                 ->withInput($validated)
-                ->withErrors(['error' => 'Failed to issue badge. Please try again.' . ($e->getMessage() ? ' Error: ' . $e->getMessage() : '')]);
+                ->withErrors(['error' => 'Failed to issue badge: ' . $e->getMessage()]);
         }
     }
 

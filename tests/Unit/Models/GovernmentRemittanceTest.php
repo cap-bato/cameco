@@ -18,12 +18,25 @@ class GovernmentRemittanceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->period = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
+        $this->period = $this->makePeriod('2026-01', 'A');
+    }
+
+    private function makePeriod(string $month, string $suffix = 'A'): PayrollPeriod
+    {
+        [$year, $m] = explode('-', $month);
+        $start = "{$year}-{$m}-01";
+        $end   = date('Y-m-t', strtotime($start));
+        return PayrollPeriod::create([
+            'period_number'           => "{$month}-{$suffix}",
+            'period_name'             => date('F Y', strtotime($start)) . " – Period {$suffix}",
+            'period_start'            => $start,
+            'period_end'              => $end,
+            'payment_date'            => date('Y-m-d', strtotime($end . ' +5 days')),
+            'period_month'            => $month,
+            'period_year'             => (int) $year,
+            'timekeeping_cutoff_date' => $end,
+            'leave_cutoff_date'       => $end,
+            'adjustment_deadline'     => date('Y-m-d', strtotime($end . ' +2 days')),
         ]);
     }
 
@@ -31,7 +44,8 @@ class GovernmentRemittanceTest extends TestCase
     {
         return GovernmentRemittance::create(array_merge([
             'payroll_period_id' => $this->period->id,
-            'agency'            => 'SSS',
+            'agency'            => 'sss',
+            'remittance_type'   => 'monthly',
             'status'            => 'pending',
             'remittance_month'  => '2026-01',
             'period_start'      => '2026-01-01',
@@ -61,15 +75,25 @@ class GovernmentRemittanceTest extends TestCase
         GovernmentReport::create([
             'payroll_period_id'        => $this->period->id,
             'government_remittance_id' => $remittance->id,
-            'agency'                   => 'SSS',
-            'report_type'              => 'R3',
+            'agency'                   => 'sss',
+            'report_type'              => 'r3',
+            'report_name'              => 'SSS R3 Report',
+            'report_period'            => '2026-01',
+            'file_name'                => 'sss-r3-2026-01.csv',
+            'file_path'                => '/reports/sss-r3-2026-01.csv',
+            'file_type'                => 'csv',
             'status'                   => 'draft',
         ]);
         GovernmentReport::create([
             'payroll_period_id'        => $this->period->id,
             'government_remittance_id' => $remittance->id,
-            'agency'                   => 'SSS',
-            'report_type'              => 'ML2',
+            'agency'                   => 'sss',
+            'report_type'              => 'ml2',
+            'report_name'              => 'SSS ML2 Report',
+            'report_period'            => '2026-01',
+            'file_name'                => 'sss-ml2-2026-01.csv',
+            'file_path'                => '/reports/sss-ml2-2026-01.csv',
+            'file_type'                => 'csv',
             'status'                   => 'draft',
         ]);
 
@@ -106,12 +130,12 @@ class GovernmentRemittanceTest extends TestCase
 
     public function test_scope_by_agency_filters_by_agency(): void
     {
-        $this->makeRemittance(['agency' => 'SSS']);
-        $this->makeRemittance(['agency' => 'PhilHealth']);
-        $this->makeRemittance(['agency' => 'PhilHealth']);
+        $this->makeRemittance(['agency' => 'sss']);
+        $this->makeRemittance(['agency' => 'philhealth']);
+        $this->makeRemittance(['agency' => 'philhealth']);
 
-        $sss      = GovernmentRemittance::byAgency('SSS')->get();
-        $philHealth = GovernmentRemittance::byAgency('PhilHealth')->get();
+        $sss      = GovernmentRemittance::byAgency('sss')->get();
+        $philHealth = GovernmentRemittance::byAgency('philhealth')->get();
 
         $this->assertCount(1, $sss);
         $this->assertCount(2, $philHealth);

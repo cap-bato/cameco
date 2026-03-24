@@ -43,9 +43,35 @@ export default function EnvelopePrinter({ employees }: EnvelopePrinterProps) {
     };
 
     return (
-        <div className="space-y-4">
+        <>
+            <style>{`
+                @media print {
+                    body, html {
+                        background: #fff !important;
+                    }
+                    aside,
+                    header,
+                    nav,
+                    [data-sidebar],
+                    .sidebar,
+                    .print\:hidden,
+                    .print-hide,
+                    .app-layout,
+                    .main-content:not(.envelope-print-area) {
+                        display: none !important;
+                    }
+                    .envelope-print-area {
+                        display: block !important;
+                        width: 100vw !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: #fff !important;
+                    }
+                }
+            `}</style>
+            <div className="space-y-4 envelope-print-area">
             {/* Instructions Card */}
-            <Card className="border-blue-200 bg-blue-50">
+            <Card className="border-blue-200 bg-blue-50 print:hidden">
                 <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2 text-blue-900">
                         <AlertCircle className="h-5 w-5" />
@@ -62,20 +88,12 @@ export default function EnvelopePrinter({ employees }: EnvelopePrinterProps) {
             </Card>
 
             {/* Action Buttons */}
-            <Card>
+            <Card className="print:hidden">
                 <CardHeader>
                     <CardTitle className="text-base">Envelope Generation</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex gap-2">
-                        <Button
-                            onClick={handleGenerateForDownload}
-                            disabled={printableEmployees.length === 0 || isPrinting}
-                            className="bg-blue-600 hover:bg-blue-700"
-                        >
-                            <FileText className="h-4 w-4 mr-2" />
-                            {isPrinting ? 'Generating...' : 'Generate PDF'}
-                        </Button>
                         <Button
                             onClick={handlePrintEnvelopes}
                             disabled={printableEmployees.length === 0 || isPrinting}
@@ -168,7 +186,7 @@ export default function EnvelopePrinter({ employees }: EnvelopePrinterProps) {
             )}
 
             {printableEmployees.length === 0 && (
-                <Card>
+                <Card className="print:hidden">
                     <CardContent className="pt-8 text-center">
                         <p className="text-muted-foreground">No envelopes available for printing</p>
                         <p className="text-xs text-gray-500 mt-2">
@@ -178,5 +196,6 @@ export default function EnvelopePrinter({ employees }: EnvelopePrinterProps) {
                 </Card>
             )}
         </div>
+        </>
     );
 }

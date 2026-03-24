@@ -15,6 +15,7 @@ class EmployeeAllowance extends Model
 
     protected $fillable = [
         'employee_id',
+        'salary_component_id',
         'allowance_type',
         'allowance_name',
         'amount',
@@ -34,24 +35,18 @@ class EmployeeAllowance extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'deminimis_limit_monthly' => 'decimal:2',
-        'deminimis_limit_annual' => 'decimal:2',
-        'is_taxable' => 'boolean',
-        'is_deminimis' => 'boolean',
-        'is_active' => 'boolean',
-        'effective_date' => 'date',
-        'end_date' => 'date',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
+        // ...existing code...
     ];
 
     // Relationships
     /**
-     * Get the employee this allowance belongs to
+     * Get the salary component this allowance is linked to (if any)
+    /**
+     * Get the salary component this allowance is linked to (if any)
      */
-    public function employee(): BelongsTo
+    public function salaryComponent(): BelongsTo
     {
-        return $this->belongsTo(Employee::class);
+        return $this->belongsTo(SalaryComponent::class, 'salary_component_id');
     }
 
     /**
@@ -174,11 +169,11 @@ class EmployeeAllowance extends Model
         $today = now()->toDateString();
 
         if ($this->effective_date > $today) {
-            return 'Pending (Starts: ' . $this->effective_date->format('M d, Y') . ')';
+            return 'Pending (Starts: ' . (\Carbon\Carbon::parse($this->effective_date))->format('M d, Y') . ')';
         }
 
         if ($this->end_date && $this->end_date < $today) {
-            return 'Ended (Ended: ' . $this->end_date->format('M d, Y') . ')';
+            return 'Ended (Ended: ' . (\Carbon\Carbon::parse($this->end_date))->format('M d, Y') . ')';
         }
 
         return 'Active';

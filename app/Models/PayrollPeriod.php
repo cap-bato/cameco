@@ -252,6 +252,9 @@ class PayrollPeriod extends Model
 
     /**
      * Scope a query to include periods pending approval.
+     *
+     * @deprecated Workflow simplified to single officer. These states are no longer
+     * used for new periods as of 2026-03-07. Kept for historic period queries only.
      */
     public function scopePendingApproval($query)
     {
@@ -364,7 +367,7 @@ class PayrollPeriod extends Model
      */
     public function canApprove(): bool
     {
-        return in_array($this->status, ['under_review', 'pending_approval']);
+        return in_array($this->status, ['calculated', 'under_review', 'pending_approval']);
     }
 
     /**
@@ -455,7 +458,7 @@ class PayrollPeriod extends Model
      */
     public function approve($userId): bool
     {
-        if (!in_array($this->status, ['under_review', 'pending_approval'])) {
+    if (!in_array($this->status, ['calculated', 'under_review', 'pending_approval'])) {
             throw new \Exception('Only periods under review can be approved');
         }
 

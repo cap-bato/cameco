@@ -25,6 +25,8 @@ import {
     type Position,
     type Department,
 } from '@/components/hr/position-form-modal';
+import { PositionConfirmationDialog } from '@/components/hr/position-confirmation-dialog';
+import { PositionArchiveDialog } from '@/components/hr/position-archive-dialog';
 import { Briefcase, Plus, Edit, Archive, MoreHorizontal } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 
@@ -57,6 +59,10 @@ export default function PositionIndex({
     const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
     const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
     const [selectedDepartmentFilter, setSelectedDepartmentFilter] = useState<number | null>(null);
+    const [positionToArchive, setPositionToArchive] = useState<Position | null>(null);
+    const [confirmationOpen, setConfirmationOpen] = useState(false);
+    const [pendingFormData, setPendingFormData] = useState<Omit<Position, 'id' | 'employee_count'> | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Detect if accessed from Admin or HR context
     const isAdminContext = page.url.startsWith('/admin');
@@ -113,23 +119,37 @@ export default function PositionIndex({
     };
 
     const handleModalSubmit = async (data: Omit<Position, 'id' | 'employee_count'>) => {
+        setPendingFormData(data);
+        setConfirmationOpen(true);
+    };
+
+    const handleConfirmSubmit = async () => {
+        if (!pendingFormData) return;
+
+        setIsSubmitting(true);
         const url = modalMode === 'create'
             ? `${routePrefix}/positions`
             : `${routePrefix}/positions/${selectedPosition?.id}`;
 
         const method = modalMode === 'create' ? 'post' : 'put';
 
-        router[method](url, data, {
+        router[method](url, pendingFormData, {
             onSuccess: () => {
                 setIsModalOpen(false);
+                setConfirmationOpen(false);
+                setPendingFormData(null);
+            },
+            onError: () => {
+                setIsSubmitting(false);
+            },
+            onFinish: () => {
+                setIsSubmitting(false);
             },
         });
     };
 
     const handleArchive = (position: Position) => {
-        if (confirm(`Are you sure you want to archive "${position.title}"?`)) {
-            router.delete(`${routePrefix}/positions/${position.id}`);
-        }
+        setPositionToArchive(position);
     };
 
     /**
@@ -295,6 +315,9 @@ export default function PositionIndex({
                                                                 Position Title
                                                             </TableHead>
                                                             <TableHead className="font-semibold text-slate-900 dark:text-slate-100">
+                                                                Position Level
+                                                            </TableHead>
+                                                            <TableHead className="font-semibold text-slate-900 dark:text-slate-100">
                                                                 Code
                                                             </TableHead>
                                                             <TableHead className="font-semibold text-slate-900 dark:text-slate-100">
@@ -414,6 +437,28 @@ export default function PositionIndex({
                 positions={positions}
                 mode={modalMode}
             />
+
+            {/* Position Confirmation Dialog */}
+            <PositionConfirmationDialog
+                open={confirmationOpen}
+                onOpenChange={setConfirmationOpen}
+                onConfirm={handleConfirmSubmit}
+                isLoading={isSubmitting}
+                mode={modalMode}
+                positionTitle={selectedPosition?.title}
+            />
+
+            {/* Position Archive Dialog */}
+            {positionToArchive && (
+                <PositionArchiveDialog
+                    open={!!positionToArchive}
+                    onOpenChange={(open) => !open && setPositionToArchive(null)}
+                    positionId={positionToArchive.id}
+                    positionTitle={positionToArchive.title}
+                    employeeCount={positionToArchive.employee_count}
+                    routePrefix={routePrefix}
+                />
+            )}
         </AppLayout>
     );
 }

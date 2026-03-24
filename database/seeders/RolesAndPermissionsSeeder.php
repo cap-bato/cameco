@@ -154,6 +154,8 @@ class RolesAndPermissionsSeeder extends Seeder
         $hrManager->givePermissionTo(array_merge($hrPermissions, $timekeepingPermissions, $atsPermissions));
 
         // HR Staff - Operational Support Level
+        // HR Staff - Operational Support Level
+        // Ensure all CRUD permissions for employees are present
         $hrStaffPermissions = [
             // Dashboard
             'hr.dashboard.view',
@@ -163,6 +165,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'hr.employees.create',
             'hr.employees.update',
             'hr.employees.delete', // Can archive employees
+            'hr.employees.restore', // Can restore archived employees
             'hr.employees.view_government_ids', // Can view sensitive government IDs
 
             // Leave Management

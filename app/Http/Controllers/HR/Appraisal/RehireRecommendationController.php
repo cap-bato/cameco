@@ -31,34 +31,90 @@ class RehireRecommendationController extends Controller
         $departmentId = $request->input('department_id', '');
         $search = $request->input('search', '');
 
-        // Mock rehire recommendations
-        $mockRecommendations = $this->getMockRehireRecommendations();
+        // Get all employees with department and latest appraisal
+        $employees = \App\Models\Employee::with(['department', 'profile'])
+            ->when($departmentId, fn($q) => $q->where('department_id', $departmentId))
+            ->get();
 
-        // Apply filters
-        if ($recommendation) {
-            $mockRecommendations = array_filter(
-                $mockRecommendations,
-                fn($r) => $r['recommendation'] === $recommendation
-            );
-        }
-        if ($departmentId) {
-            $mockRecommendations = array_filter(
-                $mockRecommendations,
-                fn($r) => (string)$r['department_id'] === $departmentId
-            );
-        }
+        // Get latest appraisal per employee
+        $appraisals = \App\Models\Appraisal::whereIn('employee_id', $employees->pluck('id'))
+            ->orderBy('submitted_at', 'desc')
+            ->get()
+            ->groupBy('employee_id')
+            ->map(fn($group) => $group->first());
+
+        // Attendance rates: calculate for the last 12 months
+        $attendanceRates = \App\Models\DailyAttendanceSummary::whereIn('employee_id', $employees->pluck('id'))
+            ->where('attendance_date', '>=', now()->subMonths(12)->toDateString())
+            ->get()
+            ->groupBy('employee_id')
+            ->map(function ($records) {
+                $present = $records->where('is_present', true)->count();
+                $total = $records->count();
+                return $total > 0 ? round(($present / $total) * 100, 1) : 0.0;
+            });
+
+        // Build recommendations
+        $recommendations = $employees->map(function ($employee) use ($appraisals, $attendanceRates) {
+            $appraisal = $appraisals[$employee->id] ?? null;
+            $overallScore = $appraisal?->overall_score !== null ? floatval($appraisal->overall_score) : 0.0;
+            $attendance = $attendanceRates[$employee->id] ?? 0.0;
+            $violationCount = 0; // TODO: Replace with real violation count if model exists
+
+            // Recommendation logic
+            $recommendation = 'review_required';
+            $recommendationLabel = 'Requires Review';
+            $recommendationColor = 'bg-yellow-100 text-yellow-800';
+            if ($overallScore >= 7.5 && $attendance >= 90 && $violationCount === 0) {
+                $recommendation = 'eligible';
+                $recommendationLabel = 'Eligible for Rehire';
+                $recommendationColor = 'bg-green-100 text-green-800';
+            } elseif ($overallScore < 5.0 || $violationCount > 3) {
+                $recommendation = 'not_recommended';
+                $recommendationLabel = 'Not Recommended';
+                $recommendationColor = 'bg-red-100 text-red-800';
+            }
+
+            return [
+                'id' => $employee->id,
+                'employee_id' => $employee->id,
+                'employee_name' => $employee->profile?->first_name . ' ' . $employee->profile?->last_name,
+                'employee_number' => $employee->employee_number,
+                'department_id' => $employee->department?->id,
+                'department_name' => $employee->department?->name,
+                'appraisal_id' => $appraisal?->id,
+                'cycle_name' => $appraisal?->cycle?->name,
+                'recommendation' => $recommendation,
+                'recommendation_label' => $recommendationLabel,
+                'recommendation_color' => $recommendationColor,
+                'overall_score' => $overallScore,
+                'attendance_rate' => $attendance,
+                'violation_count' => $violationCount,
+                'notes' => $appraisal?->notes ?? '',
+                'is_overridden' => false,
+                'overridden_by' => null,
+                'created_at' => $appraisal?->created_at?->toDateTimeString(),
+                'updated_at' => $appraisal?->updated_at?->toDateTimeString(),
+            ];
+        });
+
+        // Apply search filter
         if ($search) {
-            $mockRecommendations = array_filter($mockRecommendations, function ($r) use ($search) {
+            $recommendations = $recommendations->filter(function ($r) use ($search) {
                 return stripos($r['employee_name'], $search) !== false ||
                        stripos($r['employee_number'], $search) !== false;
             });
         }
+        // Apply recommendation filter
+        if ($recommendation) {
+            $recommendations = $recommendations->filter(fn($r) => $r['recommendation'] === $recommendation);
+        }
 
         // Get departments for filter
-        $departments = $this->getMockDepartments();
+        $departments = \App\Models\Department::orderBy('name')->get(['id', 'name']);
 
         return Inertia::render('HR/RehireRecommendations/Index', [
-            'recommendations' => array_values($mockRecommendations),
+            'recommendations' => $recommendations->values(),
             'departments' => $departments,
             'filters' => [
                 'recommendation' => $recommendation,

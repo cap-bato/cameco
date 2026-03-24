@@ -37,6 +37,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
 
         // Payroll Periods - Phase 1.1 & 1.2
         Route::get('/periods', [PayrollPeriodController::class, 'index'])->name('periods.index');
+        Route::get('/periods', [PayrollPeriodController::class, 'index'])->name('periods.index');
         Route::post('/periods', [PayrollPeriodController::class, 'store'])->name('periods.store');
         Route::get('/periods/{id}', [PayrollPeriodController::class, 'show'])->name('periods.show');
         Route::get('/periods/{id}/edit', [PayrollPeriodController::class, 'edit'])->name('periods.edit');
@@ -55,6 +56,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::post('/calculations/{id}/recalculate', [PayrollCalculationController::class, 'recalculate'])->name('calculations.recalculate');
         Route::post('/calculations/{id}/approve', [PayrollCalculationController::class, 'approve'])->name('calculations.approve');
         Route::delete('/calculations/{id}', [PayrollCalculationController::class, 'destroy'])->name('calculations.destroy');
+        Route::get('/calculations/{calculation}/status', [PayrollCalculationController::class, 'status'])->name('calculations.status');
 
         // Payroll Adjustments - Phase 1.4
         Route::get('/adjustments', [PayrollAdjustmentController::class, 'index'])->name('adjustments.index');
@@ -115,9 +117,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
             ->middleware('permission:payroll.loans.view')
             ->name('loans.index');
 
-        // Loan CRUD and payment routes can be enabled via feature flag once
-        // LoansController and LoanManagementService are fully aligned.
-        if (config('features.enable_loan_crud_routes')) {
+        // LoansController and LoanManagementService are fully aligned. 
             Route::post('/loans', [LoansController::class, 'store'])
                 ->middleware('permission:payroll.loans.create')
                 ->name('loans.store');
@@ -139,7 +139,7 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
             Route::get('/loans/{id}/payments', [LoansController::class, 'getPayments'])
                 ->middleware('permission:payroll.loans.view')
                 ->name('loans.payments');
-        }
+
         Route::get('/advances', [AdvancesController::class, 'index'])->name('advances.index');
         Route::post('/advances', [AdvancesController::class, 'store'])->name('advances.store');
         Route::post('/advances/{id}/approve', [AdvancesController::class, 'approve'])->name('advances.approve');
@@ -206,8 +206,8 @@ Route::prefix('payroll')->middleware(['auth', 'verified', EnsurePayrollOfficer::
         Route::get('/payments/payslips', [PayslipsController::class, 'index'])->name('payslips.index');
         Route::post('/payments/payslips/generate', [PayslipsController::class, 'generate'])->name('payslips.generate');
         Route::post('/payments/payslips/distribute', [PayslipsController::class, 'distribute'])->name('payslips.distribute');
-        Route::get('/payments/payslips/{id}/preview', [PayslipsController::class, 'preview'])->name('payslips.preview');
-        Route::get('/payments/payslips/{id}/download', [PayslipsController::class, 'download'])->name('payslips.download');
+        Route::get('/payments/payslips/{id}/preview',  [PayslipsController::class, 'preview'])->name('payslips.preview');
+    Route::get('/payments/payslips/{id}/download', [PayslipsController::class, 'download'])->name('payslips.download');
         Route::post('/payments/payslips/{id}/email', [PayslipsController::class, 'email'])->name('payslips.email');
         Route::get('/payments/payslips/{id}/print', [PayslipsController::class, 'print'])->name('payslips.print');
         Route::post('/payments/payslips/bulk-download', [PayslipsController::class, 'bulkDownload'])->name('payslips.bulk-download');

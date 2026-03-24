@@ -16,7 +16,7 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         //add commands here if needed
         FinalizeAttendanceForPeriodCommand::class,
-
+        \App\Console\Commands\SyncLeaveBalanceRemaining::class,
     ];
 
     /**

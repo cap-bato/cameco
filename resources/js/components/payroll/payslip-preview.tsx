@@ -35,64 +35,64 @@ export function PayslipPreview({ open, onOpenChange, data, onDownload }: Payslip
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <FileText className="h-5 w-5" />
-                            Payslip Preview
+            <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto p-0">
+                {/* Professional Header */}
+                <div className="sticky top-0 z-10 bg-gradient-to-r from-blue-900 to-blue-800 px-6 py-4 text-white flex items-center justify-between border-b-4 border-blue-700">
+                    <div className="flex items-center gap-3">
+                        <FileText className="h-6 w-6" />
+                        <div>
+                            <h2 className="text-xl font-bold">PAYSLIP PREVIEW</h2>
+                            <p className="text-xs text-blue-100">Employee Compensation Statement</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                            {onDownload && (
-                                <Button variant="outline" size="sm" onClick={onDownload}>
-                                    <Download className="mr-2 h-4 w-4" />
-                                    Download PDF
-                                </Button>
-                            )}
-                            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-                                <X className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    </DialogTitle>
-                </DialogHeader>
+                    </div>
+                    {onDownload && (
+                        <Button 
+                            onClick={onDownload}
+                            className="bg-white text-blue-900 hover:bg-blue-50 font-semibold"
+                        >
+                            <Download className="mr-2 h-4 w-4" />
+                            Download PDF
+                        </Button>
+                    )}
+                </div>
 
                 {/* Payslip Content */}
-                <div className="space-y-6 py-4">
+                <div className="space-y-3 py-4 px-6">
                     {/* Company Header */}
-                    <div className="text-center">
-                        <h2 className="text-2xl font-bold">Cathay Metal Corporation</h2>
-                        <p className="text-sm text-gray-600">Employee Payslip</p>
+                    <div className="text-center border-b-2 border-gray-200 pb-2">
+                        <h2 className="text-xl font-bold text-blue-900">CAMECO CORPORATION</h2>
+                        <p className="text-xs text-gray-600 font-medium">Professional Employee Payslip</p>
                     </div>
 
-                    <Separator />
-
                     {/* Employee & Period Information */}
-                    <div className="grid gap-6 md:grid-cols-2">
+                    <div className="grid gap-3 md:grid-cols-2">
                         {/* Employee Info */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="flex items-center gap-2 text-sm">
-                                    <User className="h-4 w-4" />
+                        <Card className="border-0 shadow-md">
+                            <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 border-b-2 border-blue-200 pb-2">
+                                <CardTitle className="flex items-center gap-2 text-sm text-blue-900">
+                                    <div className="bg-blue-900 text-white p-1 rounded">
+                                        <User className="h-3 w-3" />
+                                    </div>
                                     Employee Information
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Employee Name:</span>
-                                    <span className="font-semibold">{data.employee_name}</span>
+                            <CardContent className="space-y-2 text-xs pt-2">
+                                <div className="flex justify-between items-center border-b border-gray-100 pb-1">
+                                    <span className="font-semibold text-gray-700">Employee Name:</span>
+                                    <span className="font-bold text-blue-900">{data.employee_name}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Employee Number:</span>
-                                    <span className="font-mono">{data.employee_number}</span>
+                                <div className="flex justify-between items-center border-b border-gray-100 pb-1">
+                                    <span className="font-semibold text-gray-700">Employee ID:</span>
+                                    <span className="font-mono text-gray-900 font-bold">{data.employee_number}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Position:</span>
-                                    <span>{data.position}</span>
+                                <div className="flex justify-between items-center border-b border-gray-100 pb-1">
+                                    <span className="font-semibold text-gray-700">Position:</span>
+                                    <span className="text-gray-900">{data.position}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Department:</span>
-                                    <span className="flex items-center gap-1">
-                                        <Building2 className="h-3 w-3" />
+                                <div className="flex justify-between items-center">
+                                    <span className="font-semibold text-gray-700">Department:</span>
+                                    <span className="text-gray-900 flex items-center gap-1">
+                                        <Building2 className="h-3 w-3 text-blue-600" />
                                         {data.department}
                                     </span>
                                 </div>
@@ -100,130 +100,141 @@ export function PayslipPreview({ open, onOpenChange, data, onDownload }: Payslip
                         </Card>
 
                         {/* Period Info */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="flex items-center gap-2 text-sm">
-                                    <Calendar className="h-4 w-4" />
-                                    Pay Period Information
+                        <Card className="border-0 shadow-md">
+                            <CardHeader className="bg-gradient-to-r from-green-50 to-green-100 border-b-2 border-green-200 pb-2">
+                                <CardTitle className="flex items-center gap-2 text-sm text-green-900">
+                                    <div className="bg-green-900 text-white p-1 rounded">
+                                        <Calendar className="h-3 w-3" />
+                                    </div>
+                                    Pay Period
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Period:</span>
-                                    <span className="font-semibold">{data.period_name}</span>
+                            <CardContent className="space-y-2 text-xs pt-2">
+                                <div className="flex justify-between items-center border-b border-gray-100 pb-1">
+                                    <span className="font-semibold text-gray-700">Period:</span>
+                                    <span className="font-bold text-gray-900">{data.period_name}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Period Start:</span>
-                                    <span>{formatDate(data.period_start)}</span>
+                                <div className="flex justify-between items-center border-b border-gray-100 pb-1">
+                                    <span className="font-semibold text-gray-700">Period Start:</span>
+                                    <span className="text-gray-900">{formatDate(data.period_start)}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Period End:</span>
-                                    <span>{formatDate(data.period_end)}</span>
+                                <div className="flex justify-between items-center border-b border-gray-100 pb-1">
+                                    <span className="font-semibold text-gray-700">Period End:</span>
+                                    <span className="text-gray-900">{formatDate(data.period_end)}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Pay Date:</span>
-                                    <span className="font-semibold text-green-700">{formatDate(data.pay_date)}</span>
+                                <div className="flex justify-between items-center">
+                                    <span className="font-semibold text-gray-700">Pay Date:</span>
+                                    <span className="font-bold text-green-700">{formatDate(data.pay_date)}</span>
                                 </div>
                             </CardContent>
                         </Card>
                     </div>
 
-                    {/* Earnings Section */}
-                    <Card>
-                        <CardHeader className="bg-green-50">
-                            <CardTitle className="text-base text-green-800">Earnings</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-4">
-                            <div className="space-y-2">
-                                {data.earnings.map((earning, index) => (
-                                    <div key={index} className="flex justify-between text-sm">
-                                        <span className="text-gray-700">{earning.name}</span>
-                                        <span className="font-medium">{formatPeso(earning.amount)}</span>
+                    {/* Earnings and Deductions Side by Side */}
+                    <div className="grid gap-3 md:grid-cols-2">
+                        {/* Earnings Section */}
+                        <Card className="border-0 shadow-md">
+                            <CardHeader className="bg-gradient-to-r from-green-600 to-green-700 text-white border-b-4 border-green-800 pb-2">
+                                <CardTitle className="text-sm font-bold">EARNINGS</CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-2">
+                                <div className="space-y-2">
+                                    {data.earnings.map((earning, index) => (
+                                        <div key={index} className="flex justify-between items-center text-xs border-b border-gray-100 pb-1 last:border-0">
+                                            <span className="text-gray-700 font-medium">{earning.name}</span>
+                                            <span className="font-bold text-green-700 text-right">{formatPeso(earning.amount)}</span>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between items-center text-sm font-bold pt-2 border-t-2 border-green-200 mt-2">
+                                        <span className="text-green-900">GROSS</span>
+                                        <span className="text-green-700">{formatPeso(data.gross_pay)}</span>
                                     </div>
-                                ))}
-                                <Separator className="my-3" />
-                                <div className="flex justify-between text-base font-semibold">
-                                    <span>Gross Pay</span>
-                                    <span className="text-green-700">{formatPeso(data.gross_pay)}</span>
                                 </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
 
-                    {/* Deductions Section */}
-                    <Card>
-                        <CardHeader className="bg-red-50">
-                            <CardTitle className="text-base text-red-800">Deductions</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-4">
-                            <div className="space-y-2">
-                                {data.deductions.map((deduction, index) => (
-                                    <div key={index} className="flex justify-between text-sm">
-                                        <span className="text-gray-700">{deduction.name}</span>
-                                        <span className="font-medium text-red-600">
-                                            ({formatPeso(deduction.amount)})
-                                        </span>
+                        {/* Deductions Section */}
+                        <Card className="border-0 shadow-md">
+                            <CardHeader className="bg-gradient-to-r from-red-600 to-red-700 text-white border-b-4 border-red-800 pb-2">
+                                <CardTitle className="text-sm font-bold">DEDUCTIONS</CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-2">
+                                <div className="space-y-2">
+                                    {data.deductions.map((deduction, index) => (
+                                        <div key={index} className="flex justify-between items-center text-xs border-b border-gray-100 pb-1 last:border-0">
+                                            <span className="text-gray-700 font-medium">{deduction.name}</span>
+                                            <span className="font-bold text-red-600 text-right">({formatPeso(deduction.amount)})</span>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between items-center text-sm font-bold pt-2 border-t-2 border-red-200 mt-2">
+                                        <span className="text-red-900">TOTAL</span>
+                                        <span className="text-red-700">({formatPeso(data.total_deductions)})</span>
                                     </div>
-                                ))}
-                                <Separator className="my-3" />
-                                <div className="flex justify-between text-base font-semibold">
-                                    <span>Total Deductions</span>
-                                    <span className="text-red-700">({formatPeso(data.total_deductions)})</span>
                                 </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
+                    </div>
 
                     {/* Net Pay Section */}
-                    <Card className="border-2 border-green-600 bg-green-50">
-                        <CardContent className="py-6">
+                    <Card className="border-0 shadow-lg">
+                        <CardContent className="bg-gradient-to-r from-blue-900 to-blue-800 text-white py-4 px-6 rounded-lg">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-700">NET PAY</p>
-                                    <p className="text-xs text-gray-600">Amount to be received</p>
+                                    <p className="text-xs font-bold text-blue-100 mb-1">NET PAY</p>
+                                    <p className="text-xs text-blue-200">Amount to be received</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-3xl font-bold text-green-700">{formatPeso(data.net_pay)}</p>
+                                    <p className="text-3xl font-black">{formatPeso(data.net_pay)}</p>
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
                     {/* Year-to-Date Summary */}
-                    <Card>
-                        <CardHeader className="bg-blue-50">
-                            <CardTitle className="text-base text-blue-800">Year-to-Date (YTD) Summary</CardTitle>
+                    <Card className="border-0 shadow-md">
+                        <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 border-b-2 border-blue-200 pb-2">
+                            <CardTitle className="text-xs text-blue-900">Year-to-Date (YTD) Summary</CardTitle>
                         </CardHeader>
-                        <CardContent className="pt-4">
-                            <div className="grid gap-4 md:grid-cols-3">
-                                <div className="space-y-1">
-                                    <p className="text-xs text-gray-600">YTD Gross</p>
-                                    <p className="text-lg font-semibold">{formatPeso(data.ytd_gross)}</p>
+                        <CardContent className="pt-3">
+                            <div className="grid gap-3 md:grid-cols-3">
+                                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border-l-4 border-green-600">
+                                    <p className="text-xs font-bold text-gray-700 mb-1">YTD GROSS</p>
+                                    <p className="text-lg font-bold text-green-700">{formatPeso(data.ytd_gross)}</p>
                                 </div>
-                                <div className="space-y-1">
-                                    <p className="text-xs text-gray-600">YTD Deductions</p>
-                                    <p className="text-lg font-semibold text-red-600">
-                                        ({formatPeso(data.ytd_deductions)})
-                                    </p>
+                                <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-3 border-l-4 border-red-600">
+                                    <p className="text-xs font-bold text-gray-700 mb-1">YTD DEDUCTIONS</p>
+                                    <p className="text-lg font-bold text-red-700">({formatPeso(data.ytd_deductions)})</p>
                                 </div>
-                                <div className="space-y-1">
-                                    <p className="text-xs text-gray-600">YTD Net</p>
-                                    <p className="text-lg font-semibold text-green-700">{formatPeso(data.ytd_net)}</p>
+                                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border-l-4 border-blue-600">
+                                    <p className="text-xs font-bold text-gray-700 mb-1">YTD NET</p>
+                                    <p className="text-lg font-bold text-blue-700">{formatPeso(data.ytd_net)}</p>
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
                     {/* Footer Notes */}
-                    <div className="rounded-lg border bg-gray-50 p-4 text-xs text-gray-600">
-                        <p className="font-semibold text-gray-800">Important Notes:</p>
-                        <ul className="mt-2 list-inside list-disc space-y-1">
-                            <li>This payslip is computer-generated and complies with DOLE regulations</li>
-                            <li>All deductions are made in accordance with Philippine labor law</li>
-                            <li>Government contributions (SSS, PhilHealth, Pag-IBIG) are as per current rates</li>
-                            <li>
-                                For questions or concerns, please contact the Payroll Department at
-                                payroll@cathay-metal.com
+                    <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border border-gray-300 p-3">
+                        <p className="font-bold text-gray-900 mb-2 flex items-center gap-2 text-xs">
+                            <div className="w-1 h-4 bg-blue-900 rounded"></div>
+                            Important Notes:
+                        </p>
+                        <ul className="space-y-1 text-xs text-gray-700">
+                            <li className="flex gap-2">
+                                <span className="text-blue-900 font-bold">•</span>
+                                <span>This payslip is computer-generated and complies with DOLE regulations</span>
+                            </li>
+                            <li className="flex gap-2">
+                                <span className="text-blue-900 font-bold">•</span>
+                                <span>All deductions are made in accordance with Philippine labor law</span>
+                            </li>
+                            <li className="flex gap-2">
+                                <span className="text-blue-900 font-bold">•</span>
+                                <span>Government contributions (SSS, PhilHealth, Pag-IBIG) are as per current rates</span>
+                            </li>
+                            <li className="flex gap-2">
+                                <span className="text-blue-900 font-bold">•</span>
+                                <span>For questions or concerns, please contact the Payroll Department</span>
                             </li>
                         </ul>
                     </div>

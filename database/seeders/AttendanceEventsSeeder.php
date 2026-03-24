@@ -205,7 +205,6 @@ class AttendanceEventsSeeder extends Seeder
 
             $exitCode = Artisan::call('timekeeping:generate-daily-summaries', [
                 '--date'          => $date,
-                '--force'         => true,
                 '--auto-finalize' => true,
             ]);
 

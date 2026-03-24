@@ -98,6 +98,14 @@ class AssignmentController extends Controller
             ])
             ->toArray();
         $schedules = \App\Models\WorkSchedule::where('status', 'active')->get(['id', 'name', 'monday_start', 'monday_end'])->toArray();
+        
+        // Map schedules to include shift_start/shift_end for frontend
+        $schedules = array_map(fn ($schedule) => [
+            'id' => $schedule['id'],
+            'name' => $schedule['name'],
+            'shift_start' => $schedule['monday_start'],
+            'shift_end' => $schedule['monday_end'],
+        ], $schedules);
 
         $filters = [
             'search' => $request->input('search', ''),
@@ -154,13 +162,31 @@ class AssignmentController extends Controller
      */
     public function store(StoreShiftAssignmentRequest $request)
     {
-        $this->shiftAssignmentService->createAssignment(
-            $request->validated(),
-            auth()->user()
-        );
+        try {
+            $assignment = $this->shiftAssignmentService->createAssignment(
+                $request->validated(),
+                auth()->user()
+            );
 
-        return redirect()->route('hr.workforce.assignments.index')
-            ->with('success', 'Shift assignment created successfully.');
+            \Log::info('Shift assignment created successfully', [
+                'id' => $assignment->id,
+                'employee_id' => $assignment->employee_id,
+                'date' => $assignment->date,
+            ]);
+
+            return redirect()->route('hr.workforce.assignments.index')
+                ->with('success', 'Shift assignment created successfully.');
+        } catch (\Throwable $e) {
+            \Log::error('Shift assignment creation failed', [
+                'data' => $request->validated(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return back()
+                ->withInput()
+                ->with('error', 'Failed to create assignment: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -211,11 +237,28 @@ class AssignmentController extends Controller
      */
     public function update(UpdateShiftAssignmentRequest $request, string $id)
     {
-        $assignment = ShiftAssignment::findOrFail($id);
-        $this->shiftAssignmentService->updateAssignment($assignment, $request->validated());
+        try {
+            $assignment = ShiftAssignment::findOrFail($id);
+            $this->shiftAssignmentService->updateAssignment($assignment, $request->validated());
 
-        return redirect()->route('hr.workforce.assignments.index')
-            ->with('success', 'Shift assignment updated successfully.');
+            \Log::info('Shift assignment updated successfully', [
+                'id' => $assignment->id,
+            ]);
+
+            return redirect()->route('hr.workforce.assignments.index')
+                ->with('success', 'Shift assignment updated successfully.');
+        } catch (\Throwable $e) {
+            \Log::error('Shift assignment update failed', [
+                'id' => $id,
+                'data' => $request->validated(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return back()
+                ->withInput()
+                ->with('error', 'Failed to update assignment: ' . $e->getMessage());
+        }
     }
 
     /**

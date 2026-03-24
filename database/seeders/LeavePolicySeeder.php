@@ -17,6 +17,10 @@ class LeavePolicySeeder extends Seeder
             ['code' => 'PL', 'name' => 'Privilege Leave', 'description' => 'General personal leave', 'annual_entitlement' => 8.0, 'max_carryover' => 2.0, 'can_carry_forward' => true, 'is_paid' => true],
             ['code' => 'BL', 'name' => 'Bereavement Leave', 'description' => 'Leave for death of a family member', 'annual_entitlement' => 3.0, 'max_carryover' => 0.0, 'can_carry_forward' => false, 'is_paid' => true],
             ['code' => 'SP', 'name' => 'Special Leave', 'description' => 'Leave for special circumstances', 'annual_entitlement' => 0.0, 'max_carryover' => 0.0, 'can_carry_forward' => false, 'is_paid' => false],
+            
+            // Deprecated - use Sick Leave with leave_type_variant 'half_am' or 'half_pm' instead
+            ['code' => 'HAM', 'name' => '(Deprecated) Half Day AM Leave', 'description' => 'Half-day leave for morning (AM) only', 'annual_entitlement' => 0.0, 'max_carryover' => 0.0, 'can_carry_forward' => false, 'is_paid' => true, 'is_active' => false],
+            ['code' => 'HPM', 'name' => '(Deprecated) Half Day PM Leave', 'description' => 'Half-day leave for afternoon (PM) only', 'annual_entitlement' => 0.0, 'max_carryover' => 0.0, 'can_carry_forward' => false, 'is_paid' => true, 'is_active' => false],
         ];
 
         foreach ($policies as $p) {

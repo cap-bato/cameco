@@ -8,6 +8,8 @@ import { send } from '@/routes/verification';
 import { Form, Head } from '@inertiajs/react';
 
 export default function VerifyEmail({ status }: { status?: string }) {
+    const verifyEmailRoute = send();
+
     return (
         <AuthLayout
             title="Verify email"
@@ -22,7 +24,11 @@ export default function VerifyEmail({ status }: { status?: string }) {
                 </div>
             )}
 
-            <Form {...send.form()} className="space-y-6 text-center">
+            <Form
+                action={verifyEmailRoute.url}
+                method={verifyEmailRoute.method}
+                className="space-y-6 text-center"
+            >
                 {({ processing }) => (
                     <>
                         <Button disabled={processing} variant="secondary">

@@ -51,10 +51,11 @@ class PayslipController extends Controller
 
             // Available years from actual payslip records
             $availableYears = Payslip::where('employee_id', $employee->id)
-                ->selectRaw('YEAR(period_start) as year')
+                ->selectRaw('EXTRACT(YEAR FROM period_start) as year')
                 ->distinct()
                 ->orderByDesc('year')
                 ->pluck('year')
+                ->map(static fn ($yearValue) => (int) $yearValue)
                 ->toArray();
 
             if (empty($availableYears)) {
@@ -202,6 +203,7 @@ class PayslipController extends Controller
         try {
             // Fetch payslip from database, ensuring it belongs to the authenticated employee
             $payslip = Payslip::where('employee_id', $employee->id)
+                ->with(['employee.profile', 'employee.department', 'employee.position'])
                 ->findOrFail($id);
 
             // Serve stored PDF if it exists
@@ -225,15 +227,31 @@ class PayslipController extends Controller
                 'payslip_id' => $id,
             ]);
 
-            $data = $this->transformPayslip($payslip);
-            $pdf  = \Barryvdh\DomPDF\Facade\Pdf::loadView('payslips.pdf', [
-                'payslip'  => $data,
-                'employee' => [
-                    'full_name'       => $employee->profile->full_name ?? $user->name,
-                    'employee_number' => $employee->employee_number,
-                    'department'      => $employee->department->name ?? 'N/A',
-                    'position'        => $employee->position->title ?? 'N/A',
-                ],
+            // Transform payslip data for PDF view
+            $payslipData = [
+                'pay_period_start' => $payslip->period_start?->format('M d, Y') ?? $payslip->period_start,
+                'pay_period_end' => $payslip->period_end?->format('M d, Y') ?? $payslip->period_end,
+                'pay_date' => $payslip->payment_date?->format('M d, Y') ?? $payslip->payment_date,
+                'basic_salary' => (float) ($payslip->earnings_data['basic_pay'] ?? 0),
+                'allowances' => $this->buildAllowancesForPdf($payslip->earnings_data ?? []),
+                'gross_pay' => (float) $payslip->total_earnings,
+                'deductions' => $this->buildDeductionsForPdf($payslip->deductions_data ?? []),
+                'net_pay' => (float) $payslip->net_pay,
+                'year_to_date_gross' => (float) $payslip->ytd_gross ?? 0,
+                'year_to_date_deductions' => (float) $payslip->ytd_deductions ?? 0,
+                'year_to_date_net' => (float) $payslip->ytd_net ?? 0,
+            ];
+
+            $employeeData = [
+                'full_name' => $payslip->employee?->profile?->full_name ?? $employee->profile->full_name ?? $user->name,
+                'employee_number' => $payslip->employee?->employee_number ?? $employee->employee_number,
+                'department' => $payslip->employee?->department?->name ?? $employee->department->name ?? 'N/A',
+                'position' => $payslip->employee?->position?->title ?? $employee->position->title ?? 'N/A',
+            ];
+
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('payslips.pdf', [
+                'payslip'  => $payslipData,
+                'employee' => $employeeData,
             ]);
 
             return $pdf->download("payslip-{$payslip->period_start?->format('Y-m')}.pdf");
@@ -469,24 +487,72 @@ class PayslipController extends Controller
      * Build allowances array from earnings data JSON.
      * 
      * Extracts allowances from earnings_data and transforms to SalaryComponent[].
+     * Includes helpful descriptions for employees to understand each allowance.
      * 
      * @param array $earningsData
      * @return array
      */
     private function buildAllowancesArray(array $earningsData): array
     {
+        $allowanceDescriptions = [
+            'rice_subsidy' => 'Monthly rice allowance for employee household consumption',
+            'transportation' => 'Transportation or commute allowance',
+            'telephone' => 'Telephone/communication allowance',
+            'laundry' => 'Uniform/laundry allowance',
+            'meal' => 'Meal allowance',
+            'hazard' => 'Hazard pay for dangerous work conditions',
+            'night_diff' => 'Additional pay for night shift work',
+            'holiday_pay' => 'Payment for holidays worked',
+            'overtime_pay' => 'Payment for hours worked beyond regular schedule',
+            'allowance' => 'Additional allowance',
+            'other_allowance' => 'Other supplementary allowance',
+        ];
+
         $allowances = [];
 
-        if (!empty($earningsData['other_allowances']) && $earningsData['other_allowances'] > 0) {
-            $allowances[] = ['name' => 'Other Allowances', 'amount' => (float) $earningsData['other_allowances']];
+        if (isset($earningsData['allowances']) && is_numeric($earningsData['allowances'])) {
+            $allowances[] = [
+                'name'   => 'Allowances',
+                'description' => 'Various allowances and supplementary benefits',
+                'amount' => (float) $earningsData['allowances'],
+            ];
         }
 
-        // If earnings_data has an 'allowances' sub-array, use that instead
+        if (!empty($earningsData['other_allowances']) && $earningsData['other_allowances'] > 0) {
+            $allowances[] = [
+                'name' => 'Other Allowances',
+                'description' => 'Additional allowances not classified elsewhere',
+                'amount' => (float) $earningsData['other_allowances']
+            ];
+        }
+
+        // If earnings_data has an 'allowances' sub-array/object, normalize to indexed SalaryComponent[].
         if (!empty($earningsData['allowances']) && is_array($earningsData['allowances'])) {
-            return array_map(fn($a) => [
-                'name'   => $a['name'] ?? 'Allowance',
-                'amount' => (float) ($a['amount'] ?? 0),
-            ], $earningsData['allowances']);
+            $normalizedAllowances = [];
+
+            foreach ($earningsData['allowances'] as $key => $allowance) {
+                if (is_array($allowance)) {
+                    $description = $allowanceDescriptions[strtolower(str_replace([' ', '_'], '_', $allowance['name'] ?? ''))] 
+                                ?? 'Additional allowance component';
+                    $normalizedAllowances[] = [
+                        'name'   => $allowance['name'] ?? 'Allowance',
+                        'description' => $description,
+                        'amount' => (float) ($allowance['amount'] ?? 0),
+                    ];
+                    continue;
+                }
+
+                // Handle key-value map format, e.g. {"Rice Subsidy": 1500}
+                $description = $allowanceDescriptions[strtolower(str_replace([' ', '_'], '_', $key))] 
+                            ?? 'Additional allowance component';
+                $normalizedAllowances[] = [
+                    'name'   => is_string($key) ? $key : 'Allowance',
+                    'description' => $description,
+                    'amount' => (float) $allowance,
+                ];
+            }
+
+            return array_values($normalizedAllowances);
         }
 
         return $allowances;
@@ -495,7 +561,8 @@ class PayslipController extends Controller
     /**
      * Build deductions array from deductions data JSON.
      * 
-     * Extracts deductions and maps to human-readable labels.
+     * Extracts deductions and maps to human-readable labels with descriptions.
+     * Includes helpful tooltips for employees, HR, and payroll staff.
      * 
      * @param array $deductionsData
      * @return array
@@ -503,18 +570,107 @@ class PayslipController extends Controller
     private function buildDeductionsArray(array $deductionsData): array
     {
         $labelMap = [
-            'sss_contribution'       => 'SSS',
-            'philhealth_contribution' => 'PhilHealth',
-            'pagibig_contribution'   => 'Pag-IBIG',
-            'withholding_tax'        => 'Withholding Tax',
-            'total_loan_deductions'  => 'Loan Deductions',
-            'tardiness_deduction'    => 'Tardiness',
+            'sss_contribution'        => [
+                'name' => 'SSS (Social Security System)',
+                'description' => 'Government social security contribution for retirement, disability, and death benefits',
+                'category' => 'government'
+            ],
+            'sss'                     => [
+                'name' => 'SSS (Social Security System)',
+                'description' => 'Government social security contribution for retirement, disability, and death benefits',
+                'category' => 'government'
+            ],
+            'philhealth_contribution' => [
+                'name' => 'PhilHealth',
+                'description' => 'Government health insurance contribution for you and your dependents',
+                'category' => 'government'
+            ],
+            'philhealth'              => [
+                'name' => 'PhilHealth',
+                'description' => 'Government health insurance contribution for you and your dependents',
+                'category' => 'government'
+            ],
+            'pagibig_contribution'    => [
+                'name' => 'Pag-IBIG (Home Development Mutual Fund)',
+                'description' => 'Government housing and savings fund contribution for home loans and retirement',
+                'category' => 'government'
+            ],
+            'pagibig'                 => [
+                'name' => 'Pag-IBIG (Home Development Mutual Fund)',
+                'description' => 'Government housing and savings fund contribution for home loans and retirement',
+                'category' => 'government'
+            ],
+            'withholding_tax'         => [
+                'name' => 'Income Tax Withheld',
+                'description' => 'Income tax automatically deducted and remitted to the Bureau of Internal Revenue (BIR)',
+                'category' => 'tax'
+            ],
+            'tax'                     => [
+                'name' => 'Income Tax Withheld',
+                'description' => 'Income tax automatically deducted and remitted to the Bureau of Internal Revenue (BIR)',
+                'category' => 'tax'
+            ],
+            'total_loan_deductions'   => [
+                'name' => 'Loan Amortization',
+                'description' => 'Monthly payment for company loans or salary loans',
+                'category' => 'loan'
+            ],
+            'loan'                    => [
+                'name' => 'Loan Amortization',
+                'description' => 'Monthly payment for company loans or salary loans',
+                'category' => 'loan'
+            ],
+            'advance'                 => [
+                'name' => 'Salary Advance Repayment',
+                'description' => 'Repayment of salary advances received from the company',
+                'category' => 'advance'
+            ],
+            'leave'                   => [
+                'name' => 'Unpaid Leave Deduction',
+                'description' => 'Salary reduction for approved unpaid leaves (leaves without pay)',
+                'category' => 'leave'
+            ],
+            'attendance'              => [
+                'name' => 'Attendance Deduction',
+                'description' => 'Deduction due to absences or incomplete work days',
+                'category' => 'attendance'
+            ],
+            'tardiness_deduction'     => [
+                'name' => 'Tardiness Deduction',
+                'description' => 'Deduction for late arrivals during the pay period',
+                'category' => 'attendance'
+            ],
+            'miscellaneous_deductions'=> [
+                'name' => 'Other Deductions',
+                'description' => 'Additional deductions not classified in standard categories',
+                'category' => 'other'
+            ],
+            'other'                   => [
+                'name' => 'Other Deductions',
+                'description' => 'Additional deductions not classified in standard categories',
+                'category' => 'other'
+            ],
         ];
 
         $deductions = [];
-        foreach ($labelMap as $key => $label) {
+        $seenLabels = [];
+        foreach ($labelMap as $key => $details) {
             if (!empty($deductionsData[$key]) && $deductionsData[$key] > 0) {
-                $deductions[] = ['name' => $label, 'amount' => (float) $deductionsData[$key]];
+                $name = is_array($details) ? $details['name'] : $details;
+                $description = is_array($details) ? ($details['description'] ?? '') : '';
+                $category = is_array($details) ? ($details['category'] ?? 'other') : 'other';
+                
+                if (isset($seenLabels[$name])) {
+                    $deductions[$seenLabels[$name]]['amount'] += (float) $deductionsData[$key];
+                } else {
+                    $seenLabels[$name] = count($deductions);
+                    $deductions[] = [
+                        'name' => $name,
+                        'description' => $description,
+                        'category' => $category,
+                        'amount' => (float) $deductionsData[$key]
+                    ];
+                }
             }
         }
 
@@ -533,6 +689,14 @@ class PayslipController extends Controller
     {
         $earningsData   = $payslip->earnings_data ?? [];
         $deductionsData = $payslip->deductions_data ?? [];
+        $deductions = $this->buildDeductionsArray($deductionsData);
+
+        if (empty($deductions) && (float) $payslip->total_deductions > 0) {
+            $deductions[] = [
+                'name' => 'Total Deductions',
+                'amount' => (float) $payslip->total_deductions,
+            ];
+        }
 
         $pdfUrl = null;
         if (!empty($payslip->file_path) && \Illuminate\Support\Facades\Storage::exists($payslip->file_path)) {
@@ -553,12 +717,25 @@ class PayslipController extends Controller
             'pay_period_end'     => $payslip->period_end?->format('Y-m-d'),
             'pay_date'           => $payslip->payment_date?->format('Y-m-d'),
             'status'             => $this->mapPayslipStatus($payslip->status),
-            'basic_salary'       => (float) ($earningsData['basic_monthly_salary'] ?? $earningsData['basic_salary'] ?? 0),
+            'basic_salary'       => (float) (
+                $earningsData['basic_pay']
+                ?? $earningsData['basic_monthly_salary']
+                ?? $earningsData['basic_salary']
+                ?? $earningsData['basic']
+                ?? $earningsData['base_pay']
+                ?? 0
+            ),
             'allowances'         => $this->buildAllowancesArray($earningsData),
             'gross_pay'          => (float) $payslip->total_earnings,
-            'deductions'         => $this->buildDeductionsArray($deductionsData),
+            'deductions'         => $deductions,
             'net_pay'            => (float) $payslip->net_pay,
             'year_to_date_gross' => (float) ($payslip->ytd_gross ?? 0),
+            'year_to_date_deductions' => (float) (
+                ($payslip->ytd_tax ?? 0)
+                + ($payslip->ytd_sss ?? 0)
+                + ($payslip->ytd_philhealth ?? 0)
+                + ($payslip->ytd_pagibig ?? 0)
+            ),
             'year_to_date_net'   => (float) ($payslip->ytd_net ?? 0),
             'pdf_url'            => $pdfUrl,
         ];
@@ -579,6 +756,57 @@ class PayslipController extends Controller
         }
 
         return $years;
+    }
+
+    /**
+     * Build allowances array for PDF view.
+     */
+    private function buildAllowancesForPdf(array $earningsData): array
+    {
+        $allowances = [];
+
+        if (!empty($earningsData['allowances']) && is_array($earningsData['allowances'])) {
+            foreach ($earningsData['allowances'] as $name => $amount) {
+                if ((float) $amount > 0) {
+                    $allowances[] = [
+                        'name' => ucwords(str_replace('_', ' ', $name)),
+                        'amount' => (float) $amount,
+                    ];
+                }
+            }
+        }
+
+        return $allowances;
+    }
+
+    /**
+     * Build deductions array for PDF view.
+     */
+    private function buildDeductionsForPdf(array $deductionsData): array
+    {
+        $deductions = [];
+
+        $labelMap = [
+            'sss_contribution' => 'SSS (Social Security System)',
+            'philhealth_contribution' => 'PhilHealth',
+            'pagibig_contribution' => 'Pag-IBIG',
+            'withholding_tax' => 'Income Tax Withheld',
+            'total_loan_deductions' => 'Loans',
+            'tardiness_deduction' => 'Tardiness',
+            'miscellaneous_deductions' => 'Other Deductions',
+        ];
+
+        foreach ($labelMap as $key => $label) {
+            $amount = (float) ($deductionsData[$key] ?? 0);
+            if ($amount > 0) {
+                $deductions[] = [
+                    'name' => $label,
+                    'amount' => $amount,
+                ];
+            }
+        }
+
+        return $deductions;
     }
 
 

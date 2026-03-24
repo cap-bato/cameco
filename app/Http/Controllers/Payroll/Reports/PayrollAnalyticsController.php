@@ -24,19 +24,19 @@ class PayrollAnalyticsController extends Controller
             $period = $periodDate->format('F Y');
         }
 
-        $costTrendData = $this->getMonthlyLaborCostTrends($periodDate);
+        $costTrendData       = $this->getMonthlyLaborCostTrends($periodDate);
         $departmentComparisons = $this->getDepartmentComparisons($periodDate);
-        $componentBreakdown = $this->getComponentBreakdown($periodDate);
-        $yoyComparisons = $this->getYearOverYearComparisons($periodDate);
+        $componentBreakdown  = $this->getComponentBreakdown($periodDate);
+        $yoyComparisons      = $this->getYearOverYearComparisons($periodDate);
         $employeeCostAnalysis = $this->getEmployeeCostAnalysis($periodDate);
-        $budgetVarianceData = $this->getBudgetVarianceData($periodDate);
+        $budgetVarianceData  = $this->getBudgetVarianceData($periodDate);
         $forecastProjections = $this->getForecastProjections($periodDate);
-        $analyticsSummary = $this->getAnalyticsSummary($periodDate);
+        $analyticsSummary    = $this->getAnalyticsSummary($periodDate);
 
         $availablePeriods = PayrollPeriod::orderByDesc('period_start')
-            ->limit(12)
-            ->get(['period_start'])
-            ->map(fn($p) => Carbon::parse((string) $p->period_start)->format('F Y'))
+            ->limit(24)
+            ->pluck('period_start')
+            ->map(fn($d) => Carbon::parse((string) $d)->format('F Y'))
             ->unique()
             ->values()
             ->toArray();
@@ -66,13 +66,43 @@ class PayrollAnalyticsController extends Controller
         ]);
     }
 
+    // ===================================================================
+    // HELPERS
+    // ===================================================================
+
+    private function getPeriodId(Carbon $periodDate): ?int
+    {
+        return PayrollPeriod::whereYear('period_start', $periodDate->year)
+            ->whereMonth('period_start', $periodDate->month)
+            ->value('id');
+    }
+
+    private function getPrevPeriodId(Carbon $periodDate): ?int
+    {
+        return PayrollPeriod::where('period_start', '<', $periodDate->copy()->startOfMonth())
+            ->orderByDesc('period_start')
+            ->value('id');
+    }
+
+    private function getPrevYearPeriodId(Carbon $periodDate): ?int
+    {
+        $prevYear = $periodDate->copy()->subYear();
+        return PayrollPeriod::whereYear('period_start', $prevYear->year)
+            ->whereMonth('period_start', $prevYear->month)
+            ->value('id');
+    }
+
+    // ===================================================================
+    // DATA METHODS
+    // ===================================================================
+
     private function getMonthlyLaborCostTrends(Carbon $periodDate): array
     {
-        $periods = PayrollPeriod::where('period_month', '<=', $periodDate->format('Y-m'))
-            ->orderByDesc('period_month')
+        $periods = PayrollPeriod::where('period_start', '<=', $periodDate->copy()->endOfMonth())
+            ->orderByDesc('period_start')
             ->limit(6)
             ->get()
-            ->sortBy('period_month')
+            ->sortBy('period_start')
             ->values();
 
         if ($periods->isEmpty()) {
@@ -122,18 +152,15 @@ class PayrollAnalyticsController extends Controller
 
     private function getDepartmentComparisons(Carbon $periodDate): array
     {
-        $periodMonth   = $periodDate->format('Y-m');
-        $currentPeriod = PayrollPeriod::where('period_month', $periodMonth)->first();
+        $currentPeriodId = $this->getPeriodId($periodDate);
 
-        if (!$currentPeriod) {
+        if (!$currentPeriodId) {
             return [];
         }
 
-        $prevPeriodId = PayrollPeriod::where('period_month', '<', $periodMonth)
-            ->orderByDesc('period_month')
-            ->value('id');
+        $prevPeriodId = $this->getPrevPeriodId($periodDate);
 
-        $currentAggs = EmployeePayrollCalculation::where('payroll_period_id', $currentPeriod->id)
+        $currentAggs = EmployeePayrollCalculation::where('payroll_period_id', $currentPeriodId)
             ->select(
                 'department',
                 DB::raw('COUNT(*) as total_employees'),
@@ -199,16 +226,13 @@ class PayrollAnalyticsController extends Controller
 
     private function getComponentBreakdown(Carbon $periodDate): array
     {
-        $periodMonth     = $periodDate->format('Y-m');
-        $currentPeriodId = PayrollPeriod::where('period_month', $periodMonth)->value('id');
+        $currentPeriodId = $this->getPeriodId($periodDate);
 
         if (!$currentPeriodId) {
             return [];
         }
 
-        $prevPeriodId = PayrollPeriod::where('period_month', '<', $periodMonth)
-            ->orderByDesc('period_month')
-            ->value('id');
+        $prevPeriodId = $this->getPrevPeriodId($periodDate);
 
         $agg = EmployeePayrollCalculation::where('payroll_period_id', $currentPeriodId)
             ->select(
@@ -291,8 +315,25 @@ class PayrollAnalyticsController extends Controller
             $monthDates[]    = $date;
         }
 
-        $currentPeriods = PayrollPeriod::whereIn('period_month', $currentMonths)->pluck('id', 'period_month');
-        $prevPeriods    = PayrollPeriod::whereIn('period_month', $prevMonths)->pluck('id', 'period_month');
+        $currentPeriods = collect();
+        $prevPeriods    = collect();
+
+        foreach ($monthDates as $idx => $date) {
+            $curId = PayrollPeriod::whereYear('period_start', $date->year)
+                ->whereMonth('period_start', $date->month)
+                ->value('id');
+            if ($curId) {
+                $currentPeriods->put($currentMonths[$idx], $curId);
+            }
+
+            $prevDate = $date->copy()->subYear();
+            $prevId   = PayrollPeriod::whereYear('period_start', $prevDate->year)
+                ->whereMonth('period_start', $prevDate->month)
+                ->value('id');
+            if ($prevId) {
+                $prevPeriods->put($prevMonths[$idx], $prevId);
+            }
+        }
 
         $currentAggs = collect();
         if ($currentPeriods->isNotEmpty()) {
@@ -343,8 +384,7 @@ class PayrollAnalyticsController extends Controller
 
     private function getEmployeeCostAnalysis(Carbon $periodDate): array
     {
-        $periodMonth = $periodDate->format('Y-m');
-        $periodId    = PayrollPeriod::where('period_month', $periodMonth)->value('id');
+        $periodId = $this->getPeriodId($periodDate);
 
         if (!$periodId) {
             return [];
@@ -381,18 +421,18 @@ class PayrollAnalyticsController extends Controller
             $ctc        = $totalGross + (float) $calc->total_bonuses + (float) $calc->total_government_deductions;
 
             $result[] = [
-                'employee_id'          => $calc->employee_id,
-                'employee_name'        => (string) ($calc->employee_name ?? ''),
-                'employee_code'        => (string) ($calc->employee_number ?? ''),
-                'department_id'        => $deptId,
-                'department_name'      => (string) ($calc->department ?? ''),
-                'position'             => (string) ($calc->position ?? ''),
-                'basic_salary'         => (int) round((float) $calc->basic_pay),
-                'total_gross_pay'      => (int) round($totalGross),
-                'total_deductions'     => (int) round((float) $calc->total_deductions),
-                'net_pay'              => (int) round((float) $calc->net_pay),
-                'cost_to_company'      => (int) round($ctc),
-                'component_breakdown'  => [
+                'employee_id'         => $calc->employee_id,
+                'employee_name'       => (string) ($calc->employee_name ?? ''),
+                'employee_code'       => (string) ($calc->employee_number ?? ''),
+                'department_id'       => $deptId,
+                'department_name'     => (string) ($calc->department ?? ''),
+                'position'            => (string) ($calc->position ?? ''),
+                'basic_salary'        => (int) round((float) $calc->basic_pay),
+                'total_gross_pay'     => (int) round($totalGross),
+                'total_deductions'    => (int) round((float) $calc->total_deductions),
+                'net_pay'             => (int) round((float) $calc->net_pay),
+                'cost_to_company'     => (int) round($ctc),
+                'component_breakdown' => [
                     ['component_name' => 'Basic Salary',     'component_type' => 'earning', 'amount' => (int) round((float) $calc->basic_pay)],
                     ['component_name' => 'Allowances',       'component_type' => 'earning', 'amount' => (int) round((float) $calc->total_allowances)],
                     ['component_name' => 'Overtime',         'component_type' => 'earning', 'amount' => (int) round((float) $calc->total_overtime_pay)],
@@ -408,8 +448,7 @@ class PayrollAnalyticsController extends Controller
 
     private function getBudgetVarianceData(Carbon $periodDate): array
     {
-        $periodMonth = $periodDate->format('Y-m');
-        $periodId    = PayrollPeriod::where('period_month', $periodMonth)->value('id');
+        $periodId = $this->getPeriodId($periodDate);
 
         if (!$periodId) {
             return [];
@@ -437,7 +476,7 @@ class PayrollAnalyticsController extends Controller
         $budgetRatios = [0.60, 0.15, 0.08, 0.10, 0.05];
 
         $variances = [];
-        $deptIndex = 1;
+        $deptIndex  = 1;
 
         foreach ($actuals as $actual) {
             $dept          = $deptsByName->get((string) $actual->department);
@@ -473,11 +512,11 @@ class PayrollAnalyticsController extends Controller
 
     private function getForecastProjections(Carbon $periodDate): array
     {
-        $historicalPeriods = PayrollPeriod::where('period_month', '<=', $periodDate->format('Y-m'))
-            ->orderByDesc('period_month')
+        $historicalPeriods = PayrollPeriod::where('period_start', '<=', $periodDate->copy()->endOfMonth())
+            ->orderByDesc('period_start')
             ->limit(6)
             ->get()
-            ->sortBy('period_month')
+            ->sortBy('period_start')
             ->values();
 
         if ($historicalPeriods->isEmpty()) {
@@ -506,7 +545,7 @@ class PayrollAnalyticsController extends Controller
             }
         }
         $avgGrowth = !empty($growthRates) ? array_sum($growthRates) / count($growthRates) : 0.02;
-        $avgGrowth = max(-0.10, min(0.20, $avgGrowth)); // clamp to [-10%, +20%]
+        $avgGrowth = max(-0.10, min(0.20, $avgGrowth));
 
         $projections = [];
         for ($i = 1; $i <= 6; $i++) {
@@ -514,17 +553,17 @@ class PayrollAnalyticsController extends Controller
             $projectedCost = $baseCost > 0 ? (int) round($baseCost * pow(1 + $avgGrowth, $i)) : 0;
 
             $projections[] = [
-                'month'                    => $date->format('m'),
-                'month_label'              => $date->format('M Y'),
-                'projected_labor_cost'     => $projectedCost,
-                'projected_basic_salary'   => (int) round($projectedCost * 0.60),
-                'projected_allowances'     => (int) round($projectedCost * 0.15),
-                'projected_overtime'       => (int) round($projectedCost * 0.08),
-                'projected_benefits'       => (int) round($projectedCost * 0.10),
-                'projected_contributions'  => (int) round($projectedCost * 0.05),
-                'projected_taxes'          => (int) round($projectedCost * 0.02),
+                'month'                   => $date->format('m'),
+                'month_label'             => $date->format('M Y'),
+                'projected_labor_cost'    => $projectedCost,
+                'projected_basic_salary'  => (int) round($projectedCost * 0.60),
+                'projected_allowances'    => (int) round($projectedCost * 0.15),
+                'projected_overtime'      => (int) round($projectedCost * 0.08),
+                'projected_benefits'      => (int) round($projectedCost * 0.10),
+                'projected_contributions' => (int) round($projectedCost * 0.05),
+                'projected_taxes'         => (int) round($projectedCost * 0.02),
                 'projected_employee_count' => $baseEmpCount + ($i - 1),
-                'confidence_level'         => $i <= 2 ? 'high' : ($i <= 4 ? 'medium' : 'low'),
+                'confidence_level'        => $i <= 2 ? 'high' : ($i <= 4 ? 'medium' : 'low'),
             ];
         }
 
@@ -533,11 +572,7 @@ class PayrollAnalyticsController extends Controller
 
     private function getAnalyticsSummary(Carbon $periodDate): array
     {
-        $periodMonth   = $periodDate->format('Y-m');
-        $prevMonth     = $periodDate->copy()->subMonth()->format('Y-m');
-        $prevYearMonth = $periodDate->copy()->subYear()->format('Y-m');
-
-        $currentPeriodId = PayrollPeriod::where('period_month', $periodMonth)->value('id');
+        $currentPeriodId = $this->getPeriodId($periodDate);
 
         if (!$currentPeriodId) {
             return [
@@ -577,16 +612,24 @@ class PayrollAnalyticsController extends Controller
             ->orderByDesc('dept_cost')
             ->first();
 
-        $prevPeriodId     = PayrollPeriod::where('period_month', $prevMonth)->value('id');
-        $prevYearPeriodId = PayrollPeriod::where('period_month', $prevYearMonth)->value('id');
+        $prevPeriodId     = $this->getPrevPeriodId($periodDate);
+        $prevYearPeriodId = $this->getPrevYearPeriodId($periodDate);
 
-        $prevCost     = $prevPeriodId ? (float) EmployeePayrollCalculation::where('payroll_period_id', $prevPeriodId)->sum('gross_pay') : 0;
-        $prevYearCost = $prevYearPeriodId ? (float) EmployeePayrollCalculation::where('payroll_period_id', $prevYearPeriodId)->sum('gross_pay') : 0;
+        $prevCost     = $prevPeriodId
+            ? (float) EmployeePayrollCalculation::where('payroll_period_id', $prevPeriodId)->sum('gross_pay')
+            : 0;
+        $prevYearCost = $prevYearPeriodId
+            ? (float) EmployeePayrollCalculation::where('payroll_period_id', $prevYearPeriodId)->sum('gross_pay')
+            : 0;
 
-        $last6Ids = PayrollPeriod::where('period_month', '<=', $periodMonth)->orderByDesc('period_month')->limit(6)->pluck('id');
+        $last6Ids = PayrollPeriod::where('period_start', '<=', $periodDate->copy()->endOfMonth())
+            ->orderByDesc('period_start')
+            ->limit(6)
+            ->pluck('id');
+
         $avgMonthlyCost = 0;
         if ($last6Ids->isNotEmpty()) {
-            $total6 = (float) EmployeePayrollCalculation::whereIn('payroll_period_id', $last6Ids)->sum('gross_pay');
+            $total6         = (float) EmployeePayrollCalculation::whereIn('payroll_period_id', $last6Ids)->sum('gross_pay');
             $avgMonthlyCost = (int) round($total6 / $last6Ids->count());
         }
 

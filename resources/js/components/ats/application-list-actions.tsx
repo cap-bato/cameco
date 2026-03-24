@@ -28,12 +28,6 @@ interface ApplicationListActionsProps {
   isLoading?: boolean;
 }
 
-/**
- * Application List Actions Component
- * Reusable action buttons for applications in list/table views
- * Can be displayed as individual buttons or as a dropdown menu
- * Includes integrated modals for status change and delete confirmation
- */
 export function ApplicationListActions({
   application,
   onView,
@@ -46,19 +40,11 @@ export function ApplicationListActions({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const handleStatusChange = () => {
-    setMoveModalOpen(true);
-  };
-
   const handleConfirmStatusChange = (newStatus: ApplicationStatus, notes?: string) => {
     if (onChangeStatus) {
       onChangeStatus(application, newStatus, notes);
       setMoveModalOpen(false);
     }
-  };
-
-  const handleDeleteClick = () => {
-    setDeleteDialogOpen(true);
   };
 
   const handleConfirmDelete = async () => {
@@ -73,7 +59,53 @@ export function ApplicationListActions({
     }
   };
 
-  // Compact dropdown menu view
+  // ─── Shared modals (used by both compact and expanded views) ────────────────
+  const modals = (
+    <>
+      <MoveApplicationModal
+        open={moveModalOpen}
+        application={application}
+        currentStatus={application.status}
+        onConfirm={handleConfirmStatusChange}
+        onCancel={() => setMoveModalOpen(false)}
+        isLoading={isLoading}
+      />
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              Delete Application
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the application from{' '}
+              <span className="font-semibold">{application.candidate_name || 'Unknown'}</span>?
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+
+  // ─── Compact dropdown view ───────────────────────────────────────────────────
   if (isCompact) {
     return (
       <>
@@ -103,10 +135,9 @@ export function ApplicationListActions({
                 <DropdownMenuSeparator />
               </>
             )}
-
             {onChangeStatus && (
               <DropdownMenuItem
-                onClick={handleStatusChange}
+                onClick={() => setMoveModalOpen(true)}
                 className="cursor-pointer"
                 disabled={isLoading || isDeleting}
               >
@@ -114,12 +145,11 @@ export function ApplicationListActions({
                 Change Status
               </DropdownMenuItem>
             )}
-
             {onDelete && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={handleDeleteClick}
+                  onClick={() => setDeleteDialogOpen(true)}
                   className="cursor-pointer text-red-600 focus:text-red-600"
                   disabled={isLoading || isDeleting}
                 >
@@ -130,51 +160,12 @@ export function ApplicationListActions({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <MoveApplicationModal
-          open={moveModalOpen}
-          application={application}
-          currentStatus={application.status}
-          onConfirm={handleConfirmStatusChange}
-          onCancel={() => setMoveModalOpen(false)}
-          isLoading={isLoading}
-        />
-
-        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600" />
-                Delete Application
-              </DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete the application from{' '}
-                <span className="font-semibold">{application.candidate_name || 'Unknown'}</span>? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setDeleteDialogOpen(false)}
-                disabled={isDeleting}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleConfirmDelete}
-                disabled={isDeleting}
-              >
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {modals}
       </>
     );
   }
 
-  // Expanded button group view
+  // ─── Expanded button group view ──────────────────────────────────────────────
   return (
     <>
       <div className="flex items-center justify-end gap-2">
@@ -191,13 +182,12 @@ export function ApplicationListActions({
             <span className="sr-only">View details</span>
           </Button>
         )}
-
         {onChangeStatus && (
           <Button
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0 hover:bg-purple-50 hover:text-purple-600"
-            onClick={handleStatusChange}
+            onClick={() => setMoveModalOpen(true)}
             title="Change status"
             disabled={isLoading || isDeleting}
           >
@@ -205,13 +195,12 @@ export function ApplicationListActions({
             <span className="sr-only">Change status</span>
           </Button>
         )}
-
         {onDelete && (
           <Button
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 text-red-600"
-            onClick={handleDeleteClick}
+            onClick={() => setDeleteDialogOpen(true)}
             title="Delete application"
             disabled={isLoading || isDeleting}
           >
@@ -220,55 +209,7 @@ export function ApplicationListActions({
           </Button>
         )}
       </div>
-
-      <MoveApplicationModal
-        open={moveModalOpen}
-        application={application}
-        currentStatus={application.status}
-        onConfirm={handleConfirmStatusChange}
-        onCancel={() => setMoveModalOpen(false)}
-        isLoading={isLoading}
-      />
-
-      <MoveApplicationModal
-        open={moveModalOpen}
-        application={application}
-        currentStatus={application.status}
-        onConfirm={handleConfirmStatusChange}
-        onCancel={() => setMoveModalOpen(false)}
-        isLoading={isLoading}
-      />
-
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-600" />
-              Delete Application
-            </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete the application from{' '}
-              <span className="font-semibold">{application.candidate_name || 'Unknown'}</span>? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleConfirmDelete}
-              disabled={isDeleting}
-            >
-              {isDeleting ? 'Deleting...' : 'Delete'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {modals}
     </>
   );
 }

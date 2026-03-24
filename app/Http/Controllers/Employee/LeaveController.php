@@ -7,6 +7,7 @@ use App\Http\Requests\Employee\LeaveRequestRequest;
 use App\Models\LeaveBalance;
 use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
+use App\Services\HR\Leave\LeaveVariantService;
 use App\Services\HR\Workforce\WorkforceCoverageService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -30,10 +31,12 @@ use Inertia\Response;
 class LeaveController extends Controller
 {
     protected WorkforceCoverageService $coverageService;
+    protected LeaveVariantService $variantService;
 
-    public function __construct(WorkforceCoverageService $coverageService)
+    public function __construct(WorkforceCoverageService $coverageService, LeaveVariantService $variantService)
     {
         $this->coverageService = $coverageService;
+        $this->variantService = $variantService;
     }
 
     /**
@@ -52,29 +55,30 @@ class LeaveController extends Controller
         try {
             // Get current year leave balances with leave policy details
             $currentYear = Carbon::now()->year;
+            $pendingByPolicy = $this->getPendingLeaveDaysByPolicy($employee->id, $currentYear);
             $balances = LeaveBalance::where('employee_id', $employee->id)
                 ->where('year', $currentYear)
-                ->with('leavePolicy:id,name,code,color,accrual_method,max_days')
+                ->with('leavePolicy:id,name,code,annual_entitlement')
                 ->get()
-                ->map(function ($balance) {
+                ->map(function ($balance) use ($pendingByPolicy) {
                     return [
                         'id' => $balance->id,
                         'leave_type' => $balance->leavePolicy->name ?? 'Unknown',
                         'leave_code' => $balance->leavePolicy->code ?? 'N/A',
-                        'color' => $balance->leavePolicy->color ?? '#64748b',
+                        'color' => '#64748b',
                         'total_entitled' => $balance->earned,
                         'used' => $balance->used,
-                        'pending' => $balance->pending ?? 0,
+                        'pending' => $pendingByPolicy[$balance->leave_policy_id] ?? 0,
                         'available' => $balance->remaining,
                         'carried_forward' => $balance->carried_forward ?? 0,
-                        'accrual_method' => $balance->leavePolicy->accrual_method ?? 'annual',
-                        'max_days' => $balance->leavePolicy->max_days ?? 0,
+                        'accrual_method' => 'annual',
+                        'max_days' => (int) ($balance->leavePolicy->annual_entitlement ?? 0),
                     ];
                 });
 
             // Get leave policies to show all available types (even with 0 balance)
             $allPolicies = LeavePolicy::where('is_active', true)
-                ->select('id', 'name', 'code', 'color', 'accrual_method', 'max_days')
+                ->select('id', 'name', 'code', 'annual_entitlement')
                 ->get()
                 ->map(function ($policy) use ($balances) {
                     $existingBalance = $balances->firstWhere('leave_code', $policy->code);
@@ -88,14 +92,14 @@ class LeaveController extends Controller
                         'id' => null,
                         'leave_type' => $policy->name,
                         'leave_code' => $policy->code,
-                        'color' => $policy->color ?? '#64748b',
+                        'color' => '#64748b',
                         'total_entitled' => 0,
                         'used' => 0,
                         'pending' => 0,
                         'available' => 0,
                         'carried_forward' => 0,
-                        'accrual_method' => $policy->accrual_method,
-                        'max_days' => $policy->max_days,
+                        'accrual_method' => 'annual',
+                        'max_days' => (int) ($policy->annual_entitlement ?? 0),
                     ];
                 });
 
@@ -159,7 +163,7 @@ class LeaveController extends Controller
 
             // Build query
             $query = LeaveRequest::where('employee_id', $employee->id)
-                ->with(['leavePolicy:id,name,code,color', 'supervisor.profile'])
+                ->with(['leavePolicy:id,name,code', 'supervisor.profile'])
                 ->whereYear('start_date', $year);
 
             if ($status && $status !== 'all') {
@@ -179,7 +183,7 @@ class LeaveController extends Controller
                         'id' => $request->id,
                         'leave_type' => $request->leavePolicy->name ?? 'Unknown',
                         'leave_type_code' => $request->leavePolicy->code ?? 'N/A',
-                        'color' => $request->leavePolicy->color ?? '#64748b',
+                        'color' => '#64748b',
                         'start_date' => $request->start_date->format('Y-m-d'),
                         'end_date' => $request->end_date->format('Y-m-d'),
                         'total_days' => $request->days_requested,
@@ -255,6 +259,59 @@ class LeaveController extends Controller
     }
 
     /**
+     * View a specific leave request by ID.
+     *
+     * For now this keeps the UX in the history page and prevents broken links.
+     */
+    public function show(Request $request, int $id): Response|RedirectResponse
+    {
+        $user = $request->user();
+        $employee = $user->employee;
+
+        if (!$employee) {
+            abort(403, 'No employee record found for your account.');
+        }
+
+        $leaveRequest = LeaveRequest::where('id', $id)
+            ->where('employee_id', $employee->id)
+            ->with(['leavePolicy:id,name,code', 'supervisor.profile'])
+            ->first();
+
+        if (!$leaveRequest) {
+            return redirect()->route('employee.leave.history')
+                ->withErrors(['error' => 'Leave request not found or access denied.']);
+        }
+
+        return Inertia::render('Employee/Leave/Show', [
+            'employee' => [
+                'id' => $employee->id,
+                'employee_number' => $employee->employee_number,
+                'full_name' => $employee->profile->full_name ?? 'N/A',
+                'department' => $employee->department->name ?? 'N/A',
+            ],
+            'request' => [
+                'id' => $leaveRequest->id,
+                'leave_type' => $leaveRequest->leavePolicy->name ?? 'Unknown',
+                'leave_type_code' => $leaveRequest->leavePolicy->code ?? 'N/A',
+                'start_date' => Carbon::parse($leaveRequest->start_date)->format('Y-m-d'),
+                'end_date' => Carbon::parse($leaveRequest->end_date)->format('Y-m-d'),
+                'total_days' => (float) $leaveRequest->days_requested,
+                'reason' => $leaveRequest->reason,
+                'status' => $leaveRequest->status,
+                'created_at' => $leaveRequest->submitted_at?->format('Y-m-d H:i:s'),
+                'approved_at' => $leaveRequest->supervisor_approved_at?->format('Y-m-d H:i:s') ?? $leaveRequest->hr_processed_at?->format('Y-m-d H:i:s'),
+                'rejected_at' => $leaveRequest->status === 'rejected'
+                    ? $leaveRequest->hr_processed_at?->format('Y-m-d H:i:s')
+                    : null,
+                'approver_name' => $leaveRequest->supervisor?->profile?->full_name ?? 'HR Staff',
+                'approver_role' => $leaveRequest->supervisor ? 'Supervisor' : 'HR Staff',
+                'rejection_reason' => $leaveRequest->hr_notes ?? $leaveRequest->supervisor_comments,
+                'cancelled_at' => $leaveRequest->cancelled_at?->format('Y-m-d H:i:s'),
+            ],
+        ]);
+    }
+
+    /**
      * Show leave request form
      * Displays available leave types and current balances for submission
      */
@@ -270,20 +327,21 @@ class LeaveController extends Controller
         try {
             // Get active leave policies
             $leavePolicies = LeavePolicy::where('is_active', true)
-                ->select('id', 'name', 'code', 'color', 'requires_document', 'min_advance_notice_days', 'max_consecutive_days')
+                ->select('id', 'name', 'code', 'description', 'annual_entitlement')
                 ->get();
 
             // Get current year balances
             $currentYear = Carbon::now()->year;
+            $pendingByPolicy = $this->getPendingLeaveDaysByPolicy($employee->id, $currentYear);
             $balances = LeaveBalance::where('employee_id', $employee->id)
                 ->where('year', $currentYear)
                 ->with('leavePolicy:id,name,code')
                 ->get()
                 ->keyBy('leave_policy_id')
-                ->map(function ($balance) {
+                ->map(function ($balance) use ($pendingByPolicy) {
                     return [
                         'available' => $balance->remaining,
-                        'pending' => $balance->pending ?? 0,
+                        'pending' => $pendingByPolicy[$balance->leave_policy_id] ?? 0,
                     ];
                 });
 
@@ -295,13 +353,13 @@ class LeaveController extends Controller
                     'id' => $policy->id,
                     'name' => $policy->name,
                     'code' => $policy->code,
-                    'color' => $policy->color ?? '#64748b',
+                    'color' => '#64748b',
                     'available_balance' => $balance['available'] ?? 0,
                     'pending' => $balance['pending'] ?? 0,
-                    'requires_document' => $policy->requires_document ?? false,
-                    'description' => '',
-                    'min_advance_notice_days' => $policy->min_advance_notice_days ?? 3,
-                    'max_consecutive_days' => $policy->max_consecutive_days ?? 30,
+                    'requires_document' => false,
+                    'description' => $policy->description ?? '',
+                    'min_advance_notice_days' => 3,
+                    'max_consecutive_days' => (int) ($policy->annual_entitlement ?? 30),
                 ];
             });
 
@@ -319,6 +377,7 @@ class LeaveController extends Controller
                     'department' => $employee->department->name ?? 'N/A',
                 ],
                 'leaveTypes' => $leavePoliciesWithBalances,
+                'leaveVariants' => $this->variantService->getAvailableVariants(),
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to load leave request form', [
@@ -360,10 +419,34 @@ class LeaveController extends Controller
             // Calculate days requested
             $startDate = Carbon::parse($validated['start_date']);
             $endDate = Carbon::parse($validated['end_date']);
-            $daysRequested = $startDate->diffInDays($endDate) + 1;
-
+            
             // Get leave policy
             $policy = LeavePolicy::findOrFail($validated['leave_policy_id']);
+            
+            // Extract and validate leave variant
+            $variant = $validated['leave_type_variant'] ?? null;
+            
+            if ($variant && !$this->variantService->isValidVariant($variant)) {
+                DB::rollBack();
+                return back()->withInput()->withErrors([
+                    'leave_type_variant' => 'Invalid leave variant selected.',
+                ]);
+            }
+            
+            // Only Sick Leave supports variants
+            if ($variant && $policy->code !== 'SL') {
+                DB::rollBack();
+                return back()->withInput()->withErrors([
+                    'leave_type_variant' => 'Leave variants are only available for Sick Leave.',
+                ]);
+            }
+            
+            // Calculate days based on variant
+            if ($variant && $this->variantService->isHalfDay($variant)) {
+                $daysRequested = 0.5;
+            } else {
+                $daysRequested = $startDate->diffInDays($endDate) + 1;
+            }
 
             // Validate leave balance (except for emergency leaves)
             $year = $startDate->year;
@@ -389,7 +472,7 @@ class LeaveController extends Controller
                 $documentPath = $file->storeAs(
                     "leave-documents/{$employee->id}",
                     $fileName,
-                    'private'
+                    'local'
                 );
             }
 
@@ -411,12 +494,8 @@ class LeaveController extends Controller
                 'status' => 'pending',
                 'submitted_at' => now(),
                 'submitted_by' => $user->id,
+                'leave_type_variant' => $variant,
             ]);
-
-            // Update leave balance pending count
-            if ($balance) {
-                $balance->increment('pending', $daysRequested);
-            }
 
             DB::commit();
 
@@ -502,7 +581,7 @@ class LeaveController extends Controller
             }
 
             // Validate leave hasn't started yet
-            if ($leaveRequest->start_date->isPast()) {
+            if (Carbon::parse($leaveRequest->start_date)->isPast()) {
                 DB::rollBack();
                 return back()->withErrors([
                     'error' => 'Cannot cancel this leave request. The leave period has already started.',
@@ -515,16 +594,6 @@ class LeaveController extends Controller
                 'cancelled_at' => now(),
                 'cancellation_reason' => $request->input('cancellation_reason'),
             ]);
-
-            // Restore leave balance pending count
-            $balance = LeaveBalance::where('employee_id', $employee->id)
-                ->where('leave_policy_id', $leaveRequest->leave_policy_id)
-                ->where('year', $leaveRequest->start_date->year)
-                ->first();
-
-            if ($balance) {
-                $balance->decrement('pending', $leaveRequest->days_requested);
-            }
 
             DB::commit();
 
@@ -591,11 +660,14 @@ class LeaveController extends Controller
             );
 
             $coveragePercentage = $coverage['coverage_percentage'] ?? 100;
-            $status = $this->determineCoverageStatus($coveragePercentage);
+            $hasScheduleData = $coverage['has_schedule_data'] ?? true;
+            $status = $hasScheduleData
+                ? $this->determineCoverageStatus($coveragePercentage)
+                : 'unavailable';
 
             // Get alternative dates with better coverage (if coverage is low)
             $alternativeDates = [];
-            if ($coveragePercentage < 80) {
+            if ($hasScheduleData && $coveragePercentage < 80) {
                 // Check next 2 weeks for better dates
                 $alternativeDates = $this->findAlternativeDates(
                     $startDate,
@@ -608,6 +680,7 @@ class LeaveController extends Controller
                 'coverage_percentage' => round($coveragePercentage, 1),
                 'status' => $status,
                 'message' => $this->getCoverageMessage($status, $coveragePercentage),
+                'coverage_available' => $hasScheduleData,
                 'alternative_dates' => $alternativeDates,
             ]);
         } catch (\Exception $e) {
@@ -645,6 +718,8 @@ class LeaveController extends Controller
     private function getCoverageMessage(string $status, float $percentage): string
     {
         switch ($status) {
+            case 'unavailable':
+                return 'Department coverage is not available yet for these dates because no staffing schedule has been published. You can still submit the request, but HR will review it once schedules are available.';
             case 'optimal':
                 return "Your dates have minimal impact on department coverage ({$percentage}%). Your request will likely be approved quickly.";
             case 'acceptable':
@@ -677,6 +752,11 @@ class LeaveController extends Controller
                 $departmentId
             );
 
+            if (($coverage['has_schedule_data'] ?? true) === false) {
+                $checkDate->addDay();
+                continue;
+            }
+
             $percentage = $coverage['coverage_percentage'] ?? 100;
 
             if ($percentage >= 85 && count($alternatives) < 3) {
@@ -692,5 +772,26 @@ class LeaveController extends Controller
         }
 
         return $alternatives;
+    }
+
+    /**
+     * Get pending leave days grouped by leave policy for a specific employee and year.
+     *
+     * @param int $employeeId
+     * @param int $year
+     * @return array<int, float>
+     */
+    private function getPendingLeaveDaysByPolicy(int $employeeId, int $year): array
+    {
+        return LeaveRequest::where('employee_id', $employeeId)
+            ->where('status', 'pending')
+            ->whereYear('start_date', $year)
+            ->selectRaw('leave_policy_id, COALESCE(SUM(days_requested), 0) as pending_days')
+            ->groupBy('leave_policy_id')
+            ->get()
+            ->mapWithKeys(function (LeaveRequest $request) {
+                return [$request->leave_policy_id => (float) $request->pending_days];
+            })
+            ->all();
     }
 }

@@ -50,6 +50,12 @@ class HandleInertiaRequests extends Middleware
                 'permissions' => $user ? $user->getAllPermissions()->pluck('name') : [],
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'flash' => [
+                'success'           => $request->session()->get('success'),
+                'error'             => $request->session()->get('error'),
+                'generated_api_key' => $request->session()->get('generated_api_key'),
+                'for_device_id'     => $request->session()->get('for_device_id'),
+            ],
         ];
     }
 }

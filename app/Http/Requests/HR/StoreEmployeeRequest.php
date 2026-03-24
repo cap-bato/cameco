@@ -11,8 +11,8 @@ class StoreEmployeeRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        // Check if user has HR Manager role or is Superadmin
-        return $this->user()->hasAnyRole(['HR Manager', 'Superadmin']);
+        // Allow HR Manager, HR Staff, or Superadmin to create employees
+        return $this->user()->hasAnyRole(['HR Manager', 'HR Staff', 'Superadmin']);
     }
 
     /**
@@ -44,7 +44,7 @@ class StoreEmployeeRequest extends FormRequest
             'mother_date_of_birth' => ['nullable', 'date'],
             
             // Contact Information
-            'email' => ['required', 'email', 'max:255', 'unique:employees,email'],
+            'email' => ['required', 'email', 'max:255', 'unique:profiles,email'],
             'phone' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'],
             'mobile' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'],
             

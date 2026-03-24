@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge as BadgeComponent } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertTriangle, Plus, Download } from 'lucide-react';
-import { differenceInDays, parseISO } from 'date-fns';
+import { differenceInDays, isValid, parseISO } from 'date-fns';
 
 interface Employee {
     id: string;
@@ -13,7 +13,7 @@ interface Employee {
     employee_id: string;
     department: string;
     position: string;
-    hire_date: string;
+    hire_date?: string | null;
     photo?: string;
 }
 
@@ -26,14 +26,24 @@ export function EmployeesWithoutBadges({ employees, onIssueBadge }: EmployeesWit
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
+    const parseHireDate = (hireDate: string | null | undefined) => {
+        if (!hireDate) {
+            return null;
+        }
+
+        const parsed = parseISO(hireDate);
+        return isValid(parsed) ? parsed : null;
+    };
+
     // Calculate days without badge (based on hire date)
     const employeesWithDaysWithoutBadge = useMemo(() => {
         return employees.map((emp) => {
-            const hireDate = parseISO(emp.hire_date);
-            const daysWithoutBadge = differenceInDays(new Date(), hireDate);
+            const hireDate = parseHireDate(emp.hire_date);
+            const daysWithoutBadge = hireDate ? Math.max(0, differenceInDays(new Date(), hireDate)) : 0;
             return {
                 ...emp,
                 daysWithoutBadge,
+                hireDateDisplay: hireDate ? hireDate.toLocaleDateString() : 'N/A',
                 isUrgent: daysWithoutBadge > 7,
             };
         });
@@ -61,7 +71,7 @@ export function EmployeesWithoutBadges({ employees, onIssueBadge }: EmployeesWit
             emp.employee_id,
             emp.department,
             emp.position,
-            emp.hire_date,
+            emp.hire_date ?? 'N/A',
             emp.daysWithoutBadge.toString(),
         ]);
 
@@ -158,7 +168,7 @@ export function EmployeesWithoutBadges({ employees, onIssueBadge }: EmployeesWit
                                         <TableCell className="text-amber-900">{emp.department}</TableCell>
                                         <TableCell className="text-amber-900">{emp.position}</TableCell>
                                         <TableCell className="text-amber-900">
-                                            {new Date(emp.hire_date).toLocaleDateString()}
+                                            {emp.hireDateDisplay}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">

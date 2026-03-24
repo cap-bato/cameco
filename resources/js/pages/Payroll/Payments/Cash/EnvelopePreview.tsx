@@ -103,22 +103,6 @@ export default function EnvelopePreview({
                     <CardHeader className="flex flex-row items-center justify-between space-y-0">
                         <CardTitle className="text-base">Summary</CardTitle>
                         <div className="flex gap-2">
-                            {/* Download all envelopes */}
-                            <Button size="sm" variant="outline" asChild>
-                                <a href={`/payroll/payments/cash/generate-envelopes/pdf?period_id=${period_id}`}>
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Download All (PDF)
-                                </a>
-                            </Button>
-                            {/* Download selected envelope */}
-                            {selectedData && (
-                                <Button size="sm" variant="outline" asChild>
-                                    <a href={`/payroll/payments/cash/generate-envelopes/pdf?period_id=${period_id}&employee_ids[]=${selectedData.employee_id}`}>
-                                        <Download className="h-4 w-4 mr-2" />
-                                        Download This Envelope
-                                    </a>
-                                </Button>
-                            )}
                             {/* Print selected envelope */}
                             <Button size="sm" onClick={handlePrintSelected} disabled={!selectedData}>
                                 <Printer className="h-4 w-4 mr-2" />

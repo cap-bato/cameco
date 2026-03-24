@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
@@ -37,6 +38,7 @@ export default function LoansPage({
     departments?: Array<{ id: number; name: string }>;
 }) {
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const { toast } = useToast();
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [selectedLoan, setSelectedLoan] = useState<EmployeeLoan | null>(null);
     const [selectedLoanPayments, setSelectedLoanPayments] = useState<LoanPayment[]>([]);
@@ -106,6 +108,10 @@ export default function LoansPage({
             activeLoans: activeLoans.length,
             totalBalance,
             totalDeductionsThisPeriod,
+            activeStatusPercent:
+                filteredLoans.length > 0
+                    ? (activeLoans.length / filteredLoans.length) * 100
+                    : 0,
         };
     }, [filteredLoans]);
 
@@ -166,9 +172,19 @@ export default function LoansPage({
                 onSuccess: () => {
                     setIsFormOpen(false);
                     setSelectedLoan(null);
+                    toast({
+                        title: 'Loan updated',
+                        description: 'The loan was updated successfully.',
+                        variant: 'default',
+                    });
                 },
                 onError: (errors) => {
                     console.error('Failed to update loan:', errors);
+                    toast({
+                        title: 'Update failed',
+                        description: 'Could not update the loan. Please check the form and try again.',
+                        variant: 'destructive',
+                    });
                 },
             });
         } else {
@@ -176,9 +192,19 @@ export default function LoansPage({
                 onSuccess: () => {
                     setIsFormOpen(false);
                     setSelectedLoan(null);
+                    toast({
+                        title: 'Loan created',
+                        description: 'The loan was created successfully.',
+                        variant: 'default',
+                    });
                 },
                 onError: (errors) => {
                     console.error('Failed to create loan:', errors);
+                    toast({
+                        title: 'Creation failed',
+                        description: 'Could not create the loan. Please check the form and try again.',
+                        variant: 'destructive',
+                    });
                 },
             });
         }
@@ -228,7 +254,9 @@ export default function LoansPage({
                     <Card className="p-4">
                         <p className="text-xs font-semibold text-muted-foreground">Active Status</p>
                         <p className="text-3xl font-bold mt-2">
-                            {((summaryStats.activeLoans / summaryStats.totalLoans) * 100).toFixed(0)}%
+                            {Number.isFinite(summaryStats.activeStatusPercent) && summaryStats.totalLoans > 0
+                                ? `${summaryStats.activeStatusPercent.toFixed(0)}%`
+                                : '0%'}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">Loan collection rate</p>
                     </Card>

@@ -338,9 +338,10 @@ export default function CaseShow({
                         </CardHeader>
                         <CardContent>
                             <ul className="space-y-2">
-                                {nextActions.map((action, index) => (
+                                {nextActions.filter(a => a && (a.action || a.description)).map((action, index) => (
                                     <li key={index} className="text-sm text-blue-800">
-                                        <span className="font-medium">{action.action}:</span> {action.description}
+                                        {action.action ? <span className="font-medium">{action.action}{action.description ? ':' : ''}</span> : null}
+                                        {action.description}
                                     </li>
                                 ))}
                             </ul>

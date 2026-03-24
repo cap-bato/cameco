@@ -57,11 +57,16 @@ class ProcessRfidLedgerJob implements ShouldQueue
 
     /**
      * Create a new job instance.
+     *
+     * @param int|null $fromSequenceId  When set, only process entries from this sequence ID onward.
+     * @param int      $limit           Maximum number of ledger entries to process per run.
+     * @param bool     $force           When true, reprocesses already-processed entries (full resync).
      */
-    public function __construct()
-    {
-        // Job is dispatched without parameters (runs globally)
-    }
+    public function __construct(
+        public readonly ?int $fromSequenceId = null,
+        public readonly int  $limit = 1000,
+        public readonly bool $force = false,
+    ) {}
 
     /**
      * Execute the job.
@@ -82,36 +87,57 @@ class ProcessRfidLedgerJob implements ShouldQueue
     {
         $startTime = microtime(true);
         
-        Log::info('[ProcessRfidLedgerJob] Starting ledger polling cycle');
+        Log::info('[ProcessRfidLedgerJob] Starting ledger polling cycle', [
+            'from_sequence_id' => $this->fromSequenceId,
+            'limit'            => $this->limit,
+            'force'            => $this->force,
+        ]);
 
         try {
             // Initialize polling service
             $pollingService = new LedgerPollingService();
 
+            // Pre-fetch events based on constructor parameters, then hand them
+            // to processLedgerEventsComplete() so the full pipeline runs.
+            if ($this->fromSequenceId !== null) {
+                // Targeted resync from a specific sequence ID
+                $events = $pollingService->pollEventsFromSequence($this->fromSequenceId, $this->limit);
+            } else {
+                // Standard incremental poll (uses prepareEventsForProcessing internally
+                // when null is passed, but we want to honour $this->limit)
+                $prepared = $pollingService->prepareEventsForProcessing($this->limit);
+                $events   = $prepared['processable_events'];
+            }
+
             // Task 6.1.1: Call LedgerPollingService to process complete pipeline
-            $result = $pollingService->processLedgerEventsComplete();
+            $result = $pollingService->processLedgerEventsComplete($events);
 
             // Calculate processing time
             $processingTime = round((microtime(true) - $startTime) * 1000, 2); // milliseconds
 
+            $hashValidation = $result['details']['hash_validation'] ?? [];
+            $hashValid      = $hashValidation['valid'] ?? true;
+            $sequenceGaps   = $hashValidation['sequence_gaps'] ?? 0;
+
             // Log success with metrics
             Log::info('[ProcessRfidLedgerJob] Ledger polling completed successfully', [
-                'events_polled' => $result['polled_count'],
-                'events_deduplicated' => $result['deduplication_stats']['duplicate_count'],
-                'events_created' => $result['processing_stats']['events_created'],
-                'processing_time_ms' => $processingTime,
-                'hash_chain_valid' => $result['hash_chain_validation']['is_valid'],
-                'sequence_gaps' => count($result['hash_chain_validation']['gaps'])
+                'events_polled'       => $result['polled'],
+                'events_deduplicated' => $result['deduplicated'],
+                'events_created'      => $result['created_attendance_events'],
+                'processing_time_ms'  => $processingTime,
+                'hash_chain_valid'    => $hashValid,
+                'sequence_gaps'       => $sequenceGaps,
+                'errors'              => count($result['errors']),
             ]);
 
             // Alert on hash chain validation failures (Task 6.1.3: Failure notifications)
-            if (!$result['hash_chain_validation']['is_valid']) {
-                $this->handleHashChainFailure($result['hash_chain_validation']);
+            if (!$hashValid) {
+                $this->handleHashChainFailure($hashValidation);
             }
 
             // Alert on sequence gaps (Task 6.1.3: Failure notifications)
-            if (count($result['hash_chain_validation']['gaps']) > 0) {
-                $this->handleSequenceGaps($result['hash_chain_validation']['gaps']);
+            if ($sequenceGaps > 0) {
+                $this->handleSequenceGaps($hashValidation['failures'] ?? []);
             }
 
         } catch (Exception $e) {
@@ -143,8 +169,9 @@ class ProcessRfidLedgerJob implements ShouldQueue
     private function handleHashChainFailure(array $validationResult): void
     {
         Log::critical('[ProcessRfidLedgerJob] Hash chain validation FAILED - Possible tampering detected', [
-            'failed_sequences' => $validationResult['failed_sequences'],
-            'total_failures' => count($validationResult['failed_sequences'])
+            'failed_at_sequence_id' => $validationResult['failed_at_sequence_id'] ?? null,
+            'invalid_hashes'        => $validationResult['invalid_hashes'] ?? 0,
+            'failures'              => $validationResult['failures'] ?? [],
         ]);
 
         // Send critical notification to HR Manager and System Admin

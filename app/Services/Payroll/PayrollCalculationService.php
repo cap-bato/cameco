@@ -39,8 +39,67 @@ use App\Models\PayrollConfiguration;
  * 9. Calculate final net pay
  * 10. Save calculation record
  */
-class PayrollCalculationService
-{
+class PayrollCalculationService {
+    /**
+     * Infer pay frequency from period date range.
+     * @param PayrollPeriod $period
+     * @return string
+     */
+    public function inferPeriodFrequency(PayrollPeriod $period): string
+    {
+        $start = $period->period_start instanceof \DateTimeInterface
+            ? $period->period_start
+            : Carbon::parse((string)$period->period_start);
+        $end = $period->period_end instanceof \DateTimeInterface
+            ? $period->period_end
+            : Carbon::parse((string)$period->period_end);
+        if (!$start || !$end) return 'unknown';
+        $days = Carbon::parse($start)->diffInDays(Carbon::parse($end));
+        // Weekly: 6-8 days
+        if ($days >= 6 && $days <= 8) return 'weekly';
+        // Bi-weekly: 12-15 days
+        if ($days >= 12 && $days <= 15) return 'bi_weekly';
+        // Semi-monthly: 13-17 days (1st/2nd half)
+        if ($days >= 13 && $days <= 17) return 'semi_monthly';
+        // Monthly: 27-32 days
+        if ($days >= 27 && $days <= 32) return 'monthly';
+        return 'unknown';
+    }
+
+    /**
+     * Get weekly position in month (1..5) for weekly periods.
+     * @param PayrollPeriod $period
+     * @return int
+     */
+    public function getWeeklyPositionInMonth(PayrollPeriod $period): int
+    {
+        $start = Carbon::parse($period->period_start);
+        // Find week number in month (1-based)
+        return intval(ceil($start->day / 7));
+    }
+
+    /**
+     * Get period position info for deduction logic.
+     * @param PayrollPeriod $period
+     * @return array
+     */
+    public function getPeriodPosition(PayrollPeriod $period): array
+    {
+        $frequency = $this->inferPeriodFrequency($period);
+        $periodHalf = $this->getPeriodHalf($period);
+        $weeklyPosition = $this->getWeeklyPositionInMonth($period);
+        $start = Carbon::parse($period->period_start);
+        $end = Carbon::parse($period->period_end);
+        // Is last period in month?
+        $isLastInMonth = $end->month !== $start->month || $end->day === $end->daysInMonth;
+        return [
+            'frequency' => $frequency,
+            'periodHalf' => $periodHalf,
+            'isLastInMonth' => $isLastInMonth,
+            'weeklyPositionInMonth' => $weeklyPosition,
+        ];
+    }
+
     public function __construct(
         private EmployeePayrollInfoService $payrollInfoService,
         private SalaryComponentService $componentService,
@@ -389,8 +448,15 @@ class PayrollCalculationService
      */
     private function calculateBasicPay(int $daysWorked, EmployeePayrollInfo $payrollInfo, PayrollPeriod $period): float
     {
+        $frequency = $this->inferPeriodFrequency($period);
         return match ($payrollInfo->salary_type) {
-            'monthly' => $payrollInfo->basic_salary / 2,  // semi-monthly: always half per period
+            'monthly' => match ($frequency) {
+                'weekly' => ($payrollInfo->basic_salary * 12) / 52,
+                'semi_monthly' => $payrollInfo->basic_salary / 2,
+                'bi_weekly' => $payrollInfo->basic_salary / 2,
+                'monthly' => $payrollInfo->basic_salary,
+                default => $payrollInfo->basic_salary / 2,
+            },
             'daily' => $daysWorked * ($payrollInfo->daily_rate ?? 0),
             'hourly' => $daysWorked * 8 * ($payrollInfo->hourly_rate ?? 0),
             default => 0,

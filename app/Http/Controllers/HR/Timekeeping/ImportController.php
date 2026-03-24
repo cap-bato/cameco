@@ -3,212 +3,224 @@
 namespace App\Http\Controllers\HR\Timekeeping;
 
 use App\Http\Controllers\Controller;
+use App\Models\AttendanceEvent;
+use App\Models\Employee;
+use App\Models\ImportBatch;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Http\JsonResponse;
 
 class ImportController extends Controller
 {
-    /**
-     * Display the import management page.
-     */
     public function index(Request $request): Response
     {
-        $batches = $this->getMockImportBatches();
+        $query = ImportBatch::with('importedByUser:id,name')
+            ->orderByDesc('created_at');
 
-        // Apply status filter
-        if ($request->has('status')) {
-            $batches = array_filter($batches, fn($b) => $b['status'] == $request->status);
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
         }
 
-        // Calculate summary
+        $batches = $query->paginate(20)->withQueryString();
+
         $summary = [
-            'total_imports' => count($batches),
-            'successful' => count(array_filter($batches, fn($b) => $b['status'] === 'completed' && $b['failed_records'] === 0)),
-            'failed' => count(array_filter($batches, fn($b) => $b['status'] === 'failed')),
-            'pending' => count(array_filter($batches, fn($b) => $b['status'] === 'pending')),
-            'records_imported' => array_sum(array_map(fn($b) => $b['successful_records'], $batches)),
+            'total_imports'    => ImportBatch::count(),
+            'successful'       => ImportBatch::where('status', 'completed')->where('failed_records', 0)->count(),
+            'failed'           => ImportBatch::where('status', 'failed')->count(),
+            'pending'          => ImportBatch::whereIn('status', ['uploaded', 'processing'])->count(),
+            'records_imported' => (int) ImportBatch::sum('successful_records'),
         ];
 
         return Inertia::render('HR/Timekeeping/Import/Index', [
-            'batches' => array_values($batches),
+            'batches' => $batches,
             'summary' => $summary,
             'filters' => $request->only(['status', 'date_from', 'date_to']),
         ]);
     }
 
-    /**
-     * Handle file upload for import.
-     */
     public function upload(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'file' => 'required|file|mimes:csv,xlsx,xls|max:10240', // 10MB max
-            'import_type' => 'required|in:attendance,overtime,schedule',
+            'file'        => 'required|file|mimes:csv,xlsx,xls|max:10240',
+            'import_type' => 'required|in:attendance,schedule,correction',
         ]);
 
-        // Mock processing
-        $batchId = rand(1000, 9999);
+        $file       = $request->file('file');
+        $storedPath = $file->store('imports/timekeeping', 'local');
+
+        $batch = ImportBatch::create([
+            'imported_by'    => auth()->id(),
+            'file_name'      => $file->getClientOriginalName(),
+            'file_path'      => $storedPath,
+            'file_size'      => $file->getSize(),
+            'import_type'    => $validated['import_type'],
+            'total_records'  => 0,
+            'status'         => 'uploaded',
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'File uploaded successfully. Processing import...',
-            'data' => [
-                'batch_id' => $batchId,
-                'file_name' => $request->file('file')->getClientOriginalName(),
-                'file_size' => $request->file('file')->getSize(),
-                'import_type' => $validated['import_type'],
-                'status' => 'pending',
-                'uploaded_at' => now()->format('Y-m-d H:i:s'),
+            'message' => 'File uploaded. Use the process endpoint to begin import.',
+            'data'    => [
+                'batch_id'    => $batch->id,
+                'file_name'   => $batch->file_name,
+                'import_type' => $batch->import_type,
+                'status'      => $batch->status,
+                'uploaded_at' => $batch->created_at->toISOString(),
             ],
         ]);
     }
 
-    /**
-     * Process an import batch.
-     */
     public function process(int $id): JsonResponse
     {
-        // Mock processing result
-        $result = [
-            'batch_id' => $id,
-            'status' => 'completed',
-            'total_records' => 150,
-            'successful_records' => 142,
-            'failed_records' => 8,
-            'warnings' => 5,
-            'processing_time' => '2.3 seconds',
-            'completed_at' => now()->format('Y-m-d H:i:s'),
-        ];
+        $batch = ImportBatch::findOrFail($id);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Import processed successfully',
-            'data' => $result,
-        ]);
-    }
-
-    /**
-     * Get import history.
-     */
-    public function history(Request $request): JsonResponse
-    {
-        $batches = $this->getMockImportBatches();
-
-        // Apply filters
-        if ($request->has('status')) {
-            $batches = array_filter($batches, fn($b) => $b['status'] == $request->status);
+        if ($batch->status === 'completed') {
+            return response()->json(['success' => false, 'message' => 'Batch already processed'], 422);
         }
 
-        return response()->json([
-            'success' => true,
-            'data' => array_values($batches),
-            'total' => count($batches),
-        ]);
+        $batch->update(['status' => 'processing', 'started_at' => now()]);
+
+        try {
+            $result = match ($batch->import_type) {
+                'attendance' => $this->processAttendanceFile($batch),
+                default      => throw new \InvalidArgumentException("Import type '{$batch->import_type}' not yet supported"),
+            };
+
+            $batch->update([
+                'status'             => 'completed',
+                'total_records'      => $result['total'],
+                'processed_records'  => $result['total'],
+                'successful_records' => $result['success'],
+                'failed_records'     => $result['failed'],
+                'error_log'          => $result['failed'] > 0 ? json_encode($result['errors']) : null,
+                'completed_at'       => now(),
+            ]);
+
+            return response()->json(['success' => true, 'data' => $result]);
+
+        } catch (\Exception $e) {
+            $batch->update([
+                'status'    => 'failed',
+                'error_log' => json_encode([['row' => 0, 'error' => $e->getMessage()]]),
+                'completed_at' => now(),
+            ]);
+
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
     }
 
-    /**
-     * Get errors for a specific import batch.
-     */
+    private function processAttendanceFile(ImportBatch $batch): array
+    {
+        $path = storage_path("app/{$batch->file_path}");
+
+        if (!file_exists($path)) {
+            throw new \RuntimeException("Import file not found: {$batch->file_name}");
+        }
+
+        $handle = fopen($path, 'r');
+        if ($handle === false) {
+            throw new \RuntimeException("Unable to open import file: {$batch->file_name}");
+        }
+
+        // Read header row
+        $headers = fgetcsv($handle);
+        if ($headers === false) {
+            fclose($handle);
+            throw new \RuntimeException('CSV file is empty or unreadable');
+        }
+        $headers = array_map('trim', $headers);
+
+        $total = $success = $failed = $skipped = 0;
+        $errors = [];
+        $rowNum = 1;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowNum++;
+            if (count($row) !== count($headers)) {
+                $failed++;
+                $errors[] = ['row' => $rowNum, 'error' => 'Column count mismatch'];
+                continue;
+            }
+
+            $data = array_combine($headers, $row);
+            $total++;
+
+            try {
+                // Expected columns: employee_number, event_date, event_type, event_time
+                $employee = Employee::where('employee_number', trim($data['employee_number'] ?? ''))
+                    ->first();
+                if (!$employee) {
+                    throw new \RuntimeException("Employee '{$data['employee_number']}' not found");
+                }
+
+                $eventDate = Carbon::parse($data['event_date'])->toDateString();
+                $eventType = strtolower(trim($data['event_type']));
+
+                if (!in_array($eventType, ['time_in', 'time_out', 'break_start', 'break_end'])) {
+                    throw new \RuntimeException("Invalid event_type '{$eventType}'");
+                }
+
+                // Duplicate check
+                $exists = AttendanceEvent::where('employee_id', $employee->id)
+                    ->whereDate('event_date', $eventDate)
+                    ->where('event_type', $eventType)
+                    ->exists();
+
+                if ($exists) {
+                    $skipped++;
+                    continue;
+                }
+
+                AttendanceEvent::create([
+                    'employee_id'       => $employee->id,
+                    'event_date'        => $eventDate,
+                    'event_time'        => Carbon::parse($eventDate . ' ' . trim($data['event_time'])),
+                    'event_type'        => $eventType,
+                    'source'            => 'imported',
+                    'imported_batch_id' => $batch->id,
+                    'created_by'        => $batch->imported_by,
+                ]);
+
+                $success++;
+
+            } catch (\Exception $e) {
+                $failed++;
+                $errors[] = ['row' => $rowNum, 'error' => $e->getMessage()];
+            }
+        }
+
+        fclose($handle);
+
+        return compact('total', 'success', 'failed', 'skipped', 'errors');
+    }
+
+    public function history(Request $request): JsonResponse
+    {
+        $batches = ImportBatch::with('importedByUser:id,name')
+            ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
+            ->orderByDesc('created_at')
+            ->paginate(20);
+
+        return response()->json(['success' => true, 'data' => $batches]);
+    }
+
     public function errors(int $id): JsonResponse
     {
-        $errors = $this->getMockImportErrors($id);
+        $batch = ImportBatch::findOrFail($id);
+
+        $errors = $batch->error_log ? json_decode($batch->error_log, true) : [];
 
         return response()->json([
             'success' => true,
-            'data' => [
-                'batch_id' => $id,
-                'errors' => $errors,
-                'total_errors' => count($errors),
+            'data'    => [
+                'batch_id'     => $id,
+                'errors'       => $errors ?? [],
+                'total_errors' => count($errors ?? []),
             ],
         ]);
     }
-
-    /**
-     * Generate mock import batches.
-     */
-    private function getMockImportBatches(): array
-    {
-        $batches = [];
-        $statuses = ['pending', 'processing', 'completed', 'failed', 'partial'];
-        $types = ['attendance', 'overtime', 'schedule'];
-
-        for ($i = 1; $i <= 10; $i++) {
-            $status = $statuses[array_rand($statuses)];
-            $totalRecords = rand(50, 200);
-            $successRate = $status === 'completed' ? rand(95, 100) : ($status === 'partial' ? rand(70, 94) : 0);
-            $successfulRecords = round($totalRecords * ($successRate / 100));
-            $failedRecords = $status === 'failed' ? $totalRecords : $totalRecords - $successfulRecords;
-            
-            $batches[] = [
-                'id' => $i,
-                'file_name' => 'attendance_import_' . now()->subDays(rand(0, 30))->format('Ymd') . '.csv',
-                'file_path' => 'imports/attendance_import_' . $i . '.csv',
-                'file_size' => rand(50000, 500000),
-                'import_type' => $types[array_rand($types)],
-                'total_records' => $totalRecords,
-                'processed_records' => $status === 'pending' ? 0 : $totalRecords,
-                'successful_records' => $successfulRecords,
-                'failed_records' => $failedRecords,
-                'warnings' => rand(0, 10),
-                'status' => $status,
-                'started_at' => $status !== 'pending' ? now()->subDays(rand(0, 30))->format('Y-m-d H:i:s') : null,
-                'completed_at' => in_array($status, ['completed', 'failed', 'partial']) ? now()->subDays(rand(0, 30))->format('Y-m-d H:i:s') : null,
-                'processing_time' => in_array($status, ['completed', 'partial']) ? rand(1, 30) . ' seconds' : null,
-                'error_log' => $status === 'failed' ? 'Invalid file format detected' : null,
-                'imported_by' => 'HR Manager',
-                'imported_by_name' => 'Admin User',
-                'created_at' => now()->subDays(rand(0, 30))->format('Y-m-d H:i:s'),
-                'updated_at' => now()->subDays(rand(0, 20))->format('Y-m-d H:i:s'),
-            ];
-        }
-
-        return $batches;
-    }
-
-    /**
-     * Generate mock import errors.
-     */
-    private function getMockImportErrors(int $batchId): array
-    {
-        $errorTypes = ['invalid_employee', 'invalid_time', 'duplicate_entry', 'validation_error'];
-        $errors = [];
-
-        for ($i = 1; $i <= 8; $i++) {
-            $errors[] = [
-                'id' => $i,
-                'import_batch_id' => $batchId,
-                'row_number' => rand(1, 200),
-                'employee_identifier' => 'EMP' . str_pad(rand(1, 100), 3, '0', STR_PAD_LEFT),
-                'error_type' => $errorTypes[array_rand($errorTypes)],
-                'error_message' => $this->getErrorMessage($errorTypes[array_rand($errorTypes)]),
-                'raw_data' => [
-                    'employee_number' => 'EMP' . str_pad(rand(1, 100), 3, '0', STR_PAD_LEFT),
-                    'date' => now()->format('Y-m-d'),
-                    'time_in' => '08:00:00',
-                    'time_out' => '17:00:00',
-                ],
-                'suggested_fix' => 'Verify employee number exists in system',
-                'created_at' => now()->format('Y-m-d H:i:s'),
-            ];
-        }
-
-        return $errors;
-    }
-
-    /**
-     * Get error message based on error type.
-     */
-    private function getErrorMessage(string $errorType): string
-    {
-        $messages = [
-            'invalid_employee' => 'Employee number not found in the system',
-            'invalid_time' => 'Time format is invalid. Expected HH:MM:SS',
-            'duplicate_entry' => 'Attendance record already exists for this employee and date',
-            'validation_error' => 'Time out must be after time in',
-        ];
-
-        return $messages[$errorType] ?? 'Unknown error';
-    }
 }
+

@@ -1,17 +1,27 @@
 <?php
 
-namespace App\Services\HR;
+    namespace App\Services\HR;
 
-use App\Models\OffboardingCase;
-use App\Models\ClearanceItem;
-use App\Models\AccessRevocation;
-use App\Models\OffboardingDocument;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Facades\DB;
+    use App\Models\OffboardingCase;
+    use App\Models\ClearanceItem;
+    use App\Models\AccessRevocation;
+    use App\Models\OffboardingDocument;
+    use Illuminate\Support\Facades\Log;
+    use Illuminate\Support\Facades\Notification;
+    use Illuminate\Support\Facades\DB;
 
-class OffboardingService
-{
+    class OffboardingService
+    {
+        /**
+         * Check if the user can waive clearance items (HR Staff or HR Manager).
+         */
+        public function userCanWaiveClearances($user): bool
+        {
+            if (!$user) return false;
+            $roles = method_exists($user, 'getRoleNames') ? $user->getRoleNames()->toArray() : ($user->roles ?? []);
+            return in_array('HR Staff', $roles) || in_array('HR Manager', $roles);
+        }
+
     /**
      * Generate a unique case number in format OFF-YYYY-NNN
      */
@@ -146,11 +156,6 @@ class OffboardingService
     {
         $systems = [
             [
-                'system_name' => 'Email',
-                'system_category' => 'email',
-                'account_identifier' => $case->employee->user?->email,
-            ],
-            [
                 'system_name' => 'VPN',
                 'system_category' => 'network',
                 'account_identifier' => $case->employee->user?->username,
@@ -164,11 +169,6 @@ class OffboardingService
                 'system_name' => 'ERP System',
                 'system_category' => 'application',
                 'account_identifier' => $case->employee->user?->username,
-            ],
-            [
-                'system_name' => 'Slack',
-                'system_category' => 'cloud_service',
-                'account_identifier' => $case->employee->user?->email,
             ],
             [
                 'system_name' => 'Microsoft 365',

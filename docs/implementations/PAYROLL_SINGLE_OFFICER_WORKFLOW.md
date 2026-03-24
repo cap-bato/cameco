@@ -370,15 +370,16 @@ Also update `<Head title="Payroll Review & Approval" />`:
 
 ## Progress Tracker
 
-- [ ] Phase 1.1 — Simplify `REVIEWABLE_STATUSES`
-- [ ] Phase 1.2 — Simplify `approve()` state machine to single step
-- [ ] Phase 1.3 — Simplify `buildApprovalWorkflow()` return
+- [x] Phase 1.1 — Simplify `REVIEWABLE_STATUSES`
+- [x] Phase 1.2 — Simplify `approve()` state machine to single step
+- [x] Phase 1.3 — Simplify `buildApprovalWorkflow()` return
 - [ ] Phase 1.4 — Simplify `buildWorkflowSteps()` and `emptyWorkflowSteps()` to 1 step
 - [ ] Phase 1.5 — Simplify `mapStatusToFrontend()`
 - [ ] Phase 1.6 — Data fix: reset any stuck periods
-- [ ] Phase 2.1 — Remove `<ApprovalWorkflow>` import and component
-- [ ] Phase 2.2 — Add "Approved" status banner
-- [ ] Phase 2.3 — Simplify header action buttons
-- [ ] Phase 3.1 — Remove `'reviewing'` from TypeScript status union
-- [ ] Phase 4 — Add deprecation comment on `PayrollPeriod::scopeUnderReview()`
-- [ ] Phase 5 — Update page/breadcrumb titles
+- [x] Phase 2.1 — Remove `<ApprovalWorkflow>` import and component
+- [x] Phase 2.2 — Add "Approved" status banner
+- [x] Phase 2.3 — Simplify header action buttons
+- [x] Phase 3.1 — Remove `'reviewing'` from TypeScript status union
+- [x] Phase 3.2 — Update `ApprovalWorkflow` type (optional cleanup)
+- [x] Phase 4 — Add deprecation comment on `PayrollPeriod::scopeUnderReview()`
+- [x] Phase 5 — Update page/breadcrumb titles

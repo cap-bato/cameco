@@ -21,6 +21,7 @@ class PositionController extends Controller
     {
         $this->authorize('viewAny', Position::class);
         $positions = Position::query()
+            ->withCount('employees')
             ->orderBy('title')
             ->get()
             ->map(function (Position $pos) {
@@ -29,12 +30,14 @@ class PositionController extends Controller
                     'title' => $pos->title,
                     'code' => (string) ($pos->code ?? ''),
                     'description' => $pos->description,
+                    'level' => (string) ($pos->level ?? ''),
                     'department_id' => $pos->department_id,
                     'reports_to' => $pos->reports_to,
                     // map DB fields to UI expectations
                     'salary_min' => $pos->min_salary,
                     'salary_max' => $pos->max_salary,
                     'is_active' => (bool) $pos->is_active,
+                    'employee_count' => $pos->employees_count ?? 0,
                 ];
             });
 
@@ -98,6 +101,7 @@ class PositionController extends Controller
             'title' => $data['title'],
             'code' => $data['code'] ?? null,
             'description' => $data['description'] ?? null,
+            'level' => $data['level'],
             'department_id' => $data['department_id'],
             'reports_to' => $data['reports_to'] ?? null,
             'min_salary' => $data['salary_min'] ?? null,
@@ -133,6 +137,7 @@ class PositionController extends Controller
                 'id' => $position->id,
                 'title' => $position->title,
                 'code' => (string) ($position->code ?? ''),
+                'level' => (string) ($position->level ?? ''),
                 'description' => $position->description,
                 'department_id' => $position->department_id,
                 'reports_to' => $position->reports_to,
@@ -157,6 +162,7 @@ class PositionController extends Controller
             'title' => $data['title'],
             'code' => $data['code'] ?? null,
             'description' => $data['description'] ?? null,
+            'level' => $data['level'] ?? $position->level,
             'department_id' => $data['department_id'],
             'reports_to' => $data['reports_to'] ?? null,
             'min_salary' => $data['salary_min'] ?? null,

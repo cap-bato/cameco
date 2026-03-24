@@ -89,32 +89,127 @@ class PagIbigController extends Controller
         ]);
     }
 
-    public function downloadMCRF(int $reportId)
-    {
-        $report = GovernmentReport::findOrFail($reportId);
-
-        if (!$report->file_path || !Storage::exists($report->file_path)) {
-            return response()->json(['success' => false, 'message' => 'MCRF report file not available'], 404);
-        }
-
-        return Storage::download($report->file_path, $report->file_name ?? 'pb_mcrf.csv');
-    }
-
-    public function downloadContributions(int $periodId)
-    {
+public function downloadMCRF(int $reportId)
+{
+    try {
         $report = GovernmentReport::where('agency', 'pagibig')
-            ->where('report_type', 'contributions')
-            ->where('payroll_period_id', $periodId)
-            ->latest()
-            ->first();
+            ->where('report_type', 'mcrf')
+            ->findOrFail($reportId);
 
-        if (!$report || !$report->file_path || !Storage::exists($report->file_path)) {
-            return response()->json(['success' => false, 'message' => 'Contributions report not available'], 404);
+        // Serve stored file if it exists
+        if ($report->file_path && Storage::exists($report->file_path)) {
+            return Storage::download($report->file_path, $report->file_name ?? 'pb_mcrf.csv');
         }
 
-        return Storage::download($report->file_path, $report->file_name ?? 'pagibig_contributions.csv');
-    }
+        // Generate on the fly
+        $contributions = $this->pagIbigService->getContributions('pagibig', $report->payroll_period_id);
+        $filename      = $report->file_name ?? "PagIBIG-MCRF-{$report->report_period}.csv";
 
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'no-cache, no-store, must-revalidate',
+        ];
+
+        $callback = function () use ($contributions) {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, [
+                'Sequence No.',
+                'Pag-IBIG Number',
+                'Employee Name',
+                'Employee Number',
+                'Monthly Compensation',
+                'Employee Rate',
+                'Employee Contribution',
+                'Employer Contribution',
+                'Total Contribution',
+            ]);
+
+            $seq = 1;
+            foreach ($contributions as $row) {
+                fputcsv($handle, [
+                    $seq++,
+                    $row['pagibig_number'],
+                    $row['employee_name'],
+                    $row['employee_number'],
+                    number_format($row['monthly_compensation'], 2, '.', ''),
+                    $row['employee_rate'] . '%',
+                    number_format($row['employee_contribution'], 2, '.', ''),
+                    number_format($row['employer_contribution'], 2, '.', ''),
+                    number_format($row['total_contribution'], 2, '.', ''),
+                ]);
+            }
+
+            fclose($handle);
+        };
+
+        return response()->stream($callback, 200, $headers);
+
+    } catch (\Exception $e) {
+        Log::error('Pag-IBIG MCRF download error', ['error' => $e->getMessage()]);
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+}
+
+public function downloadContributions(int $periodId)
+{
+    try {
+        $contributions = $this->pagIbigService->getContributions('pagibig', $periodId);
+
+        if ($contributions->isEmpty()) {
+            return response()->json(['error' => 'No contribution data found for this period.'], 404);
+        }
+
+        $period   = \App\Models\PayrollPeriod::find($periodId);
+        $month    = $period?->period_start?->format('Y-m') ?? 'unknown';
+        $filename = "PagIBIG-Contributions-{$month}.csv";
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'no-cache, no-store, must-revalidate',
+        ];
+
+        $callback = function () use ($contributions) {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, [
+                'Employee Number',
+                'Employee Name',
+                'Pag-IBIG Number',
+                'Month',
+                'Monthly Compensation',
+                'Employee Rate',
+                'Employee Contribution',
+                'Employer Contribution',
+                'Total Contribution',
+            ]);
+
+            foreach ($contributions as $row) {
+                fputcsv($handle, [
+                    $row['employee_number'],
+                    $row['employee_name'],
+                    $row['pagibig_number'],
+                    $row['month'],
+                    number_format($row['monthly_compensation'], 2, '.', ''),
+                    $row['employee_rate'] . '%',
+                    number_format($row['employee_contribution'], 2, '.', ''),
+                    number_format($row['employer_contribution'], 2, '.', ''),
+                    number_format($row['total_contribution'], 2, '.', ''),
+                ]);
+            }
+
+            fclose($handle);
+        };
+
+        return response()->stream($callback, 200, $headers);
+
+    } catch (\Exception $e) {
+        Log::error('Pag-IBIG contributions download error', ['error' => $e->getMessage()]);
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+}
     public function download(Request $request, int $reportId)
     {
         $type = $request->query('type', 'mcrf');

@@ -406,7 +406,7 @@ export default function LeaveHistory({
                                                             size="sm"
                                                             asChild
                                                         >
-                                                            <a href={`/employee/leave/requests/${request.id}`}>
+                                                            <a href={`/employee/leave/request/${request.id}`}>
                                                                 View
                                                             </a>
                                                         </Button>

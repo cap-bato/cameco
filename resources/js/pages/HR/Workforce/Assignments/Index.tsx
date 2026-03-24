@@ -166,11 +166,13 @@ export default function AssignmentsIndex() {
 
     const handleSaveAssignment = (data: Record<string, unknown>) => {
         if (editingAssignment?.id) {
-            router.put(`/hr/workforce/assignments/${editingAssignment.id}`, data as never);
-            handleCloseModal();
+            router.put(`/hr/workforce/assignments/${editingAssignment.id}`, data as never, {
+                onSuccess: handleCloseModal,
+            });
         } else {
-            router.post('/hr/workforce/assignments', data as never);
-            handleCloseModal();
+            router.post('/hr/workforce/assignments', data as never, {
+                onSuccess: handleCloseModal,
+            });
         }
     };
 

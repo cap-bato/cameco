@@ -16,11 +16,28 @@ class PayrollPeriodsSeeder extends Seeder
      */
     public function run(): void
     {
-        // Avoid duplicate seeding
-        if (PayrollPeriod::count() > 0) {
-            $this->command->warn('payroll_periods already seeded — skipping.');
-            return;
-        }
+        // Always create a fresh completed payroll period for demo/testing
+        // Truncate payroll_periods table for fresh seeding
+        \DB::statement('TRUNCATE TABLE payroll_periods RESTART IDENTITY CASCADE');
+        $now = Carbon::now();
+        $periodStart = $now->copy()->startOfMonth();
+        $periodEnd = $periodStart->copy()->day(15);
+        $paymentDate = $periodEnd->copy()->addDays(2);
+        $periodNumber = sprintf('%s-%02d-1H', $periodStart->year, $periodStart->month);
+        $payrollOfficer = User::where('email', 'payroll@cameco.com')->first();
+        $hrManager = User::where('email', 'hrmanager@cameco.com')->first();
+        $creatorId = $payrollOfficer?->id ?? $hrManager?->id ?? 1;
+        $approverId = $hrManager?->id ?? $creatorId;
+        $totalEmployees = Employee::count();
+        $activeEmployees = Employee::where('status', 'active')->count();
+        $excludedEmployees = max(0, $totalEmployees - $activeEmployees);
+        // For demo: use a realistic average net pay
+        $averageNetPay = 25000;
+        // Remove any existing period with this number (for idempotency)
+        PayrollPeriod::where('period_number', $periodNumber)->delete();
+        $periodsToDelete = [];
+        // We'll collect all period_numbers to be inserted and delete them before insert
+        // ...existing code...
 
         // Get actual employee counts from database
         $totalEmployees = Employee::count();
@@ -38,153 +55,88 @@ class PayrollPeriodsSeeder extends Seeder
         $hrManager = User::where('email', 'hrmanager@cameco.com')->first();
         $creatorId = $payrollOfficer?->id ?? $hrManager?->id ?? 1;
         $approverId = $hrManager?->id ?? $creatorId;
+        $periodsToDelete = [];
 
         $now = Carbon::now();
         $periods = [];
 
-        // Create 6 periods (last 6 months)
+        // Create 6 months of periods (12 periods: 1H and 2H per month)
+
         for ($i = 5; $i >= 0; $i--) {
+            // First half
             $periodStart = $now->copy()->subMonths($i)->startOfMonth();
             $periodEnd = $periodStart->copy()->day(15);
             $paymentDate = $periodEnd->copy()->addDays(2);
-            
             $periodNumber = sprintf('%s-%02d-1H', $periodStart->year, $periodStart->month);
-            
-            // Determine status based on how old the period is
-            if ($i >= 3) {
-                $status = 'completed'; // Older periods are completed
-                $approvedAt = $periodEnd->copy()->subDays(2);
-                $finalizedAt = $periodEnd->copy()->subDays(1);
-                $lockedAt = $periodEnd->copy();
-            } elseif ($i === 2) {
-                $status = 'approved'; // Recently approved
-                $approvedAt = $periodEnd->copy()->subDays(2);
-                $finalizedAt = null;
-                $lockedAt = null;
-            } elseif ($i === 1) {
-                $status = 'under_review'; // Under review
-                $approvedAt = null;
-                $finalizedAt = null;
-                $lockedAt = null;
-            } else {
-                $status = 'calculated'; // Current period just calculated
-                $approvedAt = null;
-                $finalizedAt = null;
-                $lockedAt = null;
-            }
 
+            // Set all periods to 'completed' for consistent payslip release
+            $status = 'completed';
+            $progress = 100;
             $periods[] = [
                 'period_number' => $periodNumber,
-                'period_name' => $periodStart->format('F Y') . ' - 1st Half',
+                'period_name' => $periodNumber, // Use period_number as name for demo
+                'period_month' => $periodStart->format('Y-m'),
+                'period_year' => $periodStart->format('Y'),
                 'period_start' => $periodStart->toDateString(),
                 'period_end' => $periodEnd->toDateString(),
+                'timekeeping_cutoff_date' => $periodEnd->toDateString(),
+                'leave_cutoff_date' => $periodEnd->toDateString(),
+                'adjustment_deadline' => $periodEnd->toDateString(),
                 'payment_date' => $paymentDate->toDateString(),
-                'period_month' => $periodStart->month,
-                'period_year' => $periodStart->year,
-                'period_type' => 'regular',
-                'timekeeping_cutoff_date' => $periodEnd->copy()->subDays(1)->toDateString(),
-                'leave_cutoff_date' => $periodEnd->copy()->subDays(1)->toDateString(),
-                'adjustment_deadline' => $periodEnd->copy()->subDays(3)->toDateString(),
+                'status' => $status,
+                'created_by' => $creatorId,
+                'approved_by' => $status === 'approved' || $status === 'completed' ? $approverId : null,
+                'approved_at' => $status === 'approved' || $status === 'completed' ? $paymentDate->copy()->subDays(3) : null,
                 'total_employees' => $totalEmployees,
                 'active_employees' => $activeEmployees,
                 'excluded_employees' => $excludedEmployees,
-                'total_gross_pay' => rand(2500000, 3500000),
-                'total_deductions' => rand(400000, 600000),
-                'total_net_pay' => rand(2000000, 3000000),
-                'total_government_contributions' => rand(150000, 250000),
-                'total_loan_deductions' => rand(50000, 100000),
-                'total_adjustments' => rand(-10000, 10000),
-                'status' => $status,
-                'calculation_started_at' => $periodEnd->copy()->subDays(5),
-                'calculation_completed_at' => $periodEnd->copy()->subDays(4),
-                'submitted_for_review_at' => $status !== 'calculated' ? $periodEnd->copy()->subDays(3) : null,
-                'reviewed_at' => in_array($status, ['approved', 'closed']) ? $periodEnd->copy()->subDays(2) : null,
-                'approved_at' => $approvedAt,
-                'finalized_at' => $finalizedAt,
-                'locked_at' => $lockedAt,
-                'exceptions_count' => rand(0, 5),
-                'adjustments_count' => rand(0, 10),
-                'timekeeping_data_locked' => in_array($status, ['approved', 'completed']),
-                'leave_data_locked' => in_array($status, ['approved', 'completed']),
-                'created_by' => $creatorId,
-                'reviewed_by' => in_array($status, ['approved', 'completed']) ? $approverId : null,
-                'approved_by' => in_array($status, ['approved', 'completed']) ? $approverId : null,
-                'locked_by' => $status === 'completed' ? $approverId : null,
-                'created_at' => $periodStart->copy()->subDays(10),
-                'updated_at' => $now,
+                'total_net_pay' => ($status === 'completed' || $status === 'approved') ? $averageNetPay * $activeEmployees : 0.00,
+                'progress_percentage' => $progress,
+                'created_at' => $periodStart->copy()->subDays(2),
+                'updated_at' => $paymentDate,
             ];
 
-            // Second half of the month
+            // Second half
             $periodStart2 = $periodEnd->copy()->addDay();
             $periodEnd2 = $periodStart->copy()->endOfMonth();
             $paymentDate2 = $periodEnd2->copy()->addDays(2);
-            
             $periodNumber2 = sprintf('%s-%02d-2H', $periodStart->year, $periodStart->month);
-            
-            // Second half typically has same status completion pattern
-            if ($i >= 3) {
-                $status2 = 'completed';
-                $approvedAt2 = $periodEnd2->copy()->subDays(2);
-                $finalizedAt2 = $periodEnd2->copy()->subDays(1);
-                $lockedAt2 = $periodEnd2->copy();
-            } elseif ($i === 2) {
-                $status2 = 'completed';
-                $approvedAt2 = $periodEnd2->copy()->subDays(2);
-                $finalizedAt2 = $periodEnd2->copy()->subDays(1);
-                $lockedAt2 = $periodEnd2->copy();
-            } elseif ($i === 1) {
-                $status2 = 'approved';
-                $approvedAt2 = $periodEnd2->copy()->subDays(2);
-                $finalizedAt2 = null;
-                $lockedAt2 = null;
+            // Set 2nd half of March to 'draft', others to 'completed'
+            if ($periodStart2->month === 3 && $periodStart2->year === $now->year) {
+                $status2 = 'draft';
+                $progress2 = 0;
             } else {
-                $status2 = 'under_review';
-                $approvedAt2 = null;
-                $finalizedAt2 = null;
-                $lockedAt2 = null;
+                $status2 = 'completed';
+                $progress2 = 100;
             }
-
             $periods[] = [
                 'period_number' => $periodNumber2,
-                'period_name' => $periodStart->format('F Y') . ' - 2nd Half',
+                'period_name' => $periodNumber2, // Use period_number as name for demo
+                'period_month' => $periodStart2->format('Y-m'),
+                'period_year' => $periodStart2->format('Y'),
                 'period_start' => $periodStart2->toDateString(),
                 'period_end' => $periodEnd2->toDateString(),
+                'timekeeping_cutoff_date' => $periodEnd2->toDateString(),
+                'leave_cutoff_date' => $periodEnd2->toDateString(),
+                'adjustment_deadline' => $periodEnd2->toDateString(),
                 'payment_date' => $paymentDate2->toDateString(),
-                'period_month' => $periodStart->month,
-                'period_year' => $periodStart->year,
-                'period_type' => 'regular',
-                'timekeeping_cutoff_date' => $periodEnd2->copy()->subDays(1)->toDateString(),
-                'leave_cutoff_date' => $periodEnd2->copy()->subDays(1)->toDateString(),
-                'adjustment_deadline' => $periodEnd2->copy()->subDays(3)->toDateString(),
+                'status' => $status2,
+                'created_by' => $creatorId,
+                'approved_by' => $status2 === 'approved' || $status2 === 'completed' ? $approverId : null,
+                'approved_at' => $status2 === 'approved' || $status2 === 'completed' ? $paymentDate2->copy()->subDays(3) : null,
                 'total_employees' => $totalEmployees,
                 'active_employees' => $activeEmployees,
                 'excluded_employees' => $excludedEmployees,
-                'total_gross_pay' => rand(2500000, 3500000),
-                'total_deductions' => rand(400000, 600000),
-                'total_net_pay' => rand(2000000, 3000000),
-                'total_government_contributions' => rand(150000, 250000),
-                'total_loan_deductions' => rand(50000, 100000),
-                'total_adjustments' => rand(-10000, 10000),
-                'status' => $status2,
-                'calculation_started_at' => $periodEnd2->copy()->subDays(5),
-                'calculation_completed_at' => $periodEnd2->copy()->subDays(4),
-                'submitted_for_review_at' => $status2 !== 'calculated' ? $periodEnd2->copy()->subDays(3) : null,
-                'reviewed_at' => in_array($status2, ['approved', 'closed']) ? $periodEnd2->copy()->subDays(2) : null,
-                'approved_at' => $approvedAt2,
-                'finalized_at' => $finalizedAt2,
-                'locked_at' => $lockedAt2,
-                'exceptions_count' => rand(0, 5),
-                'adjustments_count' => rand(0, 10),
-                'timekeeping_data_locked' => in_array($status2, ['approved', 'completed']),
-                'leave_data_locked' => in_array($status2, ['approved', 'completed']),
-                'created_by' => $creatorId,
-                'reviewed_by' => in_array($status2, ['approved', 'completed']) ? $approverId : null,
-                'approved_by' => in_array($status2, ['approved', 'completed']) ? $approverId : null,
-                'locked_by' => $status2 === 'completed' ? $approverId : null,
-                'created_at' => $periodStart2->copy()->subDays(10),
-                'updated_at' => $now,
+                'total_net_pay' => ($status2 === 'completed' || $status2 === 'approved') ? $averageNetPay * $activeEmployees : 0.00,
+                'progress_percentage' => $progress2,
+                'created_at' => $periodStart2->copy()->subDays(2),
+                'updated_at' => $paymentDate2,
             ];
         }
+
+        // Remove any existing periods with the same period_number (idempotent bulk delete)
+        $periodNumbers = array_column($periods, 'period_number');
+        PayrollPeriod::whereIn('period_number', $periodNumbers)->delete();
 
         PayrollPeriod::insert($periods);
 

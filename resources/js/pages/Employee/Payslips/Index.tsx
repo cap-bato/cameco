@@ -31,6 +31,8 @@ interface EmployeeInfo {
 
 interface SalaryComponent {
     name: string;
+    description?: string;
+    category?: string;
     amount: number;
 }
 
@@ -46,6 +48,7 @@ interface PayslipRecord {
     deductions: SalaryComponent[];
     net_pay: number;
     year_to_date_gross: number;
+    year_to_date_deductions: number;
     year_to_date_net: number;
     pdf_url?: string;
 }
@@ -389,11 +392,11 @@ export default function PayslipsIndex({
                     </CardContent>
                 </Card>
 
-                {/* BIR 2316 Tax Certificate Download */}
+                {/* BIR 2316 Tax Certificate Download 
                 <BIR2316Section
                     currentYear={new Date().getFullYear()}
                     onDownload={handleDownloadBIR2316}
-                />
+                /> */}
 
                 {/* Help Section */}
                 <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-900/10">

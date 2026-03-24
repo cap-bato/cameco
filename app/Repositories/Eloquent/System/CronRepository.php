@@ -266,6 +266,11 @@ class CronRepository implements CronRepositoryInterface
             throw new \Exception("Scheduled job with ID {$id} not found.");
         }
 
+        // Strip ANSI escape codes and non-ASCII characters (emoji/symbols) before
+        // storing, so output remains compatible with PGSQL client_encoding=WIN1252.
+        $output = preg_replace('/\x1B\[[0-9;]*[mGKHFJSTsulABCDEF]/', '', $output ?? '');
+        $output = preg_replace('/[^\x09\x0A\x0D\x20-\x7E]/u', '', $output);
+
         // Increment run count
         $job->incrementRunCount();
 

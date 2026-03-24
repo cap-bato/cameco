@@ -95,8 +95,10 @@ export default function AppraisalsIndex({ appraisals = [], cycles = [], departme
         const total = appraisals.length;
         const completed = appraisals.filter((a) => a.status === 'completed').length;
         const inProgress = appraisals.filter((a) => a.status === 'in_progress').length;
-        const avgScore = appraisals.length
-            ? (appraisals.reduce((sum, a) => sum + (a.overall_score ?? 0), 0) / appraisals.length).toFixed(2)
+        // Only average non-null, non-undefined, numeric overall_score values
+        const scored = appraisals.filter((a) => typeof a.overall_score === 'number' && !isNaN(a.overall_score));
+        const avgScore = scored.length
+            ? (scored.reduce((sum, a) => sum + (a.overall_score as number), 0) / scored.length).toFixed(2)
             : '0.00';
         return { total, completed, inProgress, avgScore };
     }, [appraisals]);

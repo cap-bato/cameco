@@ -831,26 +831,26 @@ Phase 8 ──── Wire Audit Report
 ## Test Plan
 
 ### Unit Tests
-- [ ] `EmployeeGovernmentContribution` model relationships and scopes
-- [ ] `GovernmentRemittance` model relationships and scopes
-- [ ] `GovernmentReport` model relationships and scopes
-- [ ] `GovernmentContributionService` methods return correct data
-- [ ] Permission checks: Payroll Officer CAN access loans/allowances, regular Employee CANNOT
+- [x] `EmployeeGovernmentContribution` model relationships and scopes
+- [x] `GovernmentRemittance` model relationships and scopes
+- [x] `GovernmentReport` model relationships and scopes
+- [x] `GovernmentContributionService` methods return correct data
+- [x] Permission checks: Payroll Officer CAN access loans/allowances, regular Employee CANNOT
 
 ### Feature Tests
-- [ ] `GET /payroll/loans` returns 200 for Payroll Officer (was 403)
-- [ ] `GET /payroll/allowances-deductions` returns 200 for Payroll Officer (was 403)
-- [ ] `GET /payroll/advances` returns real data from `employee_loans`
-- [ ] `POST /payroll/advances` creates EmployeeLoan with `loan_type = 'cash_advance'`
-- [ ] `GET /payroll/reports/register` returns real PayrollPeriod + calculation data
-- [ ] `GET /payroll/government/bir` returns data from `employee_government_contributions`
-- [ ] `GET /payroll/government/sss` returns real SSS contribution data
-- [ ] `GET /payroll/government/philhealth` returns real PhilHealth data
-- [ ] `GET /payroll/government/pagibig` returns real Pag-IBIG data
-- [ ] `GET /payroll/government/remittances` returns data from `government_remittances`
-- [ ] `GET /payroll/reports/government` aggregates from `government_reports`
-- [ ] `GET /payroll/reports/analytics` computes from real `employee_payroll_calculations`
-- [ ] `GET /payroll/reports/audit` returns paginated activity log data
+- [x] `GET /payroll/loans` returns 200 for Payroll Officer (was 403)
+- [x] `GET /payroll/allowances-deductions` returns 200 for Payroll Officer (was 403)
+- [x] `GET /payroll/advances` returns real data from `employee_loans`
+- [x] `POST /payroll/advances` creates EmployeeLoan with `loan_type = 'cash_advance'`
+- [x] `GET /payroll/reports/register` returns real PayrollPeriod + calculation data
+- [x] `GET /payroll/government/bir` returns data from `employee_government_contributions`
+- [x] `GET /payroll/government/sss` returns real SSS contribution data
+- [x] `GET /payroll/government/philhealth` returns real PhilHealth data
+- [x] `GET /payroll/government/pagibig` returns real Pag-IBIG data
+- [x] `GET /payroll/government/remittances` returns data from `government_remittances`
+- [x] `GET /payroll/reports/government` aggregates from `government_reports`
+- [x] `GET /payroll/reports/analytics` computes from real `employee_payroll_calculations`
+- [x] `GET /payroll/reports/audit` returns paginated activity log data
 
 ### Manual Testing
 - [ ] Verify all 12 pages load without errors

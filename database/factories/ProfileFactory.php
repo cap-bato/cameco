@@ -16,9 +16,27 @@ class ProfileFactory extends Factory
      */
     public function definition(): array
     {
-        $gender = $this->faker->randomElement(['male', 'female', 'other']);
-        $firstName = $gender === 'male' ? $this->faker->firstNameMale() : $this->faker->firstNameFemale();
-        $lastName = $this->faker->lastName();
+        $gender = $this->faker->randomElement(['male', 'female']);
+        $filipinoFirstNamesMale = [
+            'Jose', 'Juan', 'Antonio', 'Ramon', 'Carlos', 'Andres', 'Emilio', 'Manuel', 'Roberto', 'Fernando',
+            'Miguel', 'Rafael', 'Ricardo', 'Eduardo', 'Alfredo', 'Francisco', 'Isagani', 'Benigno', 'Gregorio', 'Vicente',
+            'Pedro', 'Arturo', 'Enrique', 'Jaime', 'Leandro', 'Teodoro', 'Ernesto', 'Julio', 'Pablo', 'Tomas'
+        ];
+        $filipinoFirstNamesFemale = [
+            'Maria', 'Cristina', 'Rosario', 'Luz', 'Ligaya', 'Corazon', 'Imelda', 'Gloria', 'Carmen', 'Teresa',
+            'Elena', 'Victoria', 'Josefina', 'Dolores', 'Aurora', 'Amelia', 'Leticia', 'Patricia', 'Andrea', 'Angela',
+            'Isabel', 'Cecilia', 'Estrella', 'Remedios', 'Virginia', 'Evelyn', 'Norma', 'Lourdes', 'Consuelo', 'Milagros'
+        ];
+        $filipinoLastNames = [
+            'Santos', 'Reyes', 'Cruz', 'Bautista', 'Ocampo', 'Garcia', 'Aquino', 'Torres', 'Mendoza', 'Flores',
+            'Rivera', 'Villanueva', 'Gonzales', 'Ramos', 'Lopez', 'Dela Cruz', 'Pascual', 'Castro', 'Morales', 'Navarro',
+            'Domingo', 'Salazar', 'Fernandez', 'Marquez', 'Padilla', 'Aguilar', 'Silva', 'Santiago', 'Soriano', 'Lim'
+        ];
+        $firstName = $gender === 'male'
+            ? $this->faker->randomElement($filipinoFirstNamesMale)
+            : $this->faker->randomElement($filipinoFirstNamesFemale);
+        $middleName = $this->faker->randomElement($filipinoLastNames);
+        $lastName = $this->faker->randomElement($filipinoLastNames);
         
         // Philippine-specific address components
         $cities = [
@@ -41,7 +59,7 @@ class ProfileFactory extends Factory
 
         return [
             'first_name' => $firstName,
-            'middle_name' => $this->faker->lastName(),
+            'middle_name' => $middleName,
             'last_name' => $lastName,
             'suffix' => $this->faker->optional(0.1)->randomElement(['Jr.', 'Sr.', 'II', 'III']),
             'date_of_birth' => $this->faker->dateTimeBetween('-60 years', '-22 years')->format('Y-m-d'),
@@ -54,7 +72,6 @@ class ProfileFactory extends Factory
                                $this->faker->randomElement($barangays) . ', ' . 
                                $this->faker->randomElement($cities),
             'permanent_address' => function (array $attributes) use ($streets, $barangays, $cities) {
-                // 70% chance same as current address
                 if ($this->faker->boolean(70)) {
                     return $attributes['current_address'];
                 }
@@ -63,7 +80,7 @@ class ProfileFactory extends Factory
                        $this->faker->randomElement($barangays) . ', ' . 
                        $this->faker->randomElement($cities);
             },
-            'emergency_contact_name' => $this->faker->name(),
+            'emergency_contact_name' => $this->faker->randomElement(array_merge($filipinoFirstNamesMale, $filipinoFirstNamesFemale)) . ' ' . $this->faker->randomElement($filipinoLastNames),
             'emergency_contact_relationship' => $this->faker->randomElement([
                 'Spouse', 'Father', 'Mother', 'Sibling', 'Child', 'Partner', 'Friend'
             ]),

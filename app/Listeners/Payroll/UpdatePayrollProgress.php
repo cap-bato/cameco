@@ -33,6 +33,11 @@ class UpdatePayrollProgress implements ShouldQueue
                 ->where('calculation_status', 'calculated')
                 ->count();
 
+            // Get failed calculations
+            $failedCount = EmployeePayrollCalculation::where('payroll_period_id', $event->payrollPeriod->id)
+                ->where('calculation_status', 'exception')
+                ->count();
+
             // Calculate progress percentage
             $progressPercentage = $totalEmployees > 0 
                 ? round(($completedCount / $totalEmployees) * 100, 2)
@@ -43,11 +48,22 @@ class UpdatePayrollProgress implements ShouldQueue
                 'progress_percentage' => $progressPercentage,
             ]);
 
+            // Broadcast real-time progress update
+            event(new \App\Events\Payroll\PayrollProgressUpdated(
+                $event->payrollPeriod,
+                $progressPercentage,
+                $completedCount,
+                $totalEmployees,
+                $failedCount,
+                $event->payrollPeriod->status
+            ));
+
             Log::info('Payroll progress updated', [
                 'period_id' => $event->payrollPeriod->id,
                 'progress' => $progressPercentage,
                 'completed' => $completedCount,
                 'total' => $totalEmployees,
+                'failed' => $failedCount,
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to update payroll progress', [

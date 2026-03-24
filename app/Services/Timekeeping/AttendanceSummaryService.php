@@ -306,7 +306,7 @@ class AttendanceSummaryService
      * @param \Carbon\Carbon $date Date
      * @return \Carbon\Carbon|null
      */
-    private function getScheduledStart(WorkSchedule $schedule, Carbon $date): ?Carbon
+    private function getScheduledStart(?WorkSchedule $schedule, Carbon $date): ?Carbon
     {
         if (!$schedule) {
             return null;
@@ -333,7 +333,7 @@ class AttendanceSummaryService
      * @param \Carbon\Carbon $date Date
      * @return \Carbon\Carbon|null
      */
-    private function getScheduledEnd(WorkSchedule $schedule, Carbon $date): ?Carbon
+    private function getScheduledEnd(?WorkSchedule $schedule, Carbon $date): ?Carbon
     {
         if (!$schedule) {
             return null;
@@ -428,9 +428,23 @@ class AttendanceSummaryService
             'is_late'               => false,
             'is_undertime'          => false,
             'is_overtime'           => false,
+            'is_on_leave'           => $this->isEmployeeOnLeave($employeeId, $date),
             'late_minutes'          => null,
             'undertime_minutes'     => null,
         ];
+    }
+
+    private function isEmployeeOnLeave(int $employeeId, Carbon $date): bool
+    {
+        if (!class_exists(\App\Models\LeaveRequest::class)) {
+            return false;
+        }
+
+        return \App\Models\LeaveRequest::where('employee_id', $employeeId)
+            ->where('status', 'approved')
+            ->where('start_date', '<=', $date->toDateString())
+            ->where('end_date', '>=', $date->toDateString())
+            ->exists();
     }
 
     /**

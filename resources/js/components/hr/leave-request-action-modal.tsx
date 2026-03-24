@@ -21,6 +21,7 @@ interface LeaveRequestActionModalProps {
         id: number;
         employee_name: string;
         leave_type: string;
+        leave_type_variant?: string | null;
         start_date: string;
         end_date: string;
         days_requested: number;
@@ -40,6 +41,22 @@ function getStatusColor(status: string): string {
         Rejected: 'bg-red-100 text-red-800',
     };
     return colorMap[status] || 'bg-gray-100 text-gray-800';
+}
+
+function getVariantLabel(variant: string | null | undefined): string {
+    const labels: Record<string, string> = {
+        'half_am': 'Half Day AM',
+        'half_pm': 'Half Day PM',
+    };
+    return labels[variant || ''] || '';
+}
+
+function formatLeaveTypeWithVariant(leaveType: string, variant: string | null | undefined): string {
+    const variantLabel = getVariantLabel(variant);
+    if (variantLabel) {
+        return `${leaveType} (${variantLabel})`;
+    }
+    return leaveType;
 }
 
 export function LeaveRequestActionModal({
@@ -115,7 +132,7 @@ export function LeaveRequestActionModal({
                         <div className="flex justify-between items-start">
                             <div>
                                 <div className="font-semibold">{request.employee_name}</div>
-                                <div className="text-sm text-muted-foreground">{request.leave_type}</div>
+                                <div className="text-sm text-muted-foreground">{formatLeaveTypeWithVariant(request.leave_type, request.leave_type_variant)}</div>
                             </div>
                             <Badge className={getStatusColor(request.status)}>{request.status}</Badge>
                         </div>

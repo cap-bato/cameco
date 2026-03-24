@@ -19,64 +19,72 @@ class BulkEmployeeSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->command->info('Starting bulk employee seeding...');
-        
-        // Get all departments and positions
-        $departments = Department::with('positions')->get();
-        
-        if ($departments->isEmpty()) {
-            $this->command->error('No departments found. Please run DepartmentSeeder and PositionSeeder first.');
-            return;
-        }
-
-        $this->command->info('Found ' . $departments->count() . ' departments');
-
-        // Create employees in batches for better performance
-        $batchSize = 50;
-        $totalEmployees = 31;  // Changed from 200 to 31 to align with EmployeeSeeder
+        $this->command->info('Seeding 17 generic employees to reach 142 total...');
         $createdCount = 0;
-
-        $this->command->info("Creating {$totalEmployees} employees in batches of {$batchSize}...");
-
+        $totalEmployees = 17;
+        $departments = Department::all();
+        $positions = Position::all();
         DB::beginTransaction();
-        
         try {
-            for ($i = 0; $i < $totalEmployees; $i += $batchSize) {
-                $remaining = min($batchSize, $totalEmployees - $i);
-                
-                $this->command->info("Creating batch of {$remaining} employees...");
-                
-                // Create employees with active status (most common)
-                $activeCount = (int)($remaining * 0.85); // 85% active
-                Employee::factory($activeCount)->active()->create();
-                $createdCount += $activeCount;
-                
-                // Create employees with other statuses
-                $otherCount = $remaining - $activeCount;
-                if ($otherCount > 0) {
-                    Employee::factory($otherCount)->create();
-                    $createdCount += $otherCount;
-                }
-                
-                $this->command->info("Progress: {$createdCount}/{$totalEmployees} employees created");
+            for ($i = 1; $i <= $totalEmployees; $i++) {
+                $dept = $departments->random();
+                $pos = $positions->random();
+                $profile = \App\Models\Profile::create([
+                    'first_name' => 'Generic',
+                    'middle_name' => 'Employee',
+                    'last_name' => (string)$i,
+                    'date_of_birth' => '1990-01-01',
+                    'gender' => 'male',
+                    'civil_status' => 'single',
+                    'current_address' => 'Generic Address',
+                    'permanent_address' => 'Generic Address',
+                    'email' => "generic{$i}@cameco.com",
+                ]);
+                Employee::create([
+                    'employee_number' => sprintf('GEN-%04d', $i),
+                    'profile_id' => $profile->id,
+                    'department_id' => $dept->id,
+                    'position_id' => $pos->id,
+                    'employment_type' => 'regular',
+                    'date_hired' => '2020-01-01',
+                    'status' => 'active',
+                    'created_by' => 1,
+                    'updated_by' => 1,
+                ]);
+                $createdCount++;
             }
-
-            // Assign supervisors to some employees
             $this->command->info('Assigning supervisors...');
             $this->assignSupervisors();
-
             DB::commit();
-            
-            $this->command->info('✅ Successfully created ' . $createdCount . ' employees!');
-            
-            // Display statistics
+            $this->command->info('✅ Successfully created ' . $createdCount . ' generic employees!');
             $this->displayStatistics();
-            
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->command->error('Error creating employees: ' . $e->getMessage());
+            $this->command->error('Error creating generic employees: ' . $e->getMessage());
             throw $e;
         }
+
+        // Assign photos to male employees if available
+        $sourceDir = base_path('employee-photos-mock');
+        $employees = Employee::with('profile')->orderBy('id')->get();
+        $photoFiles = collect(glob($sourceDir . '/*.jpg'))->map(fn($f) => basename($f))->toArray();
+        $this->command->info("Assigning photos to male employees...");
+        $i = 0;
+        foreach ($employees as $employee) {
+            $profile = $employee->profile;
+            if (!$profile || strtolower($profile->gender) !== 'male') continue;
+            $photoFile = $photoFiles[$i % count($photoFiles)] ?? null;
+            if ($photoFile) {
+                $sourcePath = $sourceDir . '/' . $photoFile;
+                $destPath = "employees/{$employee->employee_number}/profile.jpg";
+                if (file_exists($sourcePath)) {
+                    \Storage::disk('public')->put($destPath, file_get_contents($sourcePath));
+                    $profile->update(['profile_picture_path' => $destPath]);
+                }
+            }
+            $i++;
+        }
+        $this->command->info("Photo assignment complete.");
     }
 
     /**
@@ -128,12 +136,12 @@ class BulkEmployeeSeeder extends Seeder
         $this->command->table(
             ['Metric', 'Count'],
             [
-                ['Total Employees', Employee::count()],
+                ['Total Employees', Employee::withTrashed()->count()],
                 ['Active', Employee::where('status', 'active')->count()],
                 ['On Leave', Employee::where('status', 'on_leave')->count()],
                 ['Suspended', Employee::where('status', 'suspended')->count()],
                 ['Terminated', Employee::where('status', 'terminated')->count()],
-                ['Archived', Employee::where('status', 'archived')->count()],
+                ['Archived', Employee::withTrashed()->where('status', 'archived')->count()],
                 ['With Supervisors', Employee::whereNotNull('immediate_supervisor_id')->count()],
                 ['Regular Employees', Employee::where('employment_type', 'Regular')->count()],
                 ['Probationary', Employee::where('employment_type', 'Probationary')->count()],

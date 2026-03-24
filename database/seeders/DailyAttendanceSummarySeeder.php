@@ -38,30 +38,27 @@ class DailyAttendanceSummarySeeder extends Seeder
 
         foreach ($employees as $employee) {
             foreach ($workDays as $date) {
+                // Prevent unique constraint violation: skip if already exists
                 $exists = DailyAttendanceSummary::where('employee_id', $employee->id)
                     ->where('attendance_date', $date)
                     ->exists();
-
                 if ($exists) {
                     $skipped++;
+                    $this->command->line("  -> Skipped: employee_id={$employee->id}, date={$date} (already exists)");
                     continue;
                 }
-
                 $rand = mt_rand(1, 100);
                 $isAbsent = $rand <= 5;
                 $isLate = !$isAbsent && $rand <= 25;
                 $isOvertime = !$isAbsent && $rand >= 85;
-
                 $lateMinutes = $isLate ? mt_rand(5, 45) : 0;
                 $overtimeHours = $isOvertime ? mt_rand(1, 3) : 0.0;
                 $regularHours = $isAbsent ? 0.0 : 8.0;
                 $totalHours = $isAbsent
                     ? 0.0
                     : ($regularHours + $overtimeHours - ($lateMinutes / 60));
-
                 $timeIn = $isAbsent ? null : Carbon::parse($date . ' 08:00:00')->addMinutes($lateMinutes);
                 $timeOut = $isAbsent ? null : Carbon::parse($date . ' 17:00:00')->addHours($overtimeHours);
-
                 DailyAttendanceSummary::create([
                     'employee_id' => $employee->id,
                     'attendance_date' => $date,
@@ -85,7 +82,6 @@ class DailyAttendanceSummarySeeder extends Seeder
                     'is_finalized' => true,
                     'calculated_at' => now(),
                 ]);
-
                 $created++;
             }
         }

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Save, AlertCircle, CheckCircle2, Clock, Users, Briefcase, DollarSign, Receipt, GitBranch, Calendar, AlertTriangle, Ban, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Save, AlertCircle, CheckCircle2, Clock, Users, Briefcase, DollarSign, Receipt, Calendar, AlertTriangle, Ban, TrendingUp } from 'lucide-react';
 import { ApprovalRuleCard } from '@/components/admin/approval-rule-card';
 import { WorkflowTester } from '@/components/admin/workflow-tester';
 import { useToast } from '@/hooks/use-toast';
@@ -470,7 +470,7 @@ export default function ApprovalWorkflowsIndex({ approvalRules, leaveTypes }: Ap
                         )}
                     </TabsContent>
 
-                    {/* Tab 2: Hiring Approval (Placeholder) */}
+                    {/* Tab 2: Hiring Approval (Placeholder)
                     <TabsContent value="hiring">
                         <Card>
                             <CardHeader>
@@ -534,9 +534,9 @@ export default function ApprovalWorkflowsIndex({ approvalRules, leaveTypes }: Ap
                                 </div>
                             </CardContent>
                         </Card>
-                    </TabsContent>
+                    </TabsContent>*/}
 
-                    {/* Tab 3: Payroll Approval (Placeholder) */}
+                    {/* Tab 3: Payroll Approval (Placeholder)
                     <TabsContent value="payroll">
                         <Card>
                             <CardHeader>
@@ -600,9 +600,9 @@ export default function ApprovalWorkflowsIndex({ approvalRules, leaveTypes }: Ap
                                 </div>
                             </CardContent>
                         </Card>
-                    </TabsContent>
+                    </TabsContent>  */}
 
-                    {/* Tab 4: Expense Approval (Placeholder) */}
+                    {/* Tab 4: Expense Approval (Placeholder)
                     <TabsContent value="expense">
                         <Card>
                             <CardHeader>
@@ -666,7 +666,7 @@ export default function ApprovalWorkflowsIndex({ approvalRules, leaveTypes }: Ap
                                 </div>
                             </CardContent>
                         </Card>
-                    </TabsContent>
+                    </TabsContent>  */}
                 </Tabs>
             </div>
         </AppLayout>
