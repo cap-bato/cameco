@@ -156,11 +156,6 @@
     {
         $systems = [
             [
-                'system_name' => 'Email',
-                'system_category' => 'email',
-                'account_identifier' => $case->employee->user?->email,
-            ],
-            [
                 'system_name' => 'VPN',
                 'system_category' => 'network',
                 'account_identifier' => $case->employee->user?->username,
@@ -174,11 +169,6 @@
                 'system_name' => 'ERP System',
                 'system_category' => 'application',
                 'account_identifier' => $case->employee->user?->username,
-            ],
-            [
-                'system_name' => 'Slack',
-                'system_category' => 'cloud_service',
-                'account_identifier' => $case->employee->user?->email,
             ],
             [
                 'system_name' => 'Microsoft 365',
