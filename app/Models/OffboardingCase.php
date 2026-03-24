@@ -300,23 +300,52 @@ class OffboardingCase extends Model
      */
     public function getProgressSummary(): array
     {
+        // Calculate clearance percentage
         $totalClearances = $this->clearanceItems()->count();
         $approvedClearances = $this->clearanceItems()
             ->whereIn('status', ['approved', 'waived'])
             ->count();
+        $clearancePercentage = $totalClearances > 0 ? round(($approvedClearances / $totalClearances) * 100) : 0;
         
+        // Calculate assets return percentage
         $totalAssets = $this->companyAssets()
             ->where('status', 'issued')
             ->count();
         $returnedAssets = $this->companyAssets()
             ->where('status', 'returned')
             ->count();
+        $assetsPercentage = $totalAssets > 0 ? round(($returnedAssets / $totalAssets) * 100) : 0;
+
+        // Get exit interview status
+        $exitInterviewCompleted = $this->exitInterview()->where('status', 'completed')->exists();
+        $exitInterviewPercentage = $exitInterviewCompleted ? 100 : 0;
+
+        // Calculate access revocation percentage
+        $totalAccessRevocations = $this->accessRevocations()->count();
+        $revokedAccess = $this->accessRevocations()
+            ->whereIn('status', ['revoked', 'completed'])
+            ->count();
+        $accessRevocationPercentage = $totalAccessRevocations > 0 ? round(($revokedAccess / $totalAccessRevocations) * 100) : 0;
+
+        // Calculate documents percentage
+        $totalDocuments = $this->documents()->count();
+        $issuedDocuments = $this->documents()
+            ->where('issued_to_employee', true)
+            ->count();
+        $documentsPercentage = $totalDocuments > 0 ? round(($issuedDocuments / $totalDocuments) * 100) : 0;
+
+        // Calculate overall percentage (average of all progress percentages)
+        $overallPercentage = round(
+            ($clearancePercentage + $assetsPercentage + $exitInterviewPercentage + $accessRevocationPercentage + $documentsPercentage) / 5
+        );
 
         return [
-            'clearance_progress' => $totalClearances > 0 ? round(($approvedClearances / $totalClearances) * 100, 2) : 0,
-            'asset_return_progress' => $totalAssets > 0 ? round(($returnedAssets / $totalAssets) * 100, 2) : 0,
-            'exit_interview_completed' => $this->exitInterview()->exists(),
-            'completion_percentage' => $this->calculateCompletionPercentage(),
+            'overall_percentage' => $overallPercentage,
+            'clearance_percentage' => $clearancePercentage,
+            'exit_interview_completed' => $exitInterviewCompleted,
+            'assets_percentage' => $assetsPercentage,
+            'access_revocation_percentage' => $accessRevocationPercentage,
+            'documents_percentage' => $documentsPercentage,
         ];
     }
 }
