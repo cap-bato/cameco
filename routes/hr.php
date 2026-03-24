@@ -672,6 +672,11 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
 
         // Offboarding Module
         Route::prefix('offboarding')->name('offboarding.')->group(function () {
+            // Offboarding Root - redirect to dashboard
+            Route::get('/', [OffboardingDashboardController::class, 'index'])
+                ->middleware('permission:hr.offboarding.view')
+                ->name('index');
+
             // Offboarding Dashboard
             Route::get('/dashboard', [OffboardingDashboardController::class, 'index'])
                 ->middleware('permission:hr.offboarding.view')
