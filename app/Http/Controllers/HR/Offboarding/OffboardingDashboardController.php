@@ -374,7 +374,7 @@ class OffboardingDashboardController extends Controller
             ? round(($case->clearanceItems->where('status', 'approved')->count() / $case->clearanceItems->count()) * 100)
             : 0;
 
-        $daysRemaining = now()->diffInDays($case->last_working_day, false);
+        $daysRemaining = (int) now()->diffInDays($case->last_working_day, false);
         $isOverdue = $daysRemaining < 0;
 
         return [

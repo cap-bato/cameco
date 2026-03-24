@@ -38,6 +38,30 @@ class CronJobSeeder extends Seeder
                 'last_exit_code' => null,
             ],
             [
+                'name' => 'Database and Files Backup',
+                'description' => 'Database backup automated run.',
+                'command' => 'backup:run',
+                'cron_expression' => '1 0 1 * *', // 1st of month at 00:01
+                'is_enabled' => true,
+                'run_count' => 0,
+                'success_count' => 0,
+                'failure_count' => 0,
+                'last_run_at' => null,
+                'last_exit_code' => null,
+            ],
+            [
+                'name' => 'DAtabase Only Backup',
+                'description' => 'Database backup automated run.',
+                'command' => 'backup:run --only-db',
+                'cron_expression' => '1 0 1 * *', // 1st of month at 00:01
+                'is_enabled' => true,
+                'run_count' => 0,
+                'success_count' => 0,
+                'failure_count' => 0,
+                'last_run_at' => null,
+                'last_exit_code' => null,
+            ],
+            [
                 'name' => 'Check RFID Device Health',
                 'description' => 'Mark RFID devices as offline when their heartbeat has not been received within the expected window.',
                 'command' => 'timekeeping:check-device-health',

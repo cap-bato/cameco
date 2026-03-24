@@ -20,9 +20,10 @@ return new class extends Migration
         $hpmPolicyId = DB::table('leave_policies')->where('code', 'HPM')->value('id');
         $slPolicyId = DB::table('leave_policies')->where('code', 'SL')->value('id');
 
-        // Only proceed if all policies exist
+        // Skip if HAM/HPM policies don't exist (deprecated policies)
+        // Only proceed if SL policy exists for migration to target
         if (!$hamPolicyId || !$hpmPolicyId || !$slPolicyId) {
-            throw new \Exception('Required leave policies (HAM, HPM, SL) not found in database');
+            return;
         }
 
         // Migrate HAM requests to SL with half_am variant
