@@ -52,7 +52,7 @@ export type CandidateSource =
 /**
  * Interview recommendation types
  */
-export type InterviewRecommendation = 'hire' | 'pending' | 'reject';
+export type InterviewRecommendation = 'hire' | 'no_hire' | 'hold';
 
 /**
  * Interview location types
@@ -257,8 +257,8 @@ export interface ApplicationFilters extends CommonFilters {
     status?: ApplicationStatus | '';
     job_id?: number | '';
     source?: CandidateSource | '';
-    score_min?: number;
-    score_max?: number;
+    min_score?: number;
+    max_score?: number;
     date_from?: string;
     date_to?: string;
 }
@@ -307,7 +307,9 @@ export interface CandidateSummary {
     new_candidates: number;
     in_process: number;
     interviewed: number;
+    offered: number;
     hired: number;
+    rejected: number;
 }
 
 /**
@@ -330,9 +332,9 @@ export interface InterviewSummary {
     total_interviews: number;
     scheduled: number;
     completed: number;
-    today: number;
-    this_week: number;
     cancelled: number;
+    no_show: number;
+    upcoming_this_week: number;
 }
 
 /**

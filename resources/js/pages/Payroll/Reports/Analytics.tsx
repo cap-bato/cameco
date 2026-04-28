@@ -89,67 +89,68 @@ export default function LaborCostAnalytics({
                         <p className="mt-1 text-sm text-gray-400">Select a different period or run payroll calculations to see analytics.</p>
                     </div>
                 ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-                    <div className="rounded-lg border border-gray-200 bg-white p-4">
-                        <p className="text-sm font-medium text-gray-600">Total Labor Cost</p>
-                        <p className="mt-2 text-2xl font-bold text-gray-900">
-                            {formatCurrency(analytics_summary.total_labor_cost)}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-500">Current period</p>
-                    </div>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+                        <div className="rounded-lg border border-gray-200 bg-white p-4">
+                            <p className="text-sm font-medium text-gray-600">Total Labor Cost</p>
+                            <p className="mt-2 text-2xl font-bold text-gray-900">
+                                {formatCurrency(analytics_summary.total_labor_cost)}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">Current period</p>
+                        </div>
 
-                    <div className="rounded-lg border border-gray-200 bg-white p-4">
-                        <p className="text-sm font-medium text-gray-600">Avg Monthly Cost</p>
-                        <p className="mt-2 text-2xl font-bold text-gray-900">
-                            {formatCurrency(analytics_summary.average_monthly_cost)}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-500">Running average</p>
-                    </div>
+                        <div className="rounded-lg border border-gray-200 bg-white p-4">
+                            <p className="text-sm font-medium text-gray-600">Avg Monthly Cost</p>
+                            <p className="mt-2 text-2xl font-bold text-gray-900">
+                                {formatCurrency(analytics_summary.average_monthly_cost)}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">Running average</p>
+                        </div>
 
-                    <div className="rounded-lg border border-gray-200 bg-white p-4">
-                        <p className="text-sm font-medium text-gray-600">Employees</p>
-                        <p className="mt-2 text-2xl font-bold text-gray-900">
-                            {analytics_summary.total_employees}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-500">Active employees</p>
-                    </div>
+                        <div className="rounded-lg border border-gray-200 bg-white p-4">
+                            <p className="text-sm font-medium text-gray-600">Employees</p>
+                            <p className="mt-2 text-2xl font-bold text-gray-900">
+                                {analytics_summary.total_employees}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">Active employees</p>
+                        </div>
 
-                    <div className="rounded-lg border border-gray-200 bg-white p-4">
-                        <p className="text-sm font-medium text-gray-600">Cost per Employee</p>
-                        <p className="mt-2 text-2xl font-bold text-gray-900">
-                            {formatCurrency(analytics_summary.average_cost_per_employee)}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-500">Monthly average</p>
-                    </div>
+                        <div className="rounded-lg border border-gray-200 bg-white p-4">
+                            <p className="text-sm font-medium text-gray-600">Cost per Employee</p>
+                            <p className="mt-2 text-2xl font-bold text-gray-900">
+                                {formatCurrency(analytics_summary.average_cost_per_employee)}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">Monthly average</p>
+                        </div>
 
-                    <div className="rounded-lg border border-gray-200 bg-white p-4">
-                        <p className="text-sm font-medium text-gray-600">vs Last Year</p>
-                        <p className={`mt-2 text-2xl font-bold ${analytics_summary.trend_vs_last_year >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {analytics_summary.trend_vs_last_year > 0 ? '+' : ''}{analytics_summary.trend_vs_last_year.toFixed(1)}%
-                        </p>
-                        <p className="mt-1 text-xs text-gray-500">Year-over-year change</p>
+                        <div className="rounded-lg border border-gray-200 bg-white p-4">
+                            <p className="text-sm font-medium text-gray-600">vs Last Year</p>
+                            <p className={`mt-2 text-2xl font-bold ${analytics_summary.trend_vs_last_year >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                {analytics_summary.trend_vs_last_year > 0 ? '+' : ''}{analytics_summary.trend_vs_last_year.toFixed(1)}%
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">Year-over-year change</p>
+                        </div>
                     </div>
                 )}
 
                 {/* Top Insights */}
                 {hasData && (
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                    <h3 className="font-semibold text-blue-900">Key Insights</h3>
-                    <ul className="mt-2 space-y-2 text-sm text-blue-800">
-                        <li>
-                            • <strong>{analytics_summary.largest_cost_component}</strong> is the largest cost component at{' '}
-                            <strong>{analytics_summary.largest_cost_component_percentage.toFixed(1)}%</strong> of total labor cost
-                        </li>
-                        <li>
-                            • <strong>{analytics_summary.highest_cost_department}</strong> department has the highest costs at{' '}
-                            <strong>{formatCurrency(analytics_summary.highest_cost_department_amount)}</strong>
-                        </li>
-                        <li>
-                            • Labor costs have {analytics_summary.trend_vs_last_period >= 0 ? 'increased' : 'decreased'} by{' '}
-                            <strong>{Math.abs(analytics_summary.trend_vs_last_period).toFixed(1)}%</strong> compared to last period
-                        </li>
-                    </ul>
-                </div>
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                        <h3 className="font-semibold text-blue-900">Key Insights</h3>
+                        <ul className="mt-2 space-y-2 text-sm text-blue-800">
+                            <li>
+                                • <strong>{analytics_summary.largest_cost_component}</strong> is the largest cost component at{' '}
+                                <strong>{analytics_summary.largest_cost_component_percentage.toFixed(1)}%</strong> of total labor cost
+                            </li>
+                            <li>
+                                • <strong>{analytics_summary.highest_cost_department}</strong> department has the highest costs at{' '}
+                                <strong>{formatCurrency(analytics_summary.highest_cost_department_amount)}</strong>
+                            </li>
+                            <li>
+                                • Labor costs have {analytics_summary.trend_vs_last_period >= 0 ? 'increased' : 'decreased'} by{' '}
+                                <strong>{Math.abs(analytics_summary.trend_vs_last_period).toFixed(1)}%</strong> compared to last period
+                            </li>
+                        </ul>
+                    </div>
                 )}
 
                 {/* Tabs */}
@@ -198,14 +199,17 @@ export default function LaborCostAnalytics({
 
                 {/* Tab Content */}
                 <div className="mt-6">
-                    {activeTab === 'overview' && (
+                {activeTab === 'overview' && (
+                    <div className="space-y-6">
+                        {/* hide YoY on overview */}
                         <CostTrendCharts
                             monthlyTrends={cost_trend_data}
                             departmentComparisons={department_comparisons}
                             componentBreakdown={component_breakdown}
-                            yoyComparisons={yoy_comparisons}
+                            yoyComparisons={[]}
                         />
-                    )}
+                    </div>
+                )}
 
                     {activeTab === 'cost_trends' && (
                         <CostTrendCharts

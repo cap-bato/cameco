@@ -22,9 +22,12 @@ class ProcessYearEndCarryover extends Command
 
         $this->info("Starting year-end leave carryover processing for year {$year}...");
 
-        if (!$this->confirm("This will carry forward unused leave balances from {$year} to {$nextYear}. Continue?", true)) {
-            $this->info('Operation cancelled.');
-            return Command::SUCCESS;
+        // Prompt only in real CLI context. Web-triggered executions do not have STDIN.
+        if (app()->runningInConsole() && $this->input->isInteractive()) {
+            if (!$this->confirm("This will carry forward unused leave balances from {$year} to {$nextYear}. Continue?", true)) {
+                $this->info('Operation cancelled.');
+                return Command::SUCCESS;
+            }
         }
 
         $employees = Employee::where('status', 'active')->get();

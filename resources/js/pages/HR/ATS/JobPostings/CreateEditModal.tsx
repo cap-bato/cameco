@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, Facebook } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import type { JobPosting, JobPostingFormData } from '@/types/ats-pages';
 
@@ -32,16 +32,40 @@ export function JobPostingCreateEditModal({
   onClose,
   onSubmit,
 }: JobPostingCreateEditModalProps) {
-  const [formData, setFormData] = useState<JobPostingFormData>({
-    title: jobPosting?.title || '',
-    department_id: jobPosting?.department_id || 0,
-    description: jobPosting?.description || '',
-    requirements: jobPosting?.requirements || '',
-    status: jobPosting?.status || 'draft',
-    auto_post_facebook: jobPosting?.auto_post_facebook || false,
-  });
+  const getInitialFormData = (): JobPostingFormData & { closed_at: string } => {
+    if (jobPosting) {
+      return {
+        title: jobPosting.title || '',
+        department_id: jobPosting.department_id || 0,
+        description: jobPosting.description || '',
+        requirements: jobPosting.requirements || '',
+        status: jobPosting.status || 'draft',
+        auto_post_facebook: jobPosting.auto_post_facebook || false,
+        closed_at: jobPosting.closed_at ? jobPosting.closed_at.split('T')[0] : '',
+      };
+    }
+    return {
+      title: '',
+      department_id: 0,
+      description: '',
+      requirements: '',
+      status: 'draft',
+      auto_post_facebook: false,
+      closed_at: '',
+    };
+  };
 
+  const [formData, setFormData] = useState<JobPostingFormData & { closed_at: string }>(getInitialFormData());
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Reset form data and errors when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(getInitialFormData());
+      setErrors({});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, jobPosting]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -77,21 +101,13 @@ export function JobPostingCreateEditModal({
   };
 
   const handleClose = () => {
-    setFormData({
-      title: '',
-      department_id: 0,
-      description: '',
-      requirements: '',
-      status: 'draft',
-      auto_post_facebook: false,
-    });
     setErrors({});
     onClose();
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? 'Edit Job Posting' : 'Create New Job Posting'}
@@ -211,40 +227,10 @@ export function JobPostingCreateEditModal({
             <Input
               id="closed_at"
               type="date"
-              value={jobPosting?.closed_at ? jobPosting.closed_at.split('T')[0] : ''}
-              onChange={() => {
-                // Closing date can be set when editing
-              }}
+              value={formData.closed_at}
+              onChange={(e) => setFormData({ ...formData, closed_at: e.target.value })}
               disabled={isLoading}
             />
-          </div>
-
-          {/* Auto-Post to Facebook */}
-          <div className="space-y-2">
-            <Label className="text-sm">Facebook Integration</Label>
-            <label className="flex items-start gap-3 cursor-pointer p-3 border rounded-md hover:bg-accent/50 transition-colors">
-              <input
-                type="checkbox"
-                checked={formData.auto_post_facebook || false}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  auto_post_facebook: e.target.checked
-                })}
-                disabled={isLoading}
-                className="mt-0.5 rounded"
-              />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <Facebook className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium">
-                    Automatically post to Facebook when published
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  When enabled, this job will be automatically posted to your company's Facebook Page as soon as it's published.
-                </p>
-              </div>
-            </label>
           </div>
 
           {/* Info Alert */}

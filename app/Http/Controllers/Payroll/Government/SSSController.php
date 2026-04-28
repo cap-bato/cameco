@@ -85,65 +85,129 @@ class SSSController extends Controller
         }
     }
 
-    public function downloadR3(int $reportId)
-    {
-        try {
-            $report = GovernmentReport::where('agency', 'sss')
-                ->where('report_type', 'r3')
-                ->findOrFail($reportId);
+public function downloadR3(int $reportId)
+{
+    try {
+        $report = GovernmentReport::where('agency', 'sss')
+            ->where('report_type', 'r3')
+            ->findOrFail($reportId);
 
-            if (!$report->file_path || !Storage::exists($report->file_path)) {
-                return response(['error' => 'Report file not found. Please regenerate the report.'], 404)
-                    ->header('Content-Type', 'application/json');
+        // If a real file exists, serve it
+        if ($report->file_path && Storage::exists($report->file_path)) {
+            return Storage::download($report->file_path, $report->file_name);
+        }
+
+        // Otherwise generate on the fly from the period's contribution data
+        $contributions = $this->sssService->getContributions('sss', $report->payroll_period_id);
+
+        $filename = $report->file_name ?? "SSS-R3-{$report->report_period}.csv";
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'no-cache, no-store, must-revalidate',
+        ];
+
+        $callback = function () use ($contributions) {
+            $handle = fopen('php://output', 'w');
+
+            // R3 format columns per SSS ERPS requirements
+            fputcsv($handle, [
+                'Sequence No.',
+                'SSS Number',
+                'Employee Name',
+                'Monthly Compensation',
+                'EE Share',
+                'ER Share',
+                'EC Share',
+                'Total Contribution',
+            ]);
+
+            $seq = 1;
+            foreach ($contributions as $row) {
+                fputcsv($handle, [
+                    $seq++,
+                    $row['sss_number'],
+                    $row['employee_name'],
+                    number_format($row['monthly_compensation'], 2, '.', ''),
+                    number_format($row['employee_contribution'], 2, '.', ''),
+                    number_format($row['employer_contribution'], 2, '.', ''),
+                    number_format($row['ec_contribution'], 2, '.', ''),
+                    number_format($row['total_contribution'], 2, '.', ''),
+                ]);
             }
 
-            Log::info('SSS R3 downloaded', [
-                'report_id'     => $reportId,
-                'file_name'     => $report->file_name,
-                'downloaded_by' => auth()->id(),
-            ]);
+            fclose($handle);
+        };
 
-            return Storage::download($report->file_path, $report->file_name);
-        } catch (\Exception $e) {
-            Log::error('SSS R3 download error', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-            return response(['error' => $e->getMessage()], 500)
-                ->header('Content-Type', 'application/json');
-        }
+        return response()->stream($callback, 200, $headers);
+
+    } catch (\Exception $e) {
+        Log::error('SSS R3 download error', ['error' => $e->getMessage()]);
+        return response()->json(['error' => $e->getMessage()], 500);
     }
+}
 
-    public function downloadContributions(int $periodId)
-    {
-        try {
-            $report = GovernmentReport::where('agency', 'sss')
-                ->where('payroll_period_id', $periodId)
-                ->where('report_type', 'contributions')
-                ->latest()
-                ->first();
+public function downloadContributions(int $periodId)
+{
+    try {
+        $contributions = $this->sssService->getContributions('sss', $periodId);
 
-            if (!$report || !$report->file_path || !Storage::exists($report->file_path)) {
-                return response(['error' => 'Contributions report not found. Please generate it first.'], 404)
-                    ->header('Content-Type', 'application/json');
+        if ($contributions->isEmpty()) {
+            return response()->json(['error' => 'No contribution data found for this period.'], 404);
+        }
+
+        $period = \App\Models\PayrollPeriod::find($periodId);
+        $month  = $period?->period_start?->format('Y-m') ?? 'unknown';
+
+        $filename = "SSS-Contributions-{$month}.csv";
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'no-cache, no-store, must-revalidate',
+        ];
+
+        $callback = function () use ($contributions) {
+            $handle = fopen('php://output', 'w');
+
+            // CSV header row
+            fputcsv($handle, [
+                'Employee Number',
+                'Employee Name',
+                'SSS Number',
+                'Month',
+                'Monthly Compensation',
+                'Employee Share',
+                'Employer Share',
+                'EC Share',
+                'Total Contribution',
+            ]);
+
+            foreach ($contributions as $row) {
+                fputcsv($handle, [
+                    $row['employee_number'],
+                    $row['employee_name'],
+                    $row['sss_number'],
+                    $row['month'],
+                    number_format($row['monthly_compensation'], 2, '.', ''),
+                    number_format($row['employee_contribution'], 2, '.', ''),
+                    number_format($row['employer_contribution'], 2, '.', ''),
+                    number_format($row['ec_contribution'], 2, '.', ''),
+                    number_format($row['total_contribution'], 2, '.', ''),
+                ]);
             }
 
-            Log::info('SSS contributions downloaded', [
-                'period_id'     => $periodId,
-                'file_name'     => $report->file_name,
-                'downloaded_by' => auth()->id(),
-            ]);
+            fclose($handle);
+        };
 
-            return Storage::download($report->file_path, $report->file_name);
-        } catch (\Exception $e) {
-            Log::error('SSS contributions download error', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-            return response(['error' => $e->getMessage()], 500)
-                ->header('Content-Type', 'application/json');
-        }
+        return response()->stream($callback, 200, $headers);
+
+    } catch (\Exception $e) {
+        Log::error('SSS contributions download error', ['error' => $e->getMessage()]);
+        return response()->json(['error' => $e->getMessage()], 500);
     }
+}
 
     public function download(Request $request, int $reportId)
     {

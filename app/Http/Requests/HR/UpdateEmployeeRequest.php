@@ -11,13 +11,10 @@ class UpdateEmployeeRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        // Check if user has HR Manager role or is Superadmin
-        return $this->user()->hasAnyRole(['HR Manager', 'Superadmin']);
+        // Check if user has HR Manager role, HR Staff role, or is Superadmin
+        return $this->user()->hasAnyRole(['HR Manager', 'HR Staff', 'Superadmin']);
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     */
     /**
      * Get the validation rules that apply to the request.
      */

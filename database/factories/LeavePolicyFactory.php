@@ -20,7 +20,7 @@ class LeavePolicyFactory extends Factory
             'ML' => 'Maternity/Paternity Leave',
             'PL' => 'Privilege Leave',
             'BL' => 'Bereavement Leave',
-            'SP' => 'Special Leave'
+            'SP' => 'Special Leave',
         ];
 
         return [

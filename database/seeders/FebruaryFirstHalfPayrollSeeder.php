@@ -128,7 +128,7 @@ class FebruaryFirstHalfPayrollSeeder extends Seeder
             'period_month'         => '2026-02',
             'period_year'          => 2026,
             'period_type'          => 'regular',
-            'status'               => 'active',
+            'status'               => 'completed',
             'timekeeping_data_locked' => false,
             'leave_data_locked'    => false,
             'total_employees'      => $employees->count(),
@@ -158,6 +158,14 @@ class FebruaryFirstHalfPayrollSeeder extends Seeder
 
         foreach ($employees as $employee) {
             foreach ($workDays as $date) {
+                // Skip if attendance already exists for this employee/date
+                $exists = DailyAttendanceSummary::where('employee_id', $employee->id)
+                    ->where('attendance_date', $date)
+                    ->exists();
+                if ($exists) {
+                    $progressBar->advance();
+                    continue;
+                }
                 // Randomize attendance
                 $rand = mt_rand(1, 100);
                 $isAbsent = $rand <= 5;           // 5% absence

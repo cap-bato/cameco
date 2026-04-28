@@ -45,6 +45,11 @@ class EmployeeRoleSeeder extends Seeder
             // Notifications
             'employee.notifications.view' => 'View own notifications',
             'employee.notifications.manage' => 'Mark notifications as read, delete notifications',
+
+            // Documents (Self-Service)
+            'employee.documents.view' => 'View own documents and document request history',
+            'employee.documents.request' => 'Submit and cancel own document requests',
+            'employee.documents.download' => 'Download own documents and approved requested documents',
         ];
 
         // Create permissions

@@ -60,6 +60,12 @@ class ATSPermissionsSeeder extends Seeder
 
         $hrManagerRole->givePermissionTo(self::PERMISSIONS);
 
+        // Grant hiring pipeline update permission to HR Staff
+        $hrStaffRole = Role::firstOrCreate(
+            ['name' => 'HR Staff', 'guard_name' => 'web']
+        );
+        $hrStaffRole->givePermissionTo(self::PERMISSIONS);
+
         $this->command->info('ATS permissions seeded successfully!');
     }
 }

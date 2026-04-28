@@ -48,6 +48,7 @@ return new class extends Migration
 
             // Timestamps
             $table->timestamp('created_at')->useCurrent()->comment('Log entry creation timestamp');
+            $table->timestamp('updated_at')->nullable()->comment('Log entry update timestamp');
 
             // Indexes for Performance
             $table->index('employee_id', 'idx_badge_issue_logs_employee');

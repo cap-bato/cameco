@@ -35,7 +35,22 @@ class AllowanceDeductionService
     public function addAllowance(Employee $employee, string $allowanceType, array $data, User $creator): EmployeeAllowance
     {
         // Validate allowance type
-        $validTypes = ['rice', 'cola', 'transportation', 'meal', 'housing', 'communication', 'laundry', 'clothing', 'other'];
+        $validTypes = [
+            'rice',
+            'cola',
+            'transportation',
+            'meal',
+            'housing',
+            'communication',
+            'utilities',
+            'laundry',
+            'uniform',
+            'medical',
+            'educational',
+            'special_project',
+            'other',
+            'clothing',
+        ];
         if (!in_array($allowanceType, $validTypes)) {
             throw ValidationException::withMessages([
                 'allowance_type' => "Invalid allowance type. Allowed: " . implode(', ', $validTypes),
@@ -52,10 +67,23 @@ class AllowanceDeductionService
         // Set effective date to today if not provided
         $effectiveDate = $data['effective_date'] ?? Carbon::now()->toDateString();
 
-        // Deactivate existing allowance of same type if exists
+
+        // Check for duplicate (unique constraint: employee_id, allowance_type, effective_date)
+        $duplicate = EmployeeAllowance::where('employee_id', $employee->id)
+            ->where('allowance_type', $allowanceType)
+            ->whereDate('effective_date', $effectiveDate)
+            ->first();
+        if ($duplicate) {
+            throw ValidationException::withMessages([
+                'allowance_type' => 'This employee already has this allowance type for the selected effective date.'
+            ]);
+        }
+
+        // Deactivate existing allowance of same type if exists (but not for same effective date)
         EmployeeAllowance::where('employee_id', $employee->id)
             ->where('allowance_type', $allowanceType)
             ->where('is_active', true)
+            ->whereDate('effective_date', '!=', $effectiveDate)
             ->update([
                 'is_active' => false,
                 'end_date' => $effectiveDate,
@@ -64,7 +92,9 @@ class AllowanceDeductionService
         // Create new allowance
         $allowance = EmployeeAllowance::create([
             'employee_id' => $employee->id,
+            'salary_component_id' => $data['salary_component_id'] ?? null,
             'allowance_type' => $allowanceType,
+            'allowance_name' => $data['allowance_name'] ?? ucwords(str_replace('_', ' ', $allowanceType)),
             'amount' => (float) $data['amount'],
             'effective_date' => $effectiveDate,
             'end_date' => $data['end_date'] ?? null,
@@ -116,11 +146,15 @@ class AllowanceDeductionService
      */
     public function addDeduction(Employee $employee, string $deductionType, array $data, User $creator): EmployeeDeduction
     {
-        // Validate deduction type
-        $validTypes = ['insurance', 'union_dues', 'canteen', 'loan', 'uniform_fund', 'medical', 'educational', 'savings', 'cooperative', 'other'];
-        if (!in_array($deductionType, $validTypes)) {
+        // Accept any deduction code from SalaryComponent
+        $deductionType = strtolower($deductionType);
+        $component = \App\Models\SalaryComponent::where('code', $deductionType)
+            ->where('component_type', 'deduction')
+            ->where('is_active', true)
+            ->first();
+        if (!$component) {
             throw ValidationException::withMessages([
-                'deduction_type' => "Invalid deduction type. Allowed: " . implode(', ', $validTypes),
+                'deduction_type' => "Invalid deduction type. No active deduction component found for code: $deductionType",
             ]);
         }
 
@@ -146,7 +180,9 @@ class AllowanceDeductionService
         // Create new deduction
         $deduction = EmployeeDeduction::create([
             'employee_id' => $employee->id,
+            'salary_component_id' => $data['salary_component_id'] ?? null,
             'deduction_type' => $deductionType,
+            'deduction_name' => $data['deduction_name'] ?? ucwords(str_replace('_', ' ', $deductionType)),
             'amount' => (float) $data['amount'],
             'effective_date' => $effectiveDate,
             'end_date' => $data['end_date'] ?? null,

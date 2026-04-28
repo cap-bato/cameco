@@ -31,6 +31,7 @@ trait LogsSecurityAudits
                 'ip_address' => Request::ip(),
                 'user_agent' => Request::userAgent(),
                 'details' => $details,
+                'description' => ucwords(str_replace('_', ' ', $eventType)),
             ]);
         } catch (\Exception $e) {
             // Fail silently to not interrupt the main flow

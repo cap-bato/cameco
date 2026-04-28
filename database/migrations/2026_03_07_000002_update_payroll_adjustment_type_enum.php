@@ -18,8 +18,11 @@ return new class extends Migration
         DB::table('payroll_adjustments')->where('adjustment_type', 'override')->update(['adjustment_type' => 'correction']);
         
         // PostgreSQL: Drop the old constraint and add new one with updated values
-        DB::statement("ALTER TABLE payroll_adjustments DROP CONSTRAINT IF EXISTS payroll_adjustments_adjustment_type_check");
-        DB::statement("ALTER TABLE payroll_adjustments ADD CONSTRAINT payroll_adjustments_adjustment_type_check CHECK (adjustment_type IN ('earning', 'deduction', 'correction', 'backpay', 'refund'))");
+        // SQLite does not support CHECK constraint management via ALTER TABLE
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement("ALTER TABLE payroll_adjustments DROP CONSTRAINT IF EXISTS payroll_adjustments_adjustment_type_check");
+            DB::statement("ALTER TABLE payroll_adjustments ADD CONSTRAINT payroll_adjustments_adjustment_type_check CHECK (adjustment_type IN ('earning', 'deduction', 'correction', 'backpay', 'refund'))");
+        }
     }
 
     /**
@@ -32,8 +35,10 @@ return new class extends Migration
         DB::table('payroll_adjustments')->where('adjustment_type', 'correction')->update(['adjustment_type' => 'override']);
         DB::table('payroll_adjustments')->whereIn('adjustment_type', ['backpay', 'refund'])->update(['adjustment_type' => 'deduction']);
         
-        // Revert to old constraint values
-        DB::statement("ALTER TABLE payroll_adjustments DROP CONSTRAINT IF EXISTS payroll_adjustments_adjustment_type_check");
-        DB::statement("ALTER TABLE payroll_adjustments ADD CONSTRAINT payroll_adjustments_adjustment_type_check CHECK (adjustment_type IN ('addition', 'deduction', 'override'))");
+        // Revert to old constraint values (PostgreSQL only)
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement("ALTER TABLE payroll_adjustments DROP CONSTRAINT IF EXISTS payroll_adjustments_adjustment_type_check");
+            DB::statement("ALTER TABLE payroll_adjustments ADD CONSTRAINT payroll_adjustments_adjustment_type_check CHECK (adjustment_type IN ('addition', 'deduction', 'override'))");
+        }
     }
 };

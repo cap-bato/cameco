@@ -15,8 +15,13 @@ class EmployeeRepository implements EmployeeRepositoryInterface
     {
         $query = Employee::with(['profile', 'department', 'position', 'supervisor.profile']);
 
-        // Apply filters
-        if (!empty($filters['status'])) {
+        // Handle archived employees (soft deletes)
+        if (!empty($filters['status']) && $filters['status'] === 'archived') {
+            // Include soft-deleted (archived) records
+            $query->withTrashed();
+            $query->where('status', 'archived');
+        } else if (!empty($filters['status'])) {
+            // For other statuses, exclude soft-deleted records
             $query->where('status', $filters['status']);
         }
 
@@ -187,9 +192,9 @@ class EmployeeRepository implements EmployeeRepositoryInterface
      */
     public function getStatistics(): array
     {
-        $total = Employee::count();
+        $total = Employee::withTrashed()->count();
         $active = Employee::where('status', 'active')->count();
-        $archived = Employee::where('status', 'archived')->count();
+        $archived = Employee::withTrashed()->where('status', 'archived')->count();
         $onLeave = Employee::where('status', 'on_leave')->count();
         $terminated = Employee::where('status', 'terminated')->count();
 

@@ -66,7 +66,7 @@ export default function DocumentRequestForm({
         <AppLayout>
             <Head title="Request Document" />
 
-            <div className="space-y-6">
+            <div className="space-y-6 p-6">
                 {/* Header with Back Button */}
                 <div className="flex items-center gap-4">
                     <Button
@@ -242,12 +242,6 @@ export default function DocumentRequestForm({
                                 <h4 className="font-semibold text-sm">Certificate of Employment</h4>
                                 <p className="text-sm text-gray-600">
                                     Official document confirming your employment with the company. Commonly used for loan applications, visa applications, and government requirements.
-                                </p>
-                            </div>
-                            <div>
-                                <h4 className="font-semibold text-sm">Payslip</h4>
-                                <p className="text-sm text-gray-600">
-                                    Detailed salary statement for a specific month. Shows gross pay, deductions, and net pay. Required for many administrative processes.
                                 </p>
                             </div>
                             <div>

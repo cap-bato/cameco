@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * 
  * @property int $id
  * @property string $device_id Unique device identifier (e.g., GATE-01)
+ * @property string|null $api_key Bearer token for gate PC authentication
  * @property string $device_name Human-readable device name
  * @property string $location Physical location of device
  * @property string $status online, offline, maintenance
@@ -30,6 +31,7 @@ class RfidDevice extends Model
 
     protected $fillable = [
         'device_id',
+        'api_key',
         'device_name',
         'location',
         'status',

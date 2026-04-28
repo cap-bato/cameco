@@ -7,6 +7,7 @@ import {
     DepartmentFormModal,
     type Department,
 } from '@/components/hr/department-form-modal';
+import { DepartmentArchiveDialog } from '@/components/hr/department-archive-dialog';
 import { Building2, Plus, Edit, Archive, ChevronRight, Users } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { usePermission } from '@/components/permission-gate';
@@ -95,6 +96,7 @@ export default function DepartmentIndex({
     const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
     const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
     const [expandedDepts, setExpandedDepts] = useState<Set<number>>(new Set());
+    const [departmentToArchive, setDepartmentToArchive] = useState<Department | null>(null);
 
     // Detect if accessed from Admin or HR context
     const isAdminContext = page.url.startsWith('/admin');
@@ -153,13 +155,15 @@ export default function DepartmentIndex({
             onSuccess: () => {
                 setIsModalOpen(false);
             },
+            onError: (errors) => {
+                // Validation errors will be passed to the onError callback
+                // The modal will access them from page.props.errors via usePage()
+            }
         });
     };
 
     const handleArchive = (dept: Department) => {
-        if (confirm(`Are you sure you want to archive "${dept.name}"?`)) {
-            router.delete(`${routePrefix}/departments/${dept.id}`);
-        }
+        setDepartmentToArchive(dept);
     };
 
     /**
@@ -244,13 +248,15 @@ export default function DepartmentIndex({
                                 Add Child
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                                onClick={() => handleArchive(node)}
-                                className="text-red-600 dark:text-red-400"
-                            >
-                                <Archive className="mr-2 h-4 w-4" />
-                                Archive
-                            </DropdownMenuItem>
+                            {hasPermission('hr.departments.manage') && (
+                                <DropdownMenuItem
+                                    onClick={() => handleArchive(node)}
+                                    className="text-red-600 dark:text-red-400"
+                                >
+                                    <Archive className="mr-2 h-4 w-4" />
+                                    Archive
+                                </DropdownMenuItem>
+                            )}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
@@ -367,6 +373,18 @@ export default function DepartmentIndex({
                 departments={departments}
                 mode={modalMode}
             />
+
+            {/* Department Archive Dialog */}
+            {departmentToArchive && (
+                <DepartmentArchiveDialog
+                    open={!!departmentToArchive}
+                    onOpenChange={(open) => !open && setDepartmentToArchive(null)}
+                    departmentId={departmentToArchive.id}
+                    departmentName={departmentToArchive.name}
+                    employeeCount={departmentToArchive.employee_count}
+                    routePrefix={routePrefix}
+                />
+            )}
         </AppLayout>
     );
 }

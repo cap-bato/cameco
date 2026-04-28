@@ -22,6 +22,25 @@ class GovernmentContributionServiceTest extends TestCase
         $this->service = app(GovernmentContributionService::class);
     }
 
+    private function makePeriod(string $month, string $suffix = 'A'): PayrollPeriod
+    {
+        [$year, $m] = explode('-', $month);
+        $start = "{$year}-{$m}-01";
+        $end   = date('Y-m-t', strtotime($start));
+        return PayrollPeriod::create([
+            'period_number'           => "{$month}-{$suffix}",
+            'period_name'             => date('F Y', strtotime($start)) . " – Period {$suffix}",
+            'period_start'            => $start,
+            'period_end'              => $end,
+            'payment_date'            => date('Y-m-d', strtotime($end . ' +5 days')),
+            'period_month'            => $month,
+            'period_year'             => (int) $year,
+            'timekeeping_cutoff_date' => $end,
+            'leave_cutoff_date'       => $end,
+            'adjustment_deadline'     => date('Y-m-d', strtotime($end . ' +2 days')),
+        ]);
+    }
+
     // =========================================================================
     // getPeriods()
     // =========================================================================
@@ -34,20 +53,8 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_periods_returns_correct_shape(): void
     {
-        PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
-        PayrollPeriod::create([
-            'period_name'  => 'February 2026',
-            'period_month' => '2026-02',
-            'period_start' => '2026-02-01',
-            'period_end'   => '2026-02-28',
-            'status'       => 'open',
-        ]);
+        $this->makePeriod('2026-01');
+        $this->makePeriod('2026-02', 'A');
 
         $result = $this->service->getPeriods();
 
@@ -63,20 +70,8 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_periods_ordered_newest_first(): void
     {
-        PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
-        PayrollPeriod::create([
-            'period_name'  => 'March 2026',
-            'period_month' => '2026-03',
-            'period_start' => '2026-03-01',
-            'period_end'   => '2026-03-31',
-            'status'       => 'open',
-        ]);
+        $this->makePeriod('2026-01');
+        $this->makePeriod('2026-03', 'A');
 
         $result = $this->service->getPeriods();
 
@@ -102,19 +97,17 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_contributions_sss_maps_correct_fields(): void
     {
-        $period   = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
+        $period   = $this->makePeriod('2026-01');
         $employee = Employee::factory()->create();
 
         EmployeeGovernmentContribution::create([
             'employee_id'              => $employee->id,
             'payroll_period_id'        => $period->id,
             'period_month'             => '2026-01',
+            'period_start'             => '2026-01-01',
+            'period_end'               => '2026-01-31',
+            'basic_salary'             => 0,
+            'taxable_income'           => 0,
             'status'                   => 'processed',
             'gross_compensation'       => 20000.00,
             'sss_employee_contribution' => 363.00,
@@ -142,19 +135,17 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_contributions_philhealth_maps_correct_fields(): void
     {
-        $period   = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
+        $period   = $this->makePeriod('2026-01');
         $employee = Employee::factory()->create();
 
         EmployeeGovernmentContribution::create([
             'employee_id'                   => $employee->id,
             'payroll_period_id'             => $period->id,
             'period_month'                  => '2026-01',
+            'period_start'                  => '2026-01-01',
+            'period_end'                    => '2026-01-31',
+            'gross_compensation'            => 0,
+            'taxable_income'                => 0,
             'status'                        => 'processed',
             'basic_salary'                  => 20000.00,
             'philhealth_employee_contribution' => 450.00,
@@ -177,19 +168,18 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_contributions_pagibig_maps_correct_fields(): void
     {
-        $period   = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
+        $period   = $this->makePeriod('2026-01');
         $employee = Employee::factory()->create();
 
         EmployeeGovernmentContribution::create([
             'employee_id'                => $employee->id,
             'payroll_period_id'          => $period->id,
             'period_month'               => '2026-01',
+            'period_start'               => '2026-01-01',
+            'period_end'                 => '2026-01-31',
+            'basic_salary'               => 0,
+            'gross_compensation'         => 0,
+            'taxable_income'             => 0,
             'status'                     => 'processed',
             'pagibig_compensation_base'  => 5000.00,
             'pagibig_employee_contribution' => 100.00,
@@ -212,19 +202,16 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_contributions_bir_maps_correct_fields(): void
     {
-        $period   = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
+        $period   = $this->makePeriod('2026-01');
         $employee = Employee::factory()->create();
 
         EmployeeGovernmentContribution::create([
             'employee_id'       => $employee->id,
             'payroll_period_id' => $period->id,
             'period_month'      => '2026-01',
+            'period_start'      => '2026-01-01',
+            'period_end'        => '2026-01-31',
+            'basic_salary'      => 0,
             'status'            => 'processed',
             'gross_compensation' => 20000.00,
             'taxable_income'     => 18000.00,
@@ -244,13 +231,7 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_contributions_returns_empty_for_unknown_agency(): void
     {
-        $period = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
+        $period = $this->makePeriod('2026-01');
 
         $result = $this->service->getContributions('unknown_agency', $period->id);
         $this->assertCount(0, $result);
@@ -314,19 +295,17 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_summary_sss_aggregates_contributions_correctly(): void
     {
-        $period   = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
+        $period   = $this->makePeriod('2026-01');
         $employee = Employee::factory()->create();
 
         EmployeeGovernmentContribution::create([
             'employee_id'              => $employee->id,
             'payroll_period_id'        => $period->id,
             'period_month'             => '2026-01',
+            'period_start'             => '2026-01-01',
+            'period_end'               => '2026-01-31',
+            'basic_salary'             => 0,
+            'taxable_income'           => 0,
             'status'                   => 'processed',
             'gross_compensation'       => 20000.00,
             'sss_employee_contribution' => 363.00,
@@ -351,23 +330,18 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_remittances_returns_empty_when_none_exist(): void
     {
-        $result = $this->service->getRemittances('SSS');
+        $result = $this->service->getRemittances('sss');
         $this->assertCount(0, $result);
     }
 
     public function test_get_remittances_returns_correct_shape(): void
     {
-        $period = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
+        $period = $this->makePeriod('2026-01');
 
         GovernmentRemittance::create([
             'payroll_period_id' => $period->id,
-            'agency'            => 'SSS',
+            'agency'            => 'sss',
+            'remittance_type'   => 'monthly',
             'status'            => 'paid',
             'remittance_month'  => '2026-01',
             'period_start'      => '2026-01-01',
@@ -379,7 +353,7 @@ class GovernmentContributionServiceTest extends TestCase
             'is_late'           => false,
         ]);
 
-        $result = $this->service->getRemittances('SSS');
+        $result = $this->service->getRemittances('sss');
 
         $this->assertCount(1, $result);
         $row = $result->first();
@@ -405,17 +379,12 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_remittances_filters_by_agency(): void
     {
-        $period = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
+        $period = $this->makePeriod('2026-01');
 
         GovernmentRemittance::create([
             'payroll_period_id' => $period->id,
-            'agency'            => 'SSS',
+            'agency'            => 'sss',
+            'remittance_type'   => 'monthly',
             'status'            => 'paid',
             'remittance_month'  => '2026-01',
             'period_start'      => '2026-01-01',
@@ -428,7 +397,8 @@ class GovernmentContributionServiceTest extends TestCase
         ]);
         GovernmentRemittance::create([
             'payroll_period_id' => $period->id,
-            'agency'            => 'PhilHealth',
+            'agency'            => 'philhealth',
+            'remittance_type'   => 'monthly',
             'status'            => 'paid',
             'remittance_month'  => '2026-01',
             'period_start'      => '2026-01-01',
@@ -440,8 +410,8 @@ class GovernmentContributionServiceTest extends TestCase
             'is_late'           => false,
         ]);
 
-        $sss      = $this->service->getRemittances('SSS');
-        $philHealth = $this->service->getRemittances('PhilHealth');
+        $sss      = $this->service->getRemittances('sss');
+        $philHealth = $this->service->getRemittances('philhealth');
 
         $this->assertCount(1, $sss);
         $this->assertCount(1, $philHealth);
@@ -449,18 +419,13 @@ class GovernmentContributionServiceTest extends TestCase
 
     public function test_get_remittances_respects_limit(): void
     {
-        $period = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
-        ]);
+        $period = $this->makePeriod('2026-01');
 
         foreach (range(1, 5) as $i) {
             GovernmentRemittance::create([
                 'payroll_period_id' => $period->id,
-                'agency'            => 'SSS',
+                'agency'            => 'sss',
+                'remittance_type'   => 'monthly',
                 'status'            => 'paid',
                 'remittance_month'  => "2025-0{$i}",
                 'period_start'      => "2025-0{$i}-01",
@@ -473,7 +438,7 @@ class GovernmentContributionServiceTest extends TestCase
             ]);
         }
 
-        $result = $this->service->getRemittances('SSS', 3);
+        $result = $this->service->getRemittances('sss', 3);
         $this->assertCount(3, $result);
     }
 }

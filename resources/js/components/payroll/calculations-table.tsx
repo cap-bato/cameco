@@ -57,7 +57,7 @@ interface StatusConfig {
     icon?: React.ReactNode;
 }
 
-const statusConfigMap: Record<PayrollCalculation['status'], StatusConfig> = {
+const statusConfigMap: Record<string, StatusConfig> = {
     pending: {
         label: 'Pending',
         variant: 'secondary',
@@ -69,7 +69,22 @@ const statusConfigMap: Record<PayrollCalculation['status'], StatusConfig> = {
         icon: <Loader2 className="h-3 w-3 animate-spin" />,
     },
     completed: {
-        label: 'Completed',
+        label: 'Calculated',
+        variant: 'default',
+        icon: <CheckCircle className="h-3 w-3" />,
+    },
+    reviewing: {
+        label: 'Under Review',
+        variant: 'outline',
+        icon: <AlertCircle className="h-3 w-3" />,
+    },
+    approved: {
+        label: 'Approved',
+        variant: 'default',
+        icon: <CheckCircle className="h-3 w-3" />,
+    },
+    finalized: {
+        label: 'Finalized',
         variant: 'default',
         icon: <CheckCircle className="h-3 w-3" />,
     },
@@ -89,9 +104,6 @@ const statusConfigMap: Record<PayrollCalculation['status'], StatusConfig> = {
 // Helper Functions
 // ============================================================================
 
-/**
- * Format currency for display
- */
 function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-PH', {
         style: 'currency',
@@ -100,10 +112,8 @@ function formatCurrency(amount: number): string {
     }).format(amount);
 }
 
-/**
- * Format date for display
- */
-function formatDate(dateString: string): string {
+function formatDate(dateString: string | null | undefined): string {
+    if (!dateString) return '—';
     try {
         const date = new Date(dateString);
         return date.toLocaleDateString('en-US', {
@@ -118,9 +128,6 @@ function formatDate(dateString: string): string {
     }
 }
 
-/**
- * Get calculation type label
- */
 function getCalculationTypeLabel(type: PayrollCalculation['calculation_type']): string {
     const labels: Record<PayrollCalculation['calculation_type'], string> = {
         regular: 'Regular',
@@ -131,29 +138,24 @@ function getCalculationTypeLabel(type: PayrollCalculation['calculation_type']): 
     return labels[type] || type;
 }
 
-/**
- * Determine which actions should be available based on status
- */
-function getAvailableActions(status: PayrollCalculation['status']): string[] {
+function getAvailableActions(status: string): string[] {
     const actions: string[] = ['view'];
 
-    // Can recalculate failed or completed calculations
-    if (status === 'failed' || status === 'completed') {
+    if (status === 'failed' || status === 'completed' || status === 'approved' || status === 'finalized') {
         actions.push('recalculate');
     }
 
-    // Can approve completed calculations
     if (status === 'completed') {
         actions.push('approve');
     }
 
-    // Can cancel pending or processing calculations
     if (status === 'pending' || status === 'processing') {
         actions.push('cancel');
     }
 
     return actions;
 }
+
 
 // ============================================================================
 // CalculationRow Component (with real-time polling)
@@ -176,7 +178,6 @@ function CalculationRow({
     onCancel,
     isLoading = false,
 }: CalculationRowProps) {
-    // Real-time progress polling for processing calculations
     const progressState = usePayrollProgress({
         calculationId: calculation.id,
         initialStatus: calculation.status,
@@ -192,21 +193,26 @@ function CalculationRow({
         },
     });
 
-    // Use live polling state when available, otherwise fall back to calculation props
-    const progressPercentage = progressState.isPolling ? progressState.progress : calculation.progress_percentage;
-    const processedEmployees = progressState.isPolling && progressState.totalJobs !== null && progressState.pendingJobs !== null
-        ? progressState.totalJobs - progressState.pendingJobs
-        : calculation.processed_employees;
-    const totalEmployees = progressState.isPolling && progressState.totalJobs !== null
-        ? progressState.totalJobs
-        : calculation.total_employees;
-    const failedEmployees = progressState.isPolling && progressState.failedJobs !== null
-        ? progressState.failedJobs
-        : calculation.failed_employees;
+    // Use correct field names from the ProgressState interface:
+    // progressState.processedEmployees, totalEmployees, failedEmployees, progress
+    const progressPercentage = progressState.isPolling
+        ? progressState.progress
+        : Number(calculation.progress_percentage ?? 0) || 0;
+
+    const processedEmployees = progressState.isPolling
+        ? progressState.processedEmployees
+        : Number(calculation.processed_employees ?? 0) || 0;
+
+    const totalEmployees = progressState.isPolling
+        ? progressState.totalEmployees
+        : Number(calculation.total_employees ?? 0) || 0;
+
+    const failedEmployees = progressState.isPolling
+        ? progressState.failedEmployees
+        : Number(calculation.failed_employees ?? 0) || 0;
 
     const statusConfig = statusConfigMap[calculation.status];
     const availableActions = getAvailableActions(calculation.status);
-    const calculationDate = formatDate(calculation.calculation_date);
 
     return (
         <TableRow key={calculation.id} className="hover:bg-gray-50 dark:hover:bg-gray-900">
@@ -227,14 +233,16 @@ function CalculationRow({
                         </span>
                     </div>
                     <span className="text-xs text-gray-500">
-                        {processedEmployees}/{totalEmployees} processed
+                        {totalEmployees > 0
+                            ? `${processedEmployees}/${totalEmployees} processed`
+                            : 'Initializing...'}
                     </span>
                 </div>
             </TableCell>
             <TableCell>
                 <div className="flex items-center gap-1">
                     <Users className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm">{totalEmployees}</span>
+                    <span className="text-sm">{totalEmployees || '—'}</span>
                     {failedEmployees > 0 && (
                         <span className="text-xs text-red-600">
                             ({failedEmployees} failed)
@@ -258,7 +266,7 @@ function CalculationRow({
             </TableCell>
             <TableCell>
                 <span className="text-sm text-gray-600 dark:text-gray-400">
-                    {calculationDate}
+                    {formatDate(calculation.calculation_date)}
                 </span>
             </TableCell>
             <TableCell className="text-right">

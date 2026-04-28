@@ -25,395 +25,370 @@ class DashboardController extends Controller
     }
 
     /**
-     * Mock data for summary metrics
+     * Real data for summary metrics
      */
     private function getSummaryMetrics(): array
     {
+        $currentPeriod = \App\Models\PayrollPeriod::orderByDesc('period_start')->first();
+        $previousPeriod = \App\Models\PayrollPeriod::orderByDesc('period_start')->skip(1)->first();
+        $activeEmployees = \App\Models\Employee::active()->count();
+        $newHires = \App\Models\Employee::whereBetween('date_hired', [$currentPeriod?->period_start, $currentPeriod?->period_end])->count();
+        $separations = \App\Models\Employee::whereNotNull('termination_date')
+            ->whereBetween('termination_date', [$currentPeriod?->period_start, $currentPeriod?->period_end])->count();
+        $onLeave = 0; // Implement leave logic if available
+        $changeFromPreviousRaw = $activeEmployees - (\App\Models\Employee::active()->count() - $newHires + $separations);
+        $changeFromPrevious = ($changeFromPreviousRaw > 0 ? '+' : ($changeFromPreviousRaw < 0 ? '-' : '')) . abs($changeFromPreviousRaw);
+        $changePercentageRaw = $activeEmployees > 0 ? round(($changeFromPreviousRaw / $activeEmployees) * 100, 1) : 0;
+        $changePercentage = ($changePercentageRaw > 0 ? '+' : ($changePercentageRaw < 0 ? '-' : '')) . abs($changePercentageRaw) . '%';
+        $currentNet = $currentPeriod?->total_net_pay ?? 0;
+        $previousNet = $previousPeriod?->total_net_pay ?? 0;
+        $netDiff = $currentNet - $previousNet;
+        $netPct = $previousNet > 0 ? round(($netDiff / $previousNet) * 100, 1) : 0;
+        $trend = $netDiff >= 0 ? 'up' : 'down';
+        $pendingPeriods = \App\Models\PayrollPeriod::whereIn('status', ['calculating', 'reviewing', 'approved'])
+            ->count();
+        $periodsToCalculate = \App\Models\PayrollPeriod::where('status', 'calculating')->count();
+        $periodsToReview = \App\Models\PayrollPeriod::where('status', 'reviewing')->count();
+        $periodsToApprove = \App\Models\PayrollPeriod::where('status', 'approved')->count();
+        $adjustmentsPending = \App\Models\PayrollPeriod::where('adjustments_count', '>', 0)->count();
+        $govReportsDue = \App\Models\GovernmentReport::where('status', '!=', 'paid')->count();
         return [
             'current_period' => [
-                'id' => 1,
-                'name' => 'November 2025 - 2nd Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-11-16',
-                'end_date' => '2025-11-30',
-                'cutoff_date' => '2025-11-30',
-                'pay_date' => '2025-12-05',
-                'status' => 'calculating',
-                'status_label' => 'Calculating',
-                'status_color' => 'blue',
-                'total_employees' => 125,
-                'progress_percentage' => 45,
-                'days_until_pay' => 20,
+                'id' => $currentPeriod?->id,
+                'name' => $currentPeriod?->period_name,
+                'period_type' => $currentPeriod?->period_type,
+                'start_date' => $currentPeriod?->period_start ? \Carbon\Carbon::parse($currentPeriod->period_start)->toDateString() : null,
+                'end_date' => $currentPeriod?->period_end ? \Carbon\Carbon::parse($currentPeriod->period_end)->toDateString() : null,
+                'cutoff_date' => $currentPeriod?->timekeeping_cutoff_date ? \Carbon\Carbon::parse($currentPeriod->timekeeping_cutoff_date)->toDateString() : null,
+                'pay_date' => $currentPeriod?->payment_date ? \Carbon\Carbon::parse($currentPeriod->payment_date)->toDateString() : null,
+                'status' => $currentPeriod?->status,
+                'status_label' => ucfirst($currentPeriod?->status ?? ''),
+                'status_color' => $this->getStatusColor($currentPeriod?->status),
+                'total_employees' => $currentPeriod?->total_employees,
+                'progress_percentage' => $currentPeriod?->progress_percentage,
+                'days_until_pay' => $currentPeriod?->getDaysUntilPayment() ?? null,
             ],
             'total_employees' => [
-                'active' => 125,
-                'new_hires_this_period' => 3,
-                'separations_this_period' => 1,
-                'on_leave' => 5,
-                'change_from_previous' => '+2',
-                'change_percentage' => '+1.6%',
+                'active' => $activeEmployees,
+                'new_hires_this_period' => $newHires,
+                'separations_this_period' => $separations,
+                'on_leave' => $onLeave,
+                'change_from_previous' => $changeFromPrevious,
+                'change_percentage' => $changePercentage,
             ],
             'net_payroll' => [
-                'current_period' => 4250000.00,
-                'previous_period' => 4040000.00,
-                'difference' => 210000.00,
-                'percentage_change' => '+5.2%',
-                'trend' => 'up',
-                'formatted_current' => '₱4,250,000.00',
-                'formatted_previous' => '₱4,040,000.00',
+                'current_period' => $currentNet,
+                'previous_period' => $previousNet,
+                'difference' => $netDiff,
+                'percentage_change' => ($netPct >= 0 ? '+' : '') . $netPct . '%',
+                'trend' => $trend,
+                'formatted_current' => '₱' . number_format($currentNet, 2),
+                'formatted_previous' => '₱' . number_format($previousNet, 2),
             ],
             'pending_actions' => [
-                'total' => 8,
-                'periods_to_calculate' => 1,
-                'periods_to_review' => 1,
-                'periods_to_approve' => 1,
-                'adjustments_pending' => 3,
-                'government_reports_due' => 2,
+                'total' => $pendingPeriods,
+                'periods_to_calculate' => $periodsToCalculate,
+                'periods_to_review' => $periodsToReview,
+                'periods_to_approve' => $periodsToApprove,
+                'adjustments_pending' => $adjustmentsPending,
+                'government_reports_due' => $govReportsDue,
             ],
         ];
     }
 
     /**
-     * Mock data for pending payroll periods
+     * Helper to get status color
+     */
+    private function getStatusColor($status): string
+    {
+        return match ($status) {
+            'calculating' => 'blue',
+            'reviewing' => 'yellow',
+            'approved' => 'green',
+            'finalized' => 'gray',
+            default => 'gray',
+        };
+    }
+
+    /**
+     * Real data for pending payroll periods
      */
     private function getPendingPeriods(): array
     {
-        return [
-            [
-                'id' => 1,
-                'name' => 'November 2025 - 2nd Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-11-16',
-                'end_date' => '2025-11-30',
-                'pay_date' => '2025-12-05',
-                'status' => 'calculating',
-                'status_label' => 'Calculating',
-                'status_color' => 'blue',
-                'total_employees' => 125,
-                'total_gross_pay' => 5250000.00,
-                'total_deductions' => 1000000.00,
-                'total_net_pay' => 4250000.00,
-                'formatted_net_pay' => '₱4,250,000.00',
-                'progress_percentage' => 45,
-                'actions' => ['review', 'recalculate'],
-            ],
-            [
-                'id' => 2,
-                'name' => 'November 2025 - 1st Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-11-01',
-                'end_date' => '2025-11-15',
-                'pay_date' => '2025-11-20',
-                'status' => 'reviewing',
-                'status_label' => 'Under Review',
-                'status_color' => 'yellow',
-                'total_employees' => 123,
-                'total_gross_pay' => 5100000.00,
-                'total_deductions' => 980000.00,
-                'total_net_pay' => 4120000.00,
-                'formatted_net_pay' => '₱4,120,000.00',
-                'progress_percentage' => 75,
-                'actions' => ['approve', 'adjust'],
-            ],
-            [
-                'id' => 3,
-                'name' => 'October 2025 - 2nd Half',
-                'period_type' => 'semi_monthly',
-                'start_date' => '2025-10-16',
-                'end_date' => '2025-10-31',
-                'pay_date' => '2025-11-05',
-                'status' => 'approved',
-                'status_label' => 'Approved - Awaiting Payment',
-                'status_color' => 'green',
-                'total_employees' => 122,
-                'total_gross_pay' => 5050000.00,
-                'total_deductions' => 960000.00,
-                'total_net_pay' => 4090000.00,
-                'formatted_net_pay' => '₱4,090,000.00',
-                'progress_percentage' => 100,
-                'actions' => ['generate_payslips', 'generate_bank_file'],
-            ],
-        ];
+        $periods = \App\Models\PayrollPeriod::whereIn('status', ['calculating', 'reviewing', 'approved'])
+            ->orderByDesc('period_start')
+            ->limit(5)
+            ->get();
+        return $periods->map(function ($period) {
+            return [
+                'id' => $period->id,
+                'name' => $period->period_name,
+                'period_type' => $period->period_type,
+                'start_date' => $period->period_start ? \Carbon\Carbon::parse($period->period_start)->toDateString() : null,
+                'end_date' => $period->period_end ? \Carbon\Carbon::parse($period->period_end)->toDateString() : null,
+                'pay_date' => $period->payment_date ? \Carbon\Carbon::parse($period->payment_date)->toDateString() : null,
+                'status' => $period->status,
+                'status_label' => ucfirst($period->status),
+                'status_color' => $this->getStatusColor($period->status),
+                'total_employees' => $period->total_employees,
+                'total_gross_pay' => $period->total_gross_pay,
+                'total_deductions' => $period->total_deductions,
+                'total_net_pay' => $period->total_net_pay,
+                'formatted_net_pay' => '₱' . number_format($period->total_net_pay, 2),
+                'progress_percentage' => $period->progress_percentage,
+                'actions' => $this->getPeriodActions($period->status),
+            ];
+        })->toArray();
     }
 
     /**
-     * Mock data for recent activities
+     * Helper to get available actions for a period
+     */
+    private function getPeriodActions($status): array
+    {
+        return match ($status) {
+            'calculating' => ['review', 'recalculate'],
+            'reviewing' => ['approve', 'adjust'],
+            'approved' => ['generate_payslips', 'generate_bank_file'],
+            default => [],
+        };
+    }
+
+    /**
+     * Real data for recent activities (last 10 SecurityAuditLog entries for payroll)
      */
     private function getRecentActivities(): array
     {
-        return [
-            [
-                'id' => 1,
-                'type' => 'period_calculated',
-                'icon' => 'calculator',
-                'icon_color' => 'blue',
-                'title' => 'Payroll Calculated',
-                'description' => 'November 2025 - 1st Half payroll calculated for 123 employees',
-                'user' => 'Maria Reyes',
-                'timestamp' => '2025-11-15 14:30:00',
-                'relative_time' => '2 hours ago',
-            ],
-            [
-                'id' => 2,
-                'type' => 'adjustment_created',
-                'icon' => 'edit',
-                'icon_color' => 'yellow',
-                'title' => 'Adjustment Created',
-                'description' => 'Manual adjustment for overtime hours - Employee #EMP-2024-056',
-                'user' => 'Maria Reyes',
-                'timestamp' => '2025-11-15 11:15:00',
-                'relative_time' => '5 hours ago',
-            ],
-            [
-                'id' => 3,
-                'type' => 'government_report_generated',
-                'icon' => 'file-text',
-                'icon_color' => 'green',
-                'title' => 'Government Report Generated',
-                'description' => 'PhilHealth RF1 report for October 2025 generated successfully',
-                'user' => 'Maria Reyes',
-                'timestamp' => '2025-11-15 09:45:00',
-                'relative_time' => '7 hours ago',
-            ],
-            [
-                'id' => 4,
-                'type' => 'payroll_approved',
-                'icon' => 'check-circle',
-                'icon_color' => 'green',
-                'title' => 'Payroll Approved',
-                'description' => 'October 2025 - 2nd Half payroll approved by HR Manager',
-                'user' => 'Juan Dela Cruz',
-                'timestamp' => '2025-11-14 16:20:00',
-                'relative_time' => '1 day ago',
-            ],
-            [
-                'id' => 5,
-                'type' => 'bank_file_generated',
-                'icon' => 'download',
-                'icon_color' => 'purple',
-                'title' => 'Bank File Generated',
-                'description' => 'BPI ATM payroll file generated for 85 employees',
-                'user' => 'Maria Reyes',
-                'timestamp' => '2025-11-14 14:00:00',
-                'relative_time' => '1 day ago',
-            ],
-            [
-                'id' => 6,
-                'type' => 'payslips_generated',
-                'icon' => 'file',
-                'icon_color' => 'blue',
-                'title' => 'Payslips Generated',
-                'description' => '122 payslips generated for October 2025 - 2nd Half',
-                'user' => 'Maria Reyes',
-                'timestamp' => '2025-11-14 10:30:00',
-                'relative_time' => '1 day ago',
-            ],
-            [
-                'id' => 7,
-                'type' => 'remittance_paid',
-                'icon' => 'credit-card',
-                'icon_color' => 'green',
-                'title' => 'Remittance Paid',
-                'description' => 'PhilHealth contributions for October 2025 paid (₱125,450.00)',
-                'user' => 'Maria Reyes',
-                'timestamp' => '2025-11-12 15:45:00',
-                'relative_time' => '3 days ago',
-            ],
-            [
-                'id' => 8,
-                'type' => 'attendance_imported',
-                'icon' => 'upload',
-                'icon_color' => 'blue',
-                'title' => 'Attendance Imported',
-                'description' => 'Attendance data imported for November 1-15, 2025',
-                'user' => 'Maria Reyes',
-                'timestamp' => '2025-11-11 09:00:00',
-                'relative_time' => '4 days ago',
-            ],
-            [
-                'id' => 9,
-                'type' => 'component_updated',
-                'icon' => 'settings',
-                'icon_color' => 'gray',
-                'title' => 'Salary Component Updated',
-                'description' => 'Rice Allowance increased to ₱2,000/month',
-                'user' => 'Maria Reyes',
-                'timestamp' => '2025-11-10 14:20:00',
-                'relative_time' => '5 days ago',
-            ],
-            [
-                'id' => 10,
-                'type' => 'period_created',
-                'icon' => 'plus-circle',
-                'icon_color' => 'green',
-                'title' => 'Payroll Period Created',
-                'description' => 'November 2025 - 2nd Half period created',
-                'user' => 'Maria Reyes',
-                'timestamp' => '2025-11-10 10:00:00',
-                'relative_time' => '5 days ago',
-            ],
-        ];
+        $logs = \App\Models\SecurityAuditLog::whereIn('event_type', [
+            'payroll_calculated', 'adjustment_created', 'government_report_generated', 'payroll_approved',
+            'bank_file_generated', 'payslips_generated', 'remittance_paid', 'attendance_imported',
+            'component_updated', 'period_created',
+        ])->orderByDesc('created_at')->limit(10)->get();
+        return $logs->map(function ($log) {
+            return [
+                'id' => $log->id,
+                'type' => $log->event_type,
+                'icon' => $this->getActivityIcon($log->event_type),
+                'icon_color' => $this->getActivityColor($log->event_type),
+                'title' => $this->getActivityTitle($log->event_type),
+                'description' => $log->description,
+                'user' => $log->user?->name ?? 'System',
+                'timestamp' => $log->created_at?->toDateTimeString(),
+                'relative_time' => $log->created_at?->diffForHumans(),
+            ];
+        })->toArray();
+    }
+
+    private function getActivityIcon($type): string
+    {
+        return match ($type) {
+            'payroll_calculated' => 'calculator',
+            'adjustment_created' => 'edit',
+            'government_report_generated' => 'file-text',
+            'payroll_approved' => 'check-circle',
+            'bank_file_generated' => 'download',
+            'payslips_generated' => 'file',
+            'remittance_paid' => 'credit-card',
+            'attendance_imported' => 'upload',
+            'component_updated' => 'settings',
+            'period_created' => 'plus-circle',
+            default => 'info',
+        };
+    }
+
+    private function getActivityColor($type): string
+    {
+        return match ($type) {
+            'payroll_calculated' => 'blue',
+            'adjustment_created' => 'yellow',
+            'government_report_generated' => 'green',
+            'payroll_approved' => 'green',
+            'bank_file_generated' => 'purple',
+            'payslips_generated' => 'blue',
+            'remittance_paid' => 'green',
+            'attendance_imported' => 'blue',
+            'component_updated' => 'gray',
+            'period_created' => 'green',
+            default => 'gray',
+        };
+    }
+
+    private function getActivityTitle($type): string
+    {
+        return match ($type) {
+            'payroll_calculated' => 'Payroll Calculated',
+            'adjustment_created' => 'Adjustment Created',
+            'government_report_generated' => 'Government Report Generated',
+            'payroll_approved' => 'Payroll Approved',
+            'bank_file_generated' => 'Bank File Generated',
+            'payslips_generated' => 'Payslips Generated',
+            'remittance_paid' => 'Remittance Paid',
+            'attendance_imported' => 'Attendance Imported',
+            'component_updated' => 'Salary Component Updated',
+            'period_created' => 'Payroll Period Created',
+            default => 'Activity',
+        };
     }
 
     /**
-     * Mock data for critical alerts
+     * Real data for critical alerts (sample: overdue remittances, calculation errors, deadlines, variances, pending bank files)
      */
     private function getCriticalAlerts(): array
     {
-        return [
-            [
-                'id' => 1,
+        $alerts = [];
+        // Overdue government remittances
+        $overdueRemits = \App\Models\GovernmentReport::where('status', 'overdue')->get();
+        foreach ($overdueRemits as $remit) {
+            $alerts[] = [
+                'id' => 'remit_' . $remit->id,
                 'type' => 'overdue_remittance',
                 'severity' => 'error',
                 'icon' => 'alert-circle',
-                'title' => 'SSS Remittance Overdue',
-                'message' => 'SSS contributions for October 2025 are 5 days overdue. Please remit immediately to avoid penalties.',
+                'title' => $remit->agency . ' Remittance Overdue',
+                'message' => $remit->agency . ' contributions for ' . $remit->report_period . ' are overdue.',
                 'action_label' => 'Pay Now',
-                'action_url' => '/payroll/government/sss/remittances',
-                'days_overdue' => 5,
-                'amount' => '₱145,230.00',
-                'deadline' => '2025-11-10',
-                'created_at' => '2025-11-10 00:00:00',
-            ],
-            [
-                'id' => 2,
+                'action_url' => '/payroll/government/' . strtolower($remit->agency) . '/remittances',
+                'days_overdue' => now()->diffInDays($remit->due_date),
+                'amount' => '₱' . number_format($remit->total_amount, 2),
+                'deadline' => $remit->due_date ? \Carbon\Carbon::parse($remit->due_date)->toDateString() : null,
+                'created_at' => $remit->created_at?->toDateTimeString(),
+            ];
+        }
+        // Calculation errors (negative net pay)
+        $errorCalcs = \App\Models\EmployeePayrollCalculation::where('net_pay', '<', 0)->limit(3)->get();
+        foreach ($errorCalcs as $calc) {
+            $alerts[] = [
+                'id' => 'calc_' . $calc->id,
                 'type' => 'calculation_error',
                 'severity' => 'error',
                 'icon' => 'x-circle',
                 'title' => 'Calculation Errors Detected',
-                'message' => '3 employees have negative net pay in November 2025 - 2nd Half. Review and adjust before approval.',
+                'message' => 'Employee #' . $calc->employee_number . ' has negative net pay in ' . ($calc->payrollPeriod?->period_name ?? 'period') . '.',
                 'action_label' => 'Review Errors',
                 'action_url' => '/payroll/calculations/errors',
-                'affected_employees' => 3,
-                'period' => 'November 2025 - 2nd Half',
-                'created_at' => '2025-11-15 14:30:00',
-            ],
-            [
-                'id' => 3,
+                'affected_employees' => 1,
+                'period' => $calc->payrollPeriod?->period_name,
+                'created_at' => $calc->created_at?->toDateTimeString(),
+            ];
+        }
+        // Upcoming deadlines (remittances due soon) - fallback: show latest 'ready' or 'submitted' reports as 'due soon'
+        $upcomingRemits = \App\Models\GovernmentReport::whereIn('status', ['ready', 'submitted'])
+            ->orderByDesc('created_at')->limit(2)->get();
+        foreach ($upcomingRemits as $remit) {
+            $alerts[] = [
+                'id' => 'upcoming_' . $remit->id,
                 'type' => 'upcoming_deadline',
                 'severity' => 'warning',
                 'icon' => 'clock',
-                'title' => 'Pag-IBIG Remittance Due Soon',
-                'message' => 'Pag-IBIG contributions for October 2025 are due in 3 days (November 18, 2025).',
+                'title' => $remit->agency . ' Remittance Due Soon',
+                'message' => $remit->agency . ' contributions for ' . $remit->report_period . ' are due soon.',
                 'action_label' => 'Prepare Payment',
-                'action_url' => '/payroll/government/pagibig/remittances',
-                'days_until_due' => 3,
-                'amount' => '₱52,840.00',
-                'deadline' => '2025-11-18',
-                'created_at' => '2025-11-15 08:00:00',
-            ],
-            [
-                'id' => 4,
-                'type' => 'variance_alert',
-                'severity' => 'warning',
-                'icon' => 'trending-up',
-                'title' => 'Unusual Payroll Variance',
-                'message' => 'November 2025 - 1st Half payroll is 12.5% higher than previous period. Please verify calculations.',
-                'action_label' => 'View Comparison',
-                'action_url' => '/payroll/periods/1/compare',
-                'variance_percentage' => '+12.5%',
-                'variance_amount' => '₱515,000.00',
-                'created_at' => '2025-11-15 14:35:00',
-            ],
-            [
-                'id' => 5,
+                'action_url' => '/payroll/government/' . strtolower($remit->agency) . '/remittances',
+                'days_until_due' => null,
+                'amount' => '₱' . number_format($remit->total_amount, 2),
+                'deadline' => null,
+                'created_at' => $remit->created_at?->toDateTimeString(),
+            ];
+        }
+        // Payroll variances (periods with >10% net pay change)
+        $periods = \App\Models\PayrollPeriod::orderByDesc('period_start')->limit(2)->get();
+        if ($periods->count() === 2) {
+            $curr = $periods[0];
+            $prev = $periods[1];
+            if ($prev->total_net_pay > 0) {
+                $pct = (($curr->total_net_pay - $prev->total_net_pay) / $prev->total_net_pay) * 100;
+                if (abs($pct) > 10) {
+                    $alerts[] = [
+                        'id' => 'variance_' . $curr->id,
+                        'type' => 'variance_alert',
+                        'severity' => 'warning',
+                        'icon' => 'trending-up',
+                        'title' => 'Unusual Payroll Variance',
+                        'message' => $curr->period_name . ' payroll is ' . round($pct, 1) . '% ' . ($pct > 0 ? 'higher' : 'lower') . ' than previous period.',
+                        'action_label' => 'View Comparison',
+                        'action_url' => '/payroll/periods/' . $curr->id . '/compare',
+                        'variance_percentage' => ($pct > 0 ? '+' : '') . round($pct, 1) . '%',
+                        'variance_amount' => '₱' . number_format($curr->total_net_pay - $prev->total_net_pay, 2),
+                        'created_at' => $curr->updated_at?->toDateTimeString(),
+                    ];
+                }
+            }
+        }
+        // Pending bank file generations
+        $pendingBankFiles = \App\Models\PayrollPeriod::where('status', 'approved')
+            ->whereDoesntHave('bankFileBatches')
+            ->limit(2)->get();
+        foreach ($pendingBankFiles as $period) {
+            $alerts[] = [
+                'id' => 'bankfile_' . $period->id,
                 'type' => 'bank_file_pending',
                 'severity' => 'info',
                 'icon' => 'alert-triangle',
                 'title' => 'Bank File Generation Pending',
-                'message' => 'October 2025 - 2nd Half bank file not yet generated. Generate before pay date (Nov 20).',
+                'message' => $period->period_name . ' bank file not yet generated. Generate before pay date (' . ($period->payment_date ? \Carbon\Carbon::parse($period->payment_date)->toDateString() : '') . ').',
                 'action_label' => 'Generate Now',
                 'action_url' => '/payroll/bank-files/generate',
-                'period' => 'October 2025 - 2nd Half',
-                'pay_date' => '2025-11-20',
-                'days_until_pay_date' => 5,
-                'created_at' => '2025-11-15 10:00:00',
-            ],
-        ];
+                'period' => $period->period_name,
+                'pay_date' => $period->payment_date ? \Carbon\Carbon::parse($period->payment_date)->toDateString() : null,
+                'days_until_pay_date' => now()->diffInDays($period->payment_date, false),
+                'created_at' => $period->updated_at?->toDateTimeString(),
+            ];
+        }
+        return $alerts;
     }
 
     /**
-     * Mock data for compliance status
+     * Real data for compliance status (latest report per agency)
      */
     private function getComplianceStatus(): array
     {
-        return [
-            'sss' => [
-                'name' => 'SSS',
-                'full_name' => 'Social Security System',
-                'period' => 'October 2025',
-                'due_date' => '2025-11-10',
-                'status' => 'overdue',
-                'status_label' => 'Overdue',
-                'status_color' => 'red',
-                'days_overdue' => 5,
-                'amount' => 145230.00,
-                'formatted_amount' => '₱145,230.00',
-                'employee_share' => 72615.00,
-                'employer_share' => 72615.00,
-                'report_generated' => true,
-                'report_type' => 'R3',
-                'payment_reference' => null,
-                'actions' => ['pay_now', 'view_report'],
-            ],
-            'philhealth' => [
-                'name' => 'PhilHealth',
-                'full_name' => 'Philippine Health Insurance Corporation',
-                'period' => 'October 2025',
-                'due_date' => '2025-11-10',
-                'status' => 'paid',
-                'status_label' => 'Paid',
-                'status_color' => 'green',
-                'days_overdue' => 0,
-                'amount' => 125450.00,
-                'formatted_amount' => '₱125,450.00',
-                'employee_share' => 62725.00,
-                'employer_share' => 62725.00,
-                'report_generated' => true,
-                'report_type' => 'RF1',
-                'payment_reference' => 'PH-2025-11-001234',
-                'paid_date' => '2025-11-08',
-                'actions' => ['view_receipt', 'view_report'],
-            ],
-            'pagibig' => [
-                'name' => 'Pag-IBIG',
-                'full_name' => 'Home Development Mutual Fund',
-                'period' => 'October 2025',
-                'due_date' => '2025-11-18',
-                'status' => 'pending',
-                'status_label' => 'Due in 3 days',
-                'status_color' => 'yellow',
-                'days_until_due' => 3,
-                'amount' => 52840.00,
-                'formatted_amount' => '₱52,840.00',
-                'employee_share' => 26420.00,
-                'employer_share' => 26420.00,
-                'report_generated' => true,
-                'report_type' => 'MCRF',
-                'payment_reference' => null,
-                'actions' => ['pay_now', 'view_report'],
-            ],
-            'bir' => [
-                'name' => 'BIR',
-                'full_name' => 'Bureau of Internal Revenue',
-                'period' => 'October 2025',
-                'due_date' => '2025-11-20',
-                'status' => 'pending',
-                'status_label' => 'Due in 5 days',
-                'status_color' => 'yellow',
-                'days_until_due' => 5,
-                'amount' => 285600.00,
-                'formatted_amount' => '₱285,600.00',
-                'report_generated' => true,
-                'report_type' => '1601C',
-                'payment_reference' => null,
-                'actions' => ['pay_now', 'view_report'],
-            ],
-        ];
+        $agencies = ['SSS', 'PhilHealth', 'Pag-IBIG', 'BIR'];
+        $result = [];
+        foreach ($agencies as $agency) {
+            $report = \App\Models\GovernmentReport::where('agency', $agency)
+                ->orderByDesc('report_period')->first();
+            if ($report) {
+                $status = $report->status;
+                $statusLabel = match ($status) {
+                    'overdue' => 'Overdue',
+                    'paid' => 'Paid',
+                    'pending' => 'Due Soon',
+                    default => ucfirst($status),
+                };
+                $statusColor = match ($status) {
+                    'overdue' => 'red',
+                    'paid' => 'green',
+                    'pending' => 'yellow',
+                    default => 'gray',
+                };
+                $days = $status === 'overdue' ? now()->diffInDays($report->due_date) : ($status === 'pending' ? now()->diffInDays($report->due_date, false) : 0);
+                $result[strtolower($agency)] = [
+                    'name' => $agency,
+                    'full_name' => $report->report_name ?? $agency,
+                    'period' => $report->report_period,
+                    'due_date' => $report->due_date ? \Carbon\Carbon::parse($report->due_date)->toDateString() : null,
+                    'status' => $status,
+                    'status_label' => $statusLabel,
+                    'status_color' => $statusColor,
+                    'days_overdue' => $status === 'overdue' ? $days : 0,
+                    'days_until_due' => $status === 'pending' ? $days : 0,
+                    'amount' => $report->total_amount,
+                    'formatted_amount' => '₱' . number_format($report->total_amount, 2),
+                    'employee_share' => $report->total_employee_share,
+                    'employer_share' => $report->total_employer_share,
+                    'report_generated' => true,
+                    'report_type' => $report->report_type,
+                    'payment_reference' => $report->payment_reference ?? null,
+                    'paid_date' => $report->paid_date ?? null,
+                    'actions' => ['pay_now', 'view_report'],
+                ];
+            }
+        }
+        return $result;
     }
 
     /**
-     * Mock data for quick actions
+     * Real data for quick actions (static for now)
      */
     private function getQuickActions(): array
     {
@@ -423,7 +398,7 @@ class DashboardController extends Controller
                 'label' => 'Create Payroll Period',
                 'icon' => 'plus-circle',
                 'color' => 'blue',
-                'url' => '/payroll/periods/create',
+                'url' => '/payroll/periods',
                 'description' => 'Start a new payroll period',
             ],
             [
@@ -431,7 +406,7 @@ class DashboardController extends Controller
                 'label' => 'Import Attendance',
                 'icon' => 'upload',
                 'color' => 'green',
-                'url' => '/payroll/timekeeping/import',
+                'url' => '/payroll/employee-payroll-info',
                 'description' => 'Import timekeeping data',
             ],
             [
@@ -439,7 +414,7 @@ class DashboardController extends Controller
                 'label' => 'Government Reports',
                 'icon' => 'file-text',
                 'color' => 'purple',
-                'url' => '/payroll/government/reports',
+                'url' => '/payroll/reports/government',
                 'description' => 'Generate compliance reports',
             ],
             [
@@ -455,7 +430,7 @@ class DashboardController extends Controller
                 'label' => 'Export Summary',
                 'icon' => 'download',
                 'color' => 'orange',
-                'url' => '/payroll/reports/export',
+                'url' => '/payroll/reports/analytics',
                 'description' => 'Export payroll summary',
             ],
         ];

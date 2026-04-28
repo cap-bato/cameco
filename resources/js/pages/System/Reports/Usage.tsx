@@ -47,6 +47,8 @@ type ActivityByType = {
 
 interface Props {
   activity_summary: {
+    total_users: number;
+    active_accounts: number;
     total_events: number;
     unique_users: number;
     successful_logins: number;
@@ -68,6 +70,30 @@ const COLORS = [
   '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16',
 ];
 
+/**
+ * Safely format a duration in minutes to a human-readable string.
+ * Guards against negatives (backend bug) and long decimals.
+ *
+ * Examples:
+ *   formatDuration(90)    → "1h 30m"
+ *   formatDuration(45)    → "45m"
+ *   formatDuration(-360)  → "6h 0m"   ← abs() safety net
+ */
+function formatDuration(rawMinutes: number): string {
+  const minutes = Math.round(Math.abs(rawMinutes));
+  if (minutes === 0) return '0m';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+/** Round a number to at most 1 decimal place, removing trailing .0 */
+function fmt1(n: number): string {
+  return Math.abs(parseFloat(n.toFixed(1))).toString();
+}
+
 export default function UsageAnalytics({
   activity_summary,
   user_login_stats,
@@ -81,10 +107,7 @@ export default function UsageAnalytics({
   const [toDate, setToDate] = useState(to_date);
 
   const handleDateFilter = () => {
-    const params = new URLSearchParams({
-      from: fromDate,
-      to: toDate,
-    });
+    const params = new URLSearchParams({ from: fromDate, to: toDate });
     window.location.href = `/system/reports/usage?${params.toString()}`;
   };
 
@@ -115,21 +138,11 @@ export default function UsageAnalytics({
           <CardContent className="flex gap-4 items-end">
             <div className="flex-1">
               <label className="text-sm font-medium">From</label>
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="mt-1"
-              />
+              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="mt-1" />
             </div>
             <div className="flex-1">
               <label className="text-sm font-medium">To</label>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="mt-1"
-              />
+              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="mt-1" />
             </div>
             <Button onClick={handleDateFilter}>Apply Filter</Button>
           </CardContent>
@@ -154,12 +167,14 @@ export default function UsageAnalytics({
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                Unique Users
+                Active Accounts
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{activity_summary.unique_users}</div>
-              <p className="text-xs text-muted-foreground mt-1">Active users</p>
+              <div className="text-3xl font-bold">{activity_summary.active_accounts}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {activity_summary.unique_users} users had activity in selected period
+              </p>
             </CardContent>
           </Card>
 
@@ -168,7 +183,7 @@ export default function UsageAnalytics({
               <CardTitle className="text-sm font-medium text-muted-foreground">Success Rate</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{activity_summary.success_rate}%</div>
+              <div className="text-3xl font-bold">{fmt1(activity_summary.success_rate)}%</div>
               <p className="text-xs text-muted-foreground mt-1">
                 {activity_summary.successful_logins} successful, {activity_summary.failed_login_attempts} failed
               </p>
@@ -183,7 +198,9 @@ export default function UsageAnalytics({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{session_stats.average_duration_minutes}m</div>
+              <div className="text-3xl font-bold">
+                {formatDuration(session_stats.average_duration_minutes)}
+              </div>
               <p className="text-xs text-muted-foreground mt-1">{session_stats.total_sessions} sessions</p>
             </CardContent>
           </Card>
@@ -201,12 +218,14 @@ export default function UsageAnalytics({
                 <div key={idx}>
                   <div className="flex justify-between items-center text-sm mb-1">
                     <span className="font-medium">{module.module}</span>
-                    <span className="text-muted-foreground">{module.access_count} accesses ({module.percentage}%)</span>
+                    <span className="text-muted-foreground">
+                      {module.access_count} accesses ({fmt1(module.percentage)}%)
+                    </span>
                   </div>
                   <div className="w-full bg-neutral-200 dark:bg-neutral-900 rounded h-2">
                     <div
                       className="bg-blue-500 h-2 rounded transition-all"
-                      style={{ width: `${module.percentage}%` }}
+                      style={{ width: `${Math.min(100, Math.abs(module.percentage))}%` }}
                     />
                   </div>
                 </div>
@@ -226,10 +245,7 @@ export default function UsageAnalytics({
               {activity_by_type.map((action, idx) => (
                 <div key={idx} className="flex items-center justify-between p-2 border rounded">
                   <div className="flex items-center gap-2">
-                    <div
-                      className="w-4 h-4 rounded"
-                      style={{ backgroundColor: COLORS[idx % COLORS.length] }}
-                    />
+                    <div className="w-4 h-4 rounded" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                     <span className="text-sm font-medium">{action.action}</span>
                   </div>
                   <Badge variant="secondary">{action.count}</Badge>
@@ -239,7 +255,7 @@ export default function UsageAnalytics({
           </CardContent>
         </Card>
 
-        {/* Last Logins */}
+        {/* User Login Statistics */}
         <Card>
           <CardHeader>
             <CardTitle>User Login Statistics</CardTitle>
@@ -290,15 +306,21 @@ export default function UsageAnalytics({
               </div>
               <div className="border rounded p-3">
                 <p className="text-sm text-muted-foreground">Average Duration</p>
-                <p className="text-2xl font-bold">{session_stats.average_duration_minutes}m</p>
+                <p className="text-2xl font-bold">
+                  {formatDuration(session_stats.average_duration_minutes)}
+                </p>
               </div>
               <div className="border rounded p-3">
                 <p className="text-sm text-muted-foreground">Max Duration</p>
-                <p className="text-2xl font-bold">{session_stats.max_duration_minutes}m</p>
+                <p className="text-2xl font-bold">
+                  {formatDuration(session_stats.max_duration_minutes)}
+                </p>
               </div>
               <div className="border rounded p-3">
                 <p className="text-sm text-muted-foreground">Total Hours</p>
-                <p className="text-2xl font-bold">{session_stats.total_duration_hours}h</p>
+                <p className="text-2xl font-bold">
+                  {fmt1(Math.abs(session_stats.total_duration_hours))}h
+                </p>
               </div>
             </div>
 
@@ -314,7 +336,7 @@ export default function UsageAnalytics({
                           {new Date(session.login_at).toLocaleString()} → {new Date(session.logout_at).toLocaleString()}
                         </p>
                       </div>
-                      <Badge>{session.duration_minutes}m</Badge>
+                      <Badge>{formatDuration(session.duration_minutes)}</Badge>
                     </div>
                   ))}
                 </div>

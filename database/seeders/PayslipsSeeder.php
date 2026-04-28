@@ -17,11 +17,8 @@ class PayslipsSeeder extends Seeder
      */
     public function run(): void
     {
-        // Avoid duplicate seeding
-        if (Payslip::count() > 0) {
-            $this->command->warn('payslips already seeded — skipping.');
-            return;
-        }
+        // Truncate payslips table for fresh seeding
+        \DB::statement('TRUNCATE TABLE payslips RESTART IDENTITY CASCADE');
 
         // Get all payments
         $payments = PayrollPayment::with(['employee', 'payrollPeriod'])->get();
@@ -40,11 +37,19 @@ class PayslipsSeeder extends Seeder
             }
 
             $period = $payment->payrollPeriod;
+            // Skip 2nd half of March (by period name or number)
+            if (
+                (isset($period->period_name) && str_contains(strtolower($period->period_name), 'march') && str_contains(strtolower($period->period_name), '2nd')) ||
+                (isset($period->period_number) && preg_match('/^2026-03-2/', $period->period_number))
+            ) {
+                continue;
+            }
+
             $employee = $payment->employee;
 
             // Calculate earning breakdown
             $earnings = $this->generateEarningsBreakdown($payment->gross_pay);
-            
+
             // Calculate deduction breakdown (use actual values from payment)
             $deductions = [
                 'sss' => (float)$payment->sss_deduction,
@@ -58,18 +63,11 @@ class PayslipsSeeder extends Seeder
                 'other' => (float)$payment->other_deductions,
             ];
 
-            // Determine payslip status and distribution
-            if ($payment->status === 'paid') {
-                $status = rand(1, 100) <= 70 ? 'distributed' : 'generated'; // 70% distributed
-                $distributedAt = Carbon::parse($period->approved_at)->addHours(2)->addMinutes(30);
-                $isViewed = $status === 'distributed' && rand(1, 100) <= 80; // 80% of distributed payslips viewed
-                $viewedAt = $isViewed ? $distributedAt->copy()->addHours(rand(1, 24)) : null;
-            } else {
-                $status = 'generated';
-                $distributedAt = null;
-                $isViewed = false;
-                $viewedAt = null;
-            }
+            // Always set payslip status to 'distributed' for all seeded payslips
+            $status = 'distributed';
+            $distributedAt = Carbon::parse($period->approved_at ?? $period->payment_date)->addHours(2)->addMinutes(30);
+            $isViewed = true;
+            $viewedAt = $distributedAt->copy()->addHours(rand(1, 24));
 
             $ytdMultiplier = rand(8, 12);
             $sssYtd = (float)$payment->sss_deduction * $ytdMultiplier;

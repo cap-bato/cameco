@@ -23,9 +23,12 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { BIRPeriod } from '@/types/bir-pages';
 
+import { AlphalistEmployee } from '@/types/bir-pages';
+
 interface BIRAlphaListGeneratorProps {
     period?: BIRPeriod;
     periodId: string;
+    employees: AlphalistEmployee[];
 }
 
 /**
@@ -36,7 +39,10 @@ interface BIRAlphaListGeneratorProps {
 export const BIRAlphaListGenerator: React.FC<BIRAlphaListGeneratorProps> = ({
     period,
     periodId,
+    employees,
 }) => {
+    // Defensive: default employees to empty array if undefined/null
+    const safeEmployees = Array.isArray(employees) ? employees : [];
     const [isGenerating, setIsGenerating] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -46,97 +52,24 @@ export const BIRAlphaListGenerator: React.FC<BIRAlphaListGeneratorProps> = ({
     } | null>(null);
     const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
-    // Mock data for alphalist employees
-    const mockEmployees = [
-        {
-            sequence_number: 1,
-            tin: '123456789012',
-            employee_name: 'Juan Dela Cruz',
-            address: '123 Main St, Manila',
-            birth_date: '1990-05-15',
-            gender: 'M' as const,
-            civil_status: 'Married',
-            annual_gross_compensation: 540000,
-            annual_non_taxable_compensation: 45000,
-            annual_taxable_compensation: 495000,
-            annual_tax_withheld: 64350,
-            status_flag: 'Active',
-        },
-        {
-            sequence_number: 2,
-            tin: '123456789013',
-            employee_name: 'Maria Santos',
-            address: '456 Oak Ave, Makati',
-            birth_date: '1988-08-22',
-            gender: 'F' as const,
-            civil_status: 'Single',
-            annual_gross_compensation: 660000,
-            annual_non_taxable_compensation: 55000,
-            annual_taxable_compensation: 605000,
-            annual_tax_withheld: 79650,
-            status_flag: 'Active',
-        },
-        {
-            sequence_number: 3,
-            tin: '123456789014',
-            employee_name: 'Pedro Reyes',
-            address: '789 Pine Rd, QC',
-            birth_date: '1992-03-10',
-            gender: 'M' as const,
-            civil_status: 'Divorced',
-            annual_gross_compensation: 456000,
-            annual_non_taxable_compensation: 38000,
-            annual_taxable_compensation: 418000,
-            annual_tax_withheld: 50340,
-            status_flag: 'Active',
-        },
-        {
-            sequence_number: 4,
-            tin: '123456789015',
-            employee_name: 'Rosa Garcia',
-            address: '321 Elm St, Cebu',
-            birth_date: '1985-12-05',
-            gender: 'F' as const,
-            civil_status: 'Married',
-            annual_gross_compensation: 504000,
-            annual_non_taxable_compensation: 42000,
-            annual_taxable_compensation: 462000,
-            annual_tax_withheld: 60480,
-            status_flag: 'Active',
-        },
-        {
-            sequence_number: 5,
-            tin: '123456789016',
-            employee_name: 'Carlos Morales',
-            address: '654 Birch Ln, Davao',
-            birth_date: '1987-07-18',
-            gender: 'M' as const,
-            civil_status: 'Single',
-            annual_gross_compensation: 624000,
-            annual_non_taxable_compensation: 52000,
-            annual_taxable_compensation: 572000,
-            annual_tax_withheld: 74360,
-            status_flag: 'Active',
-        },
-    ];
-
-    const filteredEmployees = mockEmployees.filter((emp) =>
+    // Use real employees data from props (safe)
+    const filteredEmployees = safeEmployees.filter((emp) =>
         emp.employee_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         emp.tin.includes(searchTerm) ||
         emp.status_flag.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const summary = {
-        total_employees: mockEmployees.length,
-        total_gross_compensation: mockEmployees.reduce(
+        total_employees: safeEmployees.length,
+        total_gross_compensation: safeEmployees.reduce(
             (sum, e) => sum + e.annual_gross_compensation,
             0
         ),
-        total_taxable_compensation: mockEmployees.reduce(
+        total_taxable_compensation: safeEmployees.reduce(
             (sum, e) => sum + e.annual_taxable_compensation,
             0
         ),
-        total_tax_withheld: mockEmployees.reduce((sum, e) => sum + e.annual_tax_withheld, 0),
+        total_tax_withheld: safeEmployees.reduce((sum, e) => sum + e.annual_tax_withheld, 0),
     };
 
     const handleValidate = () => {
@@ -146,17 +79,17 @@ export const BIRAlphaListGenerator: React.FC<BIRAlphaListGeneratorProps> = ({
             const errors: string[] = [];
 
             // Check for missing TINs
-            if (mockEmployees.some((e) => !e.tin)) {
+            if (safeEmployees.some((e) => !e.tin)) {
                 errors.push('Some employees have missing TINs');
             }
 
             // Check for missing addresses
-            if (mockEmployees.some((e) => !e.address)) {
+            if (safeEmployees.some((e) => !e.address)) {
                 errors.push('Some employees have missing addresses');
             }
 
             // Check for invalid compensation data
-            if (mockEmployees.some((e) => e.annual_gross_compensation === 0)) {
+            if (safeEmployees.some((e) => e.annual_gross_compensation === 0)) {
                 errors.push('Some employees have zero gross compensation');
             }
 
@@ -368,7 +301,7 @@ export const BIRAlphaListGenerator: React.FC<BIRAlphaListGeneratorProps> = ({
                             </TableHeader>
                             <TableBody>
                                 {filteredEmployees.map((emp) => (
-                                    <TableRow key={emp.tin}>
+                                    <TableRow key={`${emp.tin}-${emp.sequence_number}`}> 
                                         <TableCell className="font-mono text-sm">
                                             {emp.sequence_number}
                                         </TableCell>

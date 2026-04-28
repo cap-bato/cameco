@@ -98,6 +98,7 @@ export default function AllowancesDeductionsIndex({
   const [historyData, setHistoryData] = useState<HistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; assignmentId?: number; employeeId?: number }>({ isOpen: false });
+  const [modalError, setModalError] = useState<string | null>(null);
 
   const breadcrumb = [
     { title: 'Payroll', href: '/payroll' },
@@ -130,29 +131,44 @@ export default function AllowancesDeductionsIndex({
     return match;
   });
 
-  const handleAssignComponent = async (data: EmployeeComponentAssignmentFormData) => {
+const handleAssignComponent = async (data: EmployeeComponentAssignmentFormData) => {
     setIsLoading(true);
-    try {
-      // Call the backend API to assign component
-      const url = editingAssignment
-        ? `/payroll/allowances-deductions/${data.employee_id}`
-        : '/payroll/allowances-deductions';
+    setModalError(null);
 
-      const method = editingAssignment ? 'PUT' : 'POST';
-
-      router[method as 'post' | 'put'](url, data as unknown as Record<string, string>, {
-        onSuccess: () => {
-          setIsModalOpen(false);
-          setEditingAssignment(undefined);
-        },
-        onError: (errors) => {
-          console.error('Component assignment failed:', errors);
-        },
-      });
-    } finally {
+    const onSuccess = () => {
+      setIsModalOpen(false);
+      setEditingAssignment(undefined);
       setIsLoading(false);
+      setModalError(null);
+    };
+
+    const onError = (errors: Record<string, string>) => {
+      // Prefer assignment error from backend, fallback to first error
+      let errorMsg = '';
+      if (errors && typeof errors === 'object') {
+        if (errors.assignment) errorMsg = errors.assignment;
+        else errorMsg = Object.values(errors)[0] as string;
+      } else if (typeof errors === 'string') {
+        errorMsg = errors;
+      } else {
+        errorMsg = 'Component assignment failed.';
+      }
+      setModalError(errorMsg);
+      setIsLoading(false);
+    };
+
+    if (editingAssignment) {
+      router.put(`/payroll/allowances-deductions/${data.employee_id}`, data as unknown as Record<string, unknown>, {
+        onSuccess,
+        onError,
+      });
+    } else {
+      router.post('/payroll/allowances-deductions', data as unknown as Record<string, string>, {
+        onSuccess,
+        onError,
+      });
     }
-  };
+};
 
   const handleEditAssignment = (assignment: EmployeeComponent, employeeId: number) => {
     setEditingAssignment({
@@ -408,6 +424,7 @@ export default function AllowancesDeductionsIndex({
           onClose={() => {
             setIsModalOpen(false);
             setEditingAssignment(undefined);
+            setModalError(null);
           }}
           onSubmit={handleAssignComponent}
           employees={employees}
@@ -415,6 +432,7 @@ export default function AllowancesDeductionsIndex({
           initialData={editingAssignment}
           isLoading={isLoading}
           mode={editingAssignment ? 'edit' : 'create'}
+          submitError={modalError}
         />
 
         {/* History Dialog */}

@@ -25,7 +25,8 @@ class PayrollCalculationController extends Controller
         $status          = $request->input('status');
         $calculationType = $request->input('calculation_type');
 
-        $periodsQuery = PayrollPeriod::with(['approvedBy:id,name', 'lockedBy:id,name'])
+        $periodsQuery = PayrollPeriod::query()
+            ->with(['approvedBy:id,name', 'lockedBy:id,name'])
             ->orderByDesc('period_start');
 
         if ($periodId) {
@@ -48,6 +49,11 @@ class PayrollCalculationController extends Controller
 
         $periods = $periodsQuery->get();
 
+        // Ensure $periods is a collection of PayrollPeriod models
+        if ($periods->isNotEmpty() && !$periods->first() instanceof PayrollPeriod) {
+            $periods = PayrollPeriod::whereIn('id', $periods->pluck('id'))->get();
+        }
+
         $periodIds = $periods->pluck('id')->all();
         $empCounts = EmployeePayrollCalculation::select('payroll_period_id',
                 DB::raw("COUNT(*) as total"),
@@ -66,8 +72,8 @@ class PayrollCalculationController extends Controller
             ->map(fn ($p) => [
                 'id'         => $p->id,
                 'name'       => $p->period_name,
-                'start_date' => $p->period_start?->toDateString(),
-                'end_date'   => $p->period_end?->toDateString(),
+                'start_date' => $p->period_start ? \Illuminate\Support\Carbon::parse($p->period_start)->toDateString() : null,
+                'end_date'   => $p->period_end ? \Illuminate\Support\Carbon::parse($p->period_end)->toDateString() : null,
                 'status'     => $this->dbStatusToCalcStatus($p->status),
             ]);
 
@@ -260,6 +266,7 @@ class PayrollCalculationController extends Controller
                     'finished'           => null,
                     'cancelled'          => null,
                     'batch_found'        => false,
+                    
                 ]);
             }
 
@@ -324,19 +331,21 @@ class PayrollCalculationController extends Controller
         $progress  = (float) ($p->progress_percentage ?? 0);
 
         $calcStatus = $this->dbStatusToCalcStatus($p->status);
-
-        if (in_array($calcStatus, ['completed', 'cancelled'])) {
-            $progress = 100;
+        if ($calcStatus === 'processing') {
+            $progress = 0.0;
+        } elseif (in_array($calcStatus, ['completed', 'cancelled'])) {
+            $progress = 100.0;
+        } else {
+            $progress = (float) ($p->progress_percentage ?? 0);
         }
-
         return [
             'id'                  => $p->id,
             'payroll_period_id'   => $p->id,
             'payroll_period'      => [
                 'id'         => $p->id,
                 'name'       => $p->period_name,
-                'start_date' => $p->period_start?->toDateString(),
-                'end_date'   => $p->period_end?->toDateString(),
+                'start_date' => $p->period_start ? \Illuminate\Support\Carbon::parse($p->period_start)->toDateString() : null,
+                'end_date'   => $p->period_end ? \Illuminate\Support\Carbon::parse($p->period_end)->toDateString() : null,
                 'status'     => $calcStatus,
             ],
             'calculation_type'    => $this->dbTypeToCalcType($p->period_type),
@@ -361,12 +370,16 @@ class PayrollCalculationController extends Controller
     private function dbStatusToCalcStatus(string $status): string
     {
         return match ($status) {
-            'draft', 'active'                                                    => 'pending',
-            'calculating'                                                         => 'processing',
-            'calculated', 'under_review', 'pending_approval', 'approved',
-            'finalized', 'processing_payment', 'completed'                       => 'completed',
-            'cancelled'                                                           => 'cancelled',
-            default                                                               => 'pending',
+            'draft', 'active'          => 'pending',
+            'calculating'              => 'processing',
+            'calculated'               => 'completed',
+            'under_review',
+            'pending_approval'         => 'reviewing',
+            'approved'                 => 'approved',
+            'finalized', 'completed',
+            'processing_payment'       => 'finalized',
+            'cancelled'                => 'cancelled',
+            default                    => 'pending',
         };
     }
 
@@ -375,12 +388,14 @@ class PayrollCalculationController extends Controller
         return match ($status) {
             'pending'    => ['draft', 'active'],
             'processing' => ['calculating'],
-            'completed'  => ['calculated', 'under_review', 'pending_approval', 'approved', 'finalized', 'processing_payment', 'completed'],
+            'completed'  => ['calculated'],
+            'reviewing'  => ['under_review', 'pending_approval'],
+            'approved'   => ['approved'],
+            'finalized'  => ['finalized', 'processing_payment', 'completed'],
             'cancelled'  => ['cancelled'],
             default      => [],
         };
     }
-
     private function dbTypeToCalcType(string $type): string
     {
         return match ($type) {
@@ -412,4 +427,54 @@ class PayrollCalculationController extends Controller
             default                  => 'pending',
         };
     }
+
+            // for polling 
+    public function status(int $id): JsonResponse
+        {
+    try {
+        $period = PayrollPeriod::findOrFail($id);
+
+        $batchProgress = null;
+        if ($period->status === 'calculating' && $period->calculation_batch_id) {
+            $batch = Bus::findBatch($period->calculation_batch_id);
+            if ($batch) {
+                $batchProgress = [
+                    'progress' => $batch->progress(),
+                    'total'    => $batch->totalJobs,
+                    'pending'  => $batch->pendingJobs,
+                    'failed'   => $batch->failedJobs,
+                    'finished' => $batch->finished(),
+                ];
+            }
+        }
+
+        $empCounts = EmployeePayrollCalculation::where('payroll_period_id', $id)
+            ->selectRaw("
+                COUNT(*) as total,
+                SUM(CASE WHEN calculation_status IN ('calculated','adjusted','approved','locked') THEN 1 ELSE 0 END) as processed,
+                SUM(CASE WHEN calculation_status = 'exception' THEN 1 ELSE 0 END) as failed
+            ")
+            ->first();
+
+        return response()->json([
+            'status'              => $this->dbStatusToCalcStatus($period->status),
+            'progress_percentage' => (float) ($period->progress_percentage ?? 0),
+            'processed_employees' => (int) ($empCounts?->processed ?? 0),
+            'total_employees'     => (int) ($period->total_employees ?? $empCounts?->total ?? 0),
+            'failed_employees'    => (int) ($empCounts?->failed ?? 0),
+            'total_gross_pay'     => (float) ($period->total_gross_pay ?? 0),
+            'total_net_pay'       => (float) ($period->total_net_pay ?? 0),
+            'error_message'       => null,
+            'batch'               => $batchProgress,
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Failed to retrieve calculation status', [
+            'id'    => $id,
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json(['error' => 'Failed to retrieve status'], 500);
+    }
+}
 }

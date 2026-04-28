@@ -16,6 +16,7 @@ import { useMemo, useState } from 'react';
 export default function TwoFactorChallenge() {
     const [showRecoveryInput, setShowRecoveryInput] = useState<boolean>(false);
     const [code, setCode] = useState<string>('');
+    const challengeRoute = store();
 
     const authConfigContent = useMemo<{
         title: string;
@@ -54,7 +55,8 @@ export default function TwoFactorChallenge() {
 
             <div className="space-y-6">
                 <Form
-                    {...store.form()}
+                    action={challengeRoute.url}
+                    method={challengeRoute.method}
                     className="space-y-4"
                     resetOnError
                     resetOnSuccess={!showRecoveryInput}

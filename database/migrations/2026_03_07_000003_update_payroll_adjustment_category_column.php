@@ -11,7 +11,10 @@ return new class extends Migration
     public function up(): void
     {
         // PostgreSQL: Drop the constraint to allow free-form category strings
-        DB::statement("ALTER TABLE payroll_adjustments DROP CONSTRAINT IF EXISTS payroll_adjustments_category_check");
+        // SQLite does not support CHECK constraint removal via ALTER TABLE
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement("ALTER TABLE payroll_adjustments DROP CONSTRAINT IF EXISTS payroll_adjustments_category_check");
+        }
     }
 
     /**
@@ -19,7 +22,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Revert to constraint (not recommended)
-        DB::statement("ALTER TABLE payroll_adjustments ADD CONSTRAINT payroll_adjustments_category_check CHECK (category IN ('retroactive_pay', 'correction', 'bonus', 'penalty', 'reimbursement', 'loan_adjustment', 'government_correction', 'rounding', 'other'))");
+        // Revert to constraint (PostgreSQL only; not recommended)
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement("ALTER TABLE payroll_adjustments ADD CONSTRAINT payroll_adjustments_category_check CHECK (category IN ('retroactive_pay', 'correction', 'bonus', 'penalty', 'reimbursement', 'loan_adjustment', 'government_correction', 'rounding', 'other'))");
+        }
     }
 };

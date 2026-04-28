@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
     Select,
     SelectContent,
@@ -22,7 +23,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
-import { AlertCircle, Loader2, QrCode, AlertTriangle } from 'lucide-react';
+import { AlertCircle, Loader2, QrCode, AlertTriangle, Check, Users } from 'lucide-react';
 import { BadgeScannerModal } from './badge-scanner-modal';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
@@ -50,6 +51,7 @@ interface BadgeIssuanceFormProps {
     employees: Employee[];
     isLoading?: boolean;
     existingBadgeUids?: string[];
+    serverError?: string;
 }
 
 export interface BadgeFormData {
@@ -70,11 +72,11 @@ export function BadgeIssuanceModal({
     employees,
     isLoading = false,
     existingBadgeUids = [],
+    serverError,
 }: BadgeIssuanceFormProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
     const [showScanner, setShowScanner] = useState(false);
-    const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
     const [expirationDate, setExpirationDate] = useState<Date | undefined>();
 
     const [formData, setFormData] = useState<BadgeFormData>({
@@ -93,13 +95,19 @@ export function BadgeIssuanceModal({
     const filteredEmployees = employees.filter((emp) =>
         emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         emp.employee_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        emp.department.toLowerCase().includes(searchQuery.toLowerCase())
+        emp.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        emp.position.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const employeesWithActiveBadgesCount = employees.filter((emp) => emp.badge?.is_active).length;
 
     // Validate card UID format
     const validateCardUid = (uid: string) => {
-        const uidRegex = /^([0-9A-Fa-f]{2}:){4}[0-9A-Fa-f]{2}$/;
-        return uidRegex.test(uid);
+        // Accept plug-and-play numeric IDs (e.g. 1234567890) and hex UIDs with separators.
+        const numericUidRegex = /^\d{6,20}$/;
+        const hexUidRegex = /^[0-9A-F]{8,20}$/;
+        const hexSeparatedUidRegex = /^([0-9A-F]{2}[:-]){3,9}[0-9A-F]{2}$/;
+        return numericUidRegex.test(uid) || hexUidRegex.test(uid) || hexSeparatedUidRegex.test(uid);
     };
 
     // Subtask 1.3.4: Validate form before submission
@@ -115,7 +123,7 @@ export function BadgeIssuanceModal({
         if (!formData.card_uid) {
             newErrors.card_uid = 'Card UID is required';
         } else if (!validateCardUid(formData.card_uid)) {
-            newErrors.card_uid = 'Card UID format must be XX:XX:XX:XX:XX (e.g., 04:3A:B2:C5:D8)';
+            newErrors.card_uid = 'Use numeric UID (e.g., 1234567890) or hex UID (e.g., 04:3A:B2:C5:D8)';
         } else if (existingBadgeUids.includes(formData.card_uid)) {
             // Subtask 1.3.4: Card UID uniqueness check
             newErrors.card_uid = 'This card UID is already assigned to another employee';
@@ -144,7 +152,7 @@ export function BadgeIssuanceModal({
                 if (!value) {
                     fieldErrors.card_uid = 'Card UID is required';
                 } else if (!validateCardUid(value)) {
-                    fieldErrors.card_uid = 'Card UID format must be XX:XX:XX:XX:XX';
+                    fieldErrors.card_uid = 'Use numeric UID or hex UID';
                 } else if (existingBadgeUids.includes(value)) {
                     fieldErrors.card_uid = 'This card UID is already in use';
                 } else {
@@ -170,7 +178,6 @@ export function BadgeIssuanceModal({
             employee_id: employee.id,
         }));
         setSearchQuery('');
-        setShowEmployeeDropdown(false);
         setIsExistingBadgeWarningDismissed(false);
     };
 
@@ -184,7 +191,7 @@ export function BadgeIssuanceModal({
     };
 
     const handleCardUidChange = (value: string) => {
-        const upperValue = value.toUpperCase();
+        const upperValue = value.toUpperCase().replace(/\s+/g, '');
         setFormData((prev) => ({
             ...prev,
             card_uid: upperValue,
@@ -237,26 +244,52 @@ export function BadgeIssuanceModal({
                     </DialogHeader>
 
                     <div className="space-y-6">
+                        {/* Server-side error display */}
+                        {serverError && (
+                            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-red-600" />
+                                <span>{serverError}</span>
+                            </div>
+                        )}
+
                         {/* Section 1: Employee Selection */}
                         <div className="space-y-3 border rounded-lg p-4 bg-muted/50">
-                            <h3 className="font-semibold text-sm">1. Employee Selection</h3>
+                            <h3 className="font-semibold text-sm">1. Select Employee</h3>
+
+                            <div className="flex items-center justify-between rounded-md border bg-white px-3 py-2 text-xs text-muted-foreground">
+                                <span className="inline-flex items-center gap-1.5">
+                                    <Users className="h-3.5 w-3.5" />
+                                    {employees.length} active employees
+                                </span>
+                                <span>{employeesWithActiveBadgesCount} already have active badges</span>
+                            </div>
 
                             {selectedEmployee ? (
-                                <div className="flex items-center gap-4 p-3 bg-white rounded-lg border">
-                                    {selectedEmployee.photo && (
+                                <div className="flex items-center gap-4 rounded-lg border bg-white p-3 shadow-sm">
+                                    {selectedEmployee.photo ? (
                                         <img
                                             src={selectedEmployee.photo}
                                             alt={selectedEmployee.name}
-                                            className="h-10 w-10 rounded-full object-cover"
+                                            className="h-12 w-12 rounded-full object-cover"
                                         />
+                                    ) : (
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                                            {selectedEmployee.name
+                                                .split(' ')
+                                                .map((part) => part[0])
+                                                .join('')
+                                                .slice(0, 2)
+                                                .toUpperCase()}
+                                        </div>
                                     )}
                                     <div className="flex-1">
-                                        <p className="font-semibold text-sm">{selectedEmployee.name}</p>
+                                        <p className="text-sm font-semibold">{selectedEmployee.name}</p>
+                                        <p className="text-xs text-muted-foreground">{selectedEmployee.employee_id}</p>
                                         <p className="text-xs text-muted-foreground">
-                                            {selectedEmployee.employee_id} • {selectedEmployee.department} •{' '}
-                                            {selectedEmployee.position}
+                                            {selectedEmployee.department} • {selectedEmployee.position}
                                         </p>
                                     </div>
+                                    <Check className="h-4 w-4 text-green-600" />
                                     <Button
                                         type="button"
                                         variant="ghost"
@@ -270,44 +303,64 @@ export function BadgeIssuanceModal({
                                             setIsExistingBadgeWarningDismissed(false);
                                         }}
                                     >
-                                        Change
+                                        Change Employee
                                     </Button>
                                 </div>
                             ) : (
-                                <Popover open={showEmployeeDropdown} onOpenChange={setShowEmployeeDropdown}>
-                                    <PopoverTrigger asChild>
-                                        <Input
-                                            placeholder="Search employee by name, ID, or department..."
+                                <div className={`overflow-hidden rounded-lg border bg-white ${errors.employee_id ? 'border-red-500' : ''}`}>
+                                    <Command shouldFilter={false}>
+                                        <CommandInput
+                                            placeholder="Search by name, employee ID, department, or position..."
                                             value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className={errors.employee_id ? 'border-red-500' : ''}
+                                            onValueChange={setSearchQuery}
                                         />
-                                    </PopoverTrigger>
-                                    <PopoverContent className="p-0 w-full" align="start">
-                                        <div className="max-h-64 overflow-y-auto">
-                                            {filteredEmployees.length > 0 ? (
-                                                <div className="space-y-1 p-2">
-                                                    {filteredEmployees.map((emp) => (
-                                                        <button
-                                                            key={emp.id}
-                                                            onClick={() => handleSelectEmployee(emp)}
-                                                            className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm"
-                                                        >
-                                                            <div className="font-medium">{emp.name}</div>
-                                                            <div className="text-xs text-muted-foreground">
-                                                                {emp.employee_id} • {emp.department}
+                                        <CommandList className="max-h-64">
+                                            <CommandEmpty>No employee found for your search.</CommandEmpty>
+                                            <CommandGroup>
+                                                {filteredEmployees.map((emp) => (
+                                                    <CommandItem
+                                                        key={emp.id}
+                                                        value={`${emp.name} ${emp.employee_id} ${emp.department} ${emp.position}`}
+                                                        onSelect={() => handleSelectEmployee(emp)}
+                                                        className="px-3 py-2"
+                                                    >
+                                                        <div className="flex w-full items-center gap-3">
+                                                            {emp.photo ? (
+                                                                <img
+                                                                    src={emp.photo}
+                                                                    alt={emp.name}
+                                                                    className="h-9 w-9 rounded-full object-cover"
+                                                                />
+                                                            ) : (
+                                                                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                                                                    {emp.name
+                                                                        .split(' ')
+                                                                        .map((part) => part[0])
+                                                                        .join('')
+                                                                        .slice(0, 2)
+                                                                        .toUpperCase()}
+                                                                </div>
+                                                            )}
+
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="truncate text-sm font-medium">{emp.name}</p>
+                                                                <p className="truncate text-xs text-muted-foreground">
+                                                                    {emp.employee_id} • {emp.department} • {emp.position}
+                                                                </p>
                                                             </div>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <div className="p-4 text-center text-sm text-muted-foreground">
-                                                    No employees found
-                                                </div>
-                                            )}
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
+
+                                                            {emp.badge?.is_active && (
+                                                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                                                                    Has Badge
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </div>
                             )}
 
                             {errors.employee_id && (
@@ -326,7 +379,7 @@ export function BadgeIssuanceModal({
                                             <p className="font-semibold text-sm text-amber-900">
                                                 ⚠️ Employee Already Has Active Badge
                                             </p>
-                                            <p className="text-xs text-amber-800 mt-3 mb-3 space-y-1">
+                                            <div className="mt-3 mb-3 space-y-1 text-xs text-amber-800">
                                                 <div><strong>Card UID:</strong> <code className="font-mono bg-amber-100 px-2 py-1 rounded">{selectedEmployee?.badge?.card_uid}</code></div>
                                                 <div><strong>Issued:</strong> {selectedEmployee?.badge?.issued_at ? new Date(selectedEmployee.badge.issued_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}</div>
                                                 {selectedEmployee?.badge?.last_used_at && (
@@ -335,7 +388,7 @@ export function BadgeIssuanceModal({
                                                 {selectedEmployee?.badge?.expires_at && (
                                                     <div><strong>Expires:</strong> {new Date(selectedEmployee.badge.expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</div>
                                                 )}
-                                            </p>
+                                            </div>
                                             <p className="text-xs text-amber-700 font-medium">
                                                 Select "Replace Badge" to issue a new badge or "Cancel" to select another employee
                                             </p>
@@ -373,7 +426,7 @@ export function BadgeIssuanceModal({
                         </div>
 
                         {/* Section 2: Badge Information */}
-                        {selectedEmployee && isExistingBadgeWarningDismissed !== false && (
+                        {selectedEmployee && (!hasExistingBadge || isExistingBadgeWarningDismissed) && (
                             <div className="space-y-4 border rounded-lg p-4 bg-muted/50">
                                 <h3 className="font-semibold text-sm">2. Badge Information</h3>
 
@@ -382,10 +435,10 @@ export function BadgeIssuanceModal({
                                     <label className="text-sm font-medium">
                                         Card UID <span className="text-red-600">*</span>
                                     </label>
-                                    <p className="text-xs text-muted-foreground">Format: XX:XX:XX:XX:XX (e.g., 04:3A:B2:C5:D8)</p>
+                                    <p className="text-xs text-muted-foreground">Accepts numeric RFID IDs (e.g., 1234567890) or hex UID (e.g., 04:3A:B2:C5:D8)</p>
                                     <div className="flex gap-2">
                                         <Input
-                                            placeholder="XX:XX:XX:XX:XX"
+                                            placeholder="1234567890 or 04:3A:B2:C5:D8"
                                             value={formData.card_uid}
                                             onChange={(e) => handleCardUidChange(e.target.value)}
                                             onBlur={() => {
@@ -501,7 +554,7 @@ export function BadgeIssuanceModal({
                         )}
 
                         {/* Section 3: Verification */}
-                        {selectedEmployee && isExistingBadgeWarningDismissed !== false && (
+                        {selectedEmployee && (!hasExistingBadge || isExistingBadgeWarningDismissed) && (
                             <div className="space-y-4 border rounded-lg p-4 bg-muted/50">
                                 <h3 className="font-semibold text-sm">3. Verification (Optional)</h3>
 

@@ -6,7 +6,7 @@ use App\Http\Middleware\EnsureOfficeAdmin;
 // Office Admin Routes
 // NOTE: Controllers will be created in Phase 3 - these routes are prepared in advance
 
-Route::middleware(['auth', 'verified', EnsureOfficeAdmin::class])
+Route::middleware(['auth', 'verified', EnsureOfficeAdmin::class, 'module:admin'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {

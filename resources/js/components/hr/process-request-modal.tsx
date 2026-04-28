@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { router } from '@inertiajs/react';
 import {
     Dialog,
@@ -13,6 +13,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -43,98 +50,176 @@ interface ProcessRequestModalProps {
     request: DocumentRequest;
 }
 
+interface TemplateOption {
+    id: number;
+    name: string;
+    category?: string;
+    status?: string;
+}
+
 export function ProcessRequestModal({ open, onClose, request }: ProcessRequestModalProps) {
     const { toast } = useToast();
     const [action, setAction] = useState<'generate' | 'upload' | 'reject'>('generate');
     const [templateId, setTemplateId] = useState('');
+    const [templates, setTemplates] = useState<TemplateOption[]>([]);
+    const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [file, setFile] = useState<File | null>(null);
     const [rejectionReason, setRejectionReason] = useState('');
     const [notes, setNotes] = useState('');
     const [sendEmail, setSendEmail] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSubmitting(true);
+    const documentTypeToTemplateCategory = useMemo<Record<string, string | null>>(() => ({
+        'Certificate of Employment': 'coe',
+        Payslip: null,
+        'BIR Form 2316': 'other',
+        'SSS/PhilHealth/Pag-IBIG Contribution': 'other',
+    }), []);
 
-        try {
-            const formData = new FormData();
+    const filteredTemplates = useMemo(() => {
+        const templateCategory = documentTypeToTemplateCategory[request.document_type] ?? null;
+        if (!templateCategory) return templates;
+        const exactMatches = templates.filter((t) => t.category === templateCategory);
+        return exactMatches.length > 0 ? exactMatches : templates;
+    }, [documentTypeToTemplateCategory, request.document_type, templates]);
 
-            // Populate form data based on action
-            if (action === 'generate') {
-                if (templateId) formData.append('template_id', templateId);
-            } else if (action === 'upload') {
-                if (file) formData.append('file', file);
-            } else if (action === 'reject') {
-                formData.append('rejection_reason', rejectionReason);
-            }
-
-            if (notes) formData.append('notes', notes);
-            formData.append('send_email', sendEmail ? '1' : '0');
-
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-
-            // Determine endpoint: use dedicated approve/reject routes
-            const url = action === 'reject'
-                ? `/hr/documents/requests/${request.id}/reject`
-                : `/hr/documents/requests/${request.id}/approve`;
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': csrfToken,
-                },
-                body: formData,
-            });
-
-            if (!response.ok) {
-                const text = await response.text().catch(() => '');
-                throw new Error(`HTTP error! status: ${response.status} ${text}`);
-            }
-
-            toast({
-                title: 'Success',
-                description: action === 'reject' ? 'Request rejected' : 'Request approved and document generated',
-            });
-
-            // Refresh the requests list
-            window.location.reload();
-            onClose();
-        } catch (error) {
-            console.error('Error processing request:', error);
-            toast({
-                title: 'Error',
-                description: 'Failed to process request',
-                variant: 'destructive',
-            });
+    // Reset form state when modal opens/closes or request changes
+    useEffect(() => {
+        if (open) {
+            setAction('generate');
+            setTemplateId('');
+            setFile(null);
+            setRejectionReason('');
+            setNotes('');
+            setSendEmail(true);
             setIsSubmitting(false);
         }
+    }, [open, request.id]);
+
+    // Fetch templates when modal opens and action is 'generate'
+    useEffect(() => {
+        if (!open || action !== 'generate') return;
+
+        let active = true;
+
+        const fetchTemplates = async () => {
+            setLoadingTemplates(true);
+            try {
+                const response = await fetch('/hr/documents/api/templates?status=approved', {
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                if (!response.ok) throw new Error(`Failed to load templates (${response.status})`);
+
+                const result = await response.json();
+                const rows: TemplateOption[] = Array.isArray(result?.data)
+                    ? result.data.map((t: any) => ({
+                          id: Number(t.id),
+                          name: String(t.name),
+                          category: t.category ? String(t.category) : undefined,
+                          status: t.status ? String(t.status) : undefined,
+                      }))
+                    : [];
+
+                if (active) setTemplates(rows);
+            } catch (error) {
+                console.error('Failed to load templates:', error);
+                if (active) {
+                    setTemplates([]);
+                    toast({
+                        title: 'Template loading failed',
+                        description: 'Could not load templates. Please refresh and try again.',
+                        variant: 'destructive',
+                    });
+                }
+            } finally {
+                if (active) setLoadingTemplates(false);
+            }
+        };
+
+        fetchTemplates();
+        return () => { active = false; };
+    }, [open, action, toast]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+
+        const isReject = action === 'reject';
+        const url = isReject
+            ? `/hr/documents/requests/${request.id}/reject`
+            : `/hr/documents/requests/${request.id}/approve`;
+
+        // Build payload — Inertia router handles CSRF automatically
+        const data: Record<string, any> = {
+            send_email: sendEmail,
+        };
+
+        if (action === 'generate') {
+            data.template_id = templateId;
+        } else if (action === 'upload') {
+            // File uploads need FormData; we pass the file directly and Inertia wraps it
+            data.file = file;
+        } else if (action === 'reject') {
+            data.rejection_reason = rejectionReason;
+        }
+
+        if (notes) data.notes = notes;
+
+        router.post(url, data, {
+            forceFormData: action === 'upload', // ensures multipart for file uploads
+            onSuccess: () => {
+                toast({
+                    title: 'Success',
+                    description: isReject
+                        ? 'Request rejected successfully.'
+                        : 'Request approved and document generated.',
+                });
+                onClose();
+            },
+            onError: (errors) => {
+                console.error('Process request errors:', errors);
+                const firstError = Object.values(errors)[0] as string | undefined;
+                toast({
+                    title: 'Failed to process request',
+                    description: firstError ?? 'Please check the form and try again.',
+                    variant: 'destructive',
+                });
+                setIsSubmitting(false);
+            },
+            onFinish: () => {
+                // onSuccess already closed; only reset if still open (error case)
+                setIsSubmitting(false);
+            },
+        });
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
-        if (selectedFile) {
-            // Validate file size (10MB)
-            if (selectedFile.size > 10 * 1024 * 1024) {
-                toast({
-                    title: 'File too large',
-                    description: 'File size must be less than 10MB',
-                    variant: 'destructive',
-                });
-                return;
-            }
-            setFile(selectedFile);
+        if (!selectedFile) return;
+        if (selectedFile.size > 10 * 1024 * 1024) {
+            toast({
+                title: 'File too large',
+                description: 'File size must be less than 10MB',
+                variant: 'destructive',
+            });
+            return;
         }
+        setFile(selectedFile);
     };
 
-    const insertCommonReason = (reason: string) => {
-        setRejectionReason(reason);
-    };
+    const isSubmitDisabled =
+        isSubmitting ||
+        (action === 'generate' && !templateId) ||
+        (action === 'reject' && rejectionReason.length < 20) ||
+        (action === 'upload' && !file);
 
     return (
-        <Dialog open={open} onOpenChange={onClose}>
+        <Dialog open={open} onOpenChange={(open) => !open && !isSubmitting && onClose()}>
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Process Document Request</DialogTitle>
@@ -159,20 +244,10 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
                             <div className="flex-1 space-y-2">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <h3 className="font-semibold text-lg">
-                                            {request.employee_name}
-                                        </h3>
-                                        <p className="text-sm text-gray-600">
-                                            {request.employee_number}
-                                        </p>
+                                        <h3 className="font-semibold text-lg">{request.employee_name}</h3>
+                                        <p className="text-sm text-gray-600">{request.employee_number}</p>
                                     </div>
-                                    <Badge
-                                        variant={
-                                            request.priority === 'urgent'
-                                                ? 'destructive'
-                                                : 'secondary'
-                                        }
-                                    >
+                                    <Badge variant={request.priority === 'urgent' ? 'destructive' : 'secondary'}>
                                         {request.priority}
                                     </Badge>
                                 </div>
@@ -202,7 +277,10 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
                     {/* Action Selector */}
                     <div className="space-y-4 mb-6">
                         <Label>Choose Action</Label>
-                        <RadioGroup value={action} onValueChange={(value) => setAction(value as 'generate' | 'upload' | 'reject')}>
+                        <RadioGroup
+                            value={action}
+                            onValueChange={(value) => setAction(value as 'generate' | 'upload' | 'reject')}
+                        >
                             <div className="flex items-center space-x-2 border rounded-lg p-4 hover:bg-gray-50">
                                 <RadioGroupItem value="generate" id="generate" />
                                 <Label htmlFor="generate" className="flex-1 cursor-pointer">
@@ -255,14 +333,32 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
                         <div className="space-y-4 mb-6">
                             <div>
                                 <Label htmlFor="template">Template</Label>
-                                <Input
-                                    id="template"
-                                    placeholder="Select template (implementation pending)"
+                                <Select
                                     value={templateId}
-                                    onChange={(e) => setTemplateId(e.target.value)}
-                                />
+                                    onValueChange={setTemplateId}
+                                    disabled={loadingTemplates}
+                                >
+                                    <SelectTrigger id="template">
+                                        <SelectValue
+                                            placeholder={
+                                                loadingTemplates
+                                                    ? 'Loading templates...'
+                                                    : filteredTemplates.length > 0
+                                                    ? 'Select template'
+                                                    : 'No approved templates available'
+                                            }
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {filteredTemplates.map((template) => (
+                                            <SelectItem key={template.id} value={String(template.id)}>
+                                                {template.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Template selection will be implemented with Task 2.6
+                                    Select an approved template for this document request.
                                 </p>
                             </div>
                         </div>
@@ -302,11 +398,8 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
                                     placeholder="Provide a clear reason for rejecting this request..."
                                     rows={4}
                                     className="resize-none"
-                                    required
                                 />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Minimum 20 characters
-                                </p>
+                                <p className="text-xs text-gray-500 mt-1">Minimum 20 characters</p>
                             </div>
 
                             <div>
@@ -314,50 +407,22 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
                                     Common Rejection Reasons
                                 </Label>
                                 <div className="flex flex-wrap gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            insertCommonReason('Incomplete employee records')
-                                        }
-                                    >
-                                        Incomplete Records
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            insertCommonReason('Document not available yet')
-                                        }
-                                    >
-                                        Not Available
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            insertCommonReason(
-                                                'Request period is too recent for payroll processing'
-                                            )
-                                        }
-                                    >
-                                        Too Recent
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            insertCommonReason(
-                                                'Duplicate request already fulfilled'
-                                            )
-                                        }
-                                    >
-                                        Duplicate Request
-                                    </Button>
+                                    {[
+                                        'Incomplete employee records',
+                                        'Document not available yet',
+                                        'Request period is too recent for payroll processing',
+                                        'Duplicate request already fulfilled',
+                                    ].map((reason) => (
+                                        <Button
+                                            key={reason}
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setRejectionReason(reason)}
+                                        >
+                                            {reason.length > 25 ? reason.substring(0, 25) + '…' : reason}
+                                        </Button>
+                                    ))}
                                 </div>
                             </div>
                         </div>
@@ -391,18 +456,20 @@ export function ProcessRequestModal({ open, onClose, request }: ProcessRequestMo
                     </div>
 
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={onClose}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={onClose}
+                            disabled={isSubmitting}
+                        >
                             Cancel
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={
-                                isSubmitting ||
-                                (action === 'reject' && rejectionReason.length < 20) ||
-                                (action === 'upload' && !file)
-                            }
-                        >
-                            {isSubmitting ? 'Processing...' : action === 'reject' ? 'Reject Request' : 'Process Request'}
+                        <Button type="submit" disabled={isSubmitDisabled}>
+                            {isSubmitting
+                                ? 'Processing...'
+                                : action === 'reject'
+                                ? 'Reject Request'
+                                : 'Process Request'}
                         </Button>
                     </DialogFooter>
                 </form>

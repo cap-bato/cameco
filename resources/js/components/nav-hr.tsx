@@ -36,6 +36,7 @@ interface PageProps {
     auth?: {
         permissions?: string[];
     };
+    features?: Record<string, boolean>;
     url?: string;
     [key: string]: unknown;
 }
@@ -43,6 +44,7 @@ interface PageProps {
 export function NavHR() {
     const page = usePage<PageProps>();
     const pageProps = page.props;
+    const features = pageProps.features || {};
     
     // Debug: Log everything
     console.log('=== NavHR Debug ===');
@@ -323,7 +325,7 @@ export function NavHR() {
     return (
         <>
             {/* Employee Management Section */}
-            {filteredEmployeeItems.length > 0 && (
+            {filteredEmployeeItems.length > 0 && features.employee !== false && (
             <SidebarGroup className="px-2 py-0">
                 <Collapsible defaultOpen={isEmployeeManagementActive} className="group/collapsible">
                     <SidebarMenuItem>
@@ -357,7 +359,7 @@ export function NavHR() {
             )}
 
             {/* Leave Management Section */}
-            {filteredLeaveItems.length > 0 && (
+            {filteredLeaveItems.length > 0 && features.leave !== false && (
             <SidebarGroup className="px-2 py-0">
                 <Collapsible defaultOpen={isLeaveManagementActive} className="group/collapsible">
                     <SidebarMenuItem>
@@ -391,7 +393,7 @@ export function NavHR() {
             )}
 
             {/* Document Management Section */}
-            {documentManagementItems.length > 0 && (
+            {documentManagementItems.length > 0 && features.documents !== false && (
             <SidebarGroup className="px-2 py-0">
                 <Collapsible defaultOpen={isDocumentManagementActive} className="group/collapsible">
                     <SidebarMenuItem>
@@ -425,7 +427,7 @@ export function NavHR() {
             )}
 
             {/* Recruitment Section */}
-            {recruitmentItems.length > 0 && (
+            {recruitmentItems.length > 0 && features.ats !== false && (
             <SidebarGroup className="px-2 py-0">
                 <Collapsible defaultOpen={isRecruitmentActive} className="group/collapsible">
                     <SidebarMenuItem>
@@ -459,7 +461,7 @@ export function NavHR() {
             )}
 
             {/* Workforce Management Section */}
-            {workforceManagementItems.length > 0 && (
+            {workforceManagementItems.length > 0 && features.workforce !== false && (
             <SidebarGroup className="px-2 py-0">
                 <Collapsible defaultOpen={isWorkforceManagementActive} className="group/collapsible">
                     <SidebarMenuItem>
@@ -493,7 +495,7 @@ export function NavHR() {
             )}
 
             {/* Timekeeping Section */}
-            {timekeepingItems.length > 0 && (
+            {timekeepingItems.length > 0 && features.timekeeping !== false && (
             <SidebarGroup className="px-2 py-0">
                 <Collapsible defaultOpen={isTimekeepingActive} className="group/collapsible">
                     <SidebarMenuItem>
@@ -527,7 +529,7 @@ export function NavHR() {
             )}
 
             {/* Performance & Appraisal Section */}
-            {appraisalItems.length > 0 && (
+            {appraisalItems.length > 0 && features.appraisals !== false && (
             <SidebarGroup className="px-2 py-0">
                 <Collapsible defaultOpen={isAppraisalActive} className="group/collapsible">
                     <SidebarMenuItem>
@@ -561,7 +563,7 @@ export function NavHR() {
             )}
 
             {/* Offboarding Section */}
-            {offboardingItems.length > 0 && (
+            {offboardingItems.length > 0 && features.offboarding !== false && (
             <SidebarGroup className="px-2 py-0">
                 <Collapsible defaultOpen={isOffboardingActive} className="group/collapsible">
                     <SidebarMenuItem>

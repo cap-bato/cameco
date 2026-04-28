@@ -56,6 +56,7 @@ export default function CreateEditAssignmentModal({
     const [formData, setFormData] = useState<Partial<ShiftAssignment> & { save_as_template?: boolean }>({
         employee_id: undefined,
         schedule_id: undefined,
+        department_id: undefined,
         date: new Date().toISOString().split('T')[0],
         shift_start: '06:00:00',
         shift_end: '14:00:00',
@@ -74,6 +75,7 @@ export default function CreateEditAssignmentModal({
                 id: assignment.id,
                 employee_id: assignment.employee_id,
                 schedule_id: assignment.schedule_id,
+                department_id: assignment.department_id,
                 date: assignment.date,
                 shift_start: assignment.shift_start,
                 shift_end: assignment.shift_end,
@@ -85,6 +87,7 @@ export default function CreateEditAssignmentModal({
             setFormData({
                 employee_id: undefined,
                 schedule_id: undefined,
+                department_id: undefined,
                 date: new Date().toISOString().split('T')[0],
                 shift_start: '06:00:00',
                 shift_end: '14:00:00',
@@ -97,7 +100,30 @@ export default function CreateEditAssignmentModal({
         setConflictMessage('');
     }, [assignment, isOpen]);
 
-    // Validate for conflicts when key fields change
+    // Validate for conflicts when employee or date changes
+    useEffect(() => {
+        if (formData.employee_id && formData.date) {
+            const validateAsync = async () => {
+                const timeValidation = validateShiftTimes(formData.shift_start || '06:00:00', formData.shift_end || '14:00:00');
+                if (!timeValidation.isValid) {
+                    setConflictMessage(timeValidation.errorMessage || 'Invalid shift times');
+                    setHasConflict(true);
+                    return;
+                }
+
+                const conflicts = await detectConflicts(
+                    formData.employee_id,
+                    formData.date
+                );
+
+                setHasConflict(conflicts.hasConflict);
+                setConflictMessage(conflicts.conflictMessage || '');
+            };
+            validateAsync();
+        }
+    }, [formData.employee_id, formData.date, formData.shift_start, formData.shift_end]);
+
+    // Validate for conflicts when key fields change (legacy, kept for manual validation)
     const validateAssignment = async () => {
         setIsValidating(true);
 
@@ -122,22 +148,32 @@ export default function CreateEditAssignmentModal({
         setIsValidating(false);
     };
 
+    const handleEmployeeChange = (employeeId: string) => {
+        const parsedId = parseInt(employeeId);
+        const emp = employees.find((e) => e.id === parsedId);
+        
+        setFormData((prev) => ({
+            ...prev,
+            employee_id: parsedId,  // ← use parsed ID directly, don't rely on emp?.id
+            department_id: emp?.department_id,
+        }));
+    };
+
     const handleSelectSchedule = (scheduleId: string) => {
-        const schedule = schedules.find((s) => s.id === parseInt(scheduleId));
+        const parsedId = parseInt(scheduleId);
+        const schedule = schedules.find((s) => s.id === parsedId);
         if (schedule) {
-            setFormData({
-                ...formData,
-                schedule_id: parseInt(scheduleId),
+            setFormData((prev) => ({
+                ...prev,
+                schedule_id: parsedId,
                 shift_start: schedule.shift_start,
                 shift_end: schedule.shift_end,
-            });
-            validateAssignment();
+            }));
         }
     };
 
     const handleDateChange = (date: string) => {
-        setFormData({ ...formData, date });
-        validateAssignment();
+        setFormData((prev) => ({ ...prev, date }));
     };
 
     const handleSubmit = () => {
@@ -185,10 +221,7 @@ export default function CreateEditAssignmentModal({
                                 </Label>
                                 <Select
                                     value={formData.employee_id?.toString()}
-                                    onValueChange={(value) => {
-                                        setFormData({ ...formData, employee_id: parseInt(value) });
-                                        validateAssignment();
-                                    }}
+                                    onValueChange={handleEmployeeChange}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select employee" />

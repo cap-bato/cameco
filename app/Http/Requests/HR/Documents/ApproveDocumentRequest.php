@@ -11,7 +11,16 @@ class ApproveDocumentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->can('hr.documents.requests.approve') ?? false;
+        $user = $this->user();
+        if (!$user) {
+            return false;
+        }
+
+        if ($user->can('hr.documents.approve') || $user->can('hr.documents.upload')) {
+            return true;
+        }
+
+        return $user->hasAnyRole(['HR Manager', 'HR Staff', 'Superadmin']);
     }
 
     /**

@@ -112,6 +112,12 @@ class RfidLedger extends Model
         return $this->belongsTo(\App\Models\RfidCardMapping::class, 'employee_rfid', 'card_uid');
     }
 
+    // Accessor: resolve Employee through the card mapping (supports $entry->employee)
+    public function getEmployeeAttribute()
+    {
+        return $this->rfidCardMapping?->employee;
+    }
+
     // Relationship: RFID Device
     public function device()
     {

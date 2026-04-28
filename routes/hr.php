@@ -47,7 +47,7 @@ use App\Http\Controllers\HR\Offboarding\ReportController as OffboardingReportCon
 use App\Http\Middleware\EnsureHRAccess;
 // use App\Http\Middleware\EnsureProfileComplete; for future useronboarding workflow
 
-Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
+Route::middleware(['auth', 'verified' , EnsureHRAccess::class, 'module:employee'])
     ->prefix('hr')
     ->name('hr.')
     ->group(function () {
@@ -124,7 +124,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
         });
 
         // Leave Management
-        Route::prefix('leave')->name('leave.')->group(function () {
+        Route::prefix('leave')->name('leave.')->middleware('module:leave')->group(function () {
             Route::get('/requests', [LeaveRequestController::class, 'index'])->name('requests');
             Route::get('/requests/create', [LeaveRequestController::class, 'create'])->name('requests.create');
             Route::post('/requests', [LeaveRequestController::class, 'store'])->name('requests.store');
@@ -133,6 +133,10 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::put('/requests/{id}', [LeaveRequestController::class, 'update'])->name('requests.update');
             Route::post('/requests/{id}/process', [LeaveRequestController::class, 'processApproval'])->name('requests.process');
             Route::delete('/requests/{id}', [LeaveRequestController::class, 'destroy'])->name('requests.destroy');
+            
+            // API endpoint to get employee leave balances (for leave request form)
+            Route::get('/employee/{employeeId}/balances', [LeaveBalanceController::class, 'getEmployeeBalances'])->name('employee-balances');
+            
             Route::get('/balances', [LeaveBalanceController::class, 'index'])->name('balances');
             Route::get('/policies', [LeavePolicyController::class, 'index'])->name('policies');
             
@@ -153,7 +157,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
         });
 
         // Document Management Module
-        Route::prefix('documents')->name('documents.')->group(function () {
+        Route::prefix('documents')->name('documents.')->middleware('module:documents')->group(function () {
             // Employee Documents
             Route::get('/', [\App\Http\Controllers\HR\Documents\EmployeeDocumentController::class, 'index'])
                 ->middleware('permission:hr.documents.view')
@@ -212,6 +216,10 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 Route::get('/', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'index'])
                     ->middleware('permission:hr.documents.view')
                     ->name('index');
+
+                Route::get('/{request}', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'show'])
+                    ->middleware('permission:hr.documents.view')
+                    ->name('show');
                 
                 Route::post('/{request}/process', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'process'])
                     ->middleware('permission:hr.documents.upload')
@@ -219,11 +227,11 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 
                 // Individual approve/reject endpoints (use FormRequests for authorization/validation)
                 Route::post('/{request}/approve', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'approve'])
-                    ->middleware('permission:hr.documents.approve')
+                    ->middleware('permission:hr.documents.approve|hr.documents.upload')
                     ->name('approve');
 
                 Route::post('/{request}/reject', [\App\Http\Controllers\HR\Documents\DocumentRequestController::class, 'reject'])
-                    ->middleware('permission:hr.documents.reject')
+                    ->middleware('permission:hr.documents.reject|hr.documents.upload')
                     ->name('reject');
                 
                 // Bulk actions for document requests
@@ -272,7 +280,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
         });
 
         // Appraisal & Performance Management Module
-        Route::prefix('appraisals')->name('appraisals.')->group(function () {
+        Route::prefix('appraisals')->name('appraisals.')->middleware('module:appraisals')->group(function () {
             // Appraisal Cycles
             Route::prefix('cycles')->name('cycles.')->group(function () {
                 Route::get('/', [AppraisalCycleController::class, 'index'])
@@ -293,6 +301,9 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
                 Route::put('/{id}', [AppraisalCycleController::class, 'update'])
                     ->middleware('permission:hr.appraisals.conduct')
                     ->name('update');
+                Route::delete('/{id}', [AppraisalCycleController::class, 'destroy'])
+                    ->middleware('permission:hr.appraisals.conduct')
+                    ->name('destroy');
                 Route::post('/{id}/close', [AppraisalCycleController::class, 'close'])
                     ->middleware('permission:hr.appraisals.conduct')
                     ->name('close');
@@ -352,31 +363,31 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
         });
 
         // ATS (Applicant Tracking System) Module
-        Route::prefix('ats')->name('ats.')->group(function () {
+        Route::prefix('ats')->name('ats.')->middleware('module:ats')->group(function () {
             // Job Postings
             Route::get('/job-postings', [JobPostingController::class, 'index'])
                 ->middleware('permission:hr.ats.view')
                 ->name('job-postings.index');
             Route::get('/job-postings/create', [JobPostingController::class, 'create'])
-                ->middleware('permission:hr.ats.candidates.create')
+                ->middleware('permission:hr.ats.job-postings.create')
                 ->name('job-postings.create');
             Route::post('/job-postings', [JobPostingController::class, 'store'])
-                ->middleware('permission:hr.ats.candidates.create')
+                ->middleware('permission:recruitment.job_postings.create')
                 ->name('job-postings.store');
             Route::get('/job-postings/{id}/edit', [JobPostingController::class, 'edit'])
-                ->middleware('permission:hr.ats.candidates.update')
+                ->middleware('permission:hr.ats.job-postings.update')
                 ->name('job-postings.edit');
             Route::put('/job-postings/{id}', [JobPostingController::class, 'update'])
-                ->middleware('permission:hr.ats.candidates.update')
+                ->middleware('permission:hr.ats.job-postings.update')
                 ->name('job-postings.update');
             Route::delete('/job-postings/{id}', [JobPostingController::class, 'destroy'])
-                ->middleware('permission:hr.ats.candidates.delete')
+                ->middleware('permission:hr.ats.job-postings.delete')
                 ->name('job-postings.destroy');
             Route::post('/job-postings/{id}/publish', [JobPostingController::class, 'publish'])
-                ->middleware('permission:hr.ats.candidates.update')
+                ->middleware('permission:hr.ats.job-postings.update')
                 ->name('job-postings.publish');
             Route::post('/job-postings/{id}/close', [JobPostingController::class, 'close'])
-                ->middleware('permission:hr.ats.candidates.update')
+                ->middleware('permission:hr.ats.job-postings.update')
                 ->name('job-postings.close');
 
             // Facebook Integration Routes
@@ -408,35 +419,51 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::get('/candidates', [CandidateController::class, 'index'])
                 ->middleware('permission:hr.ats.candidates.view')
                 ->name('candidates.index');
-            Route::get('/candidates/{id}', [CandidateController::class, 'show'])
+            Route::get('/candidates/{candidate}', [CandidateController::class, 'show'])
                 ->middleware('permission:hr.ats.candidates.view')
                 ->name('candidates.show');
             Route::post('/candidates', [CandidateController::class, 'store'])
                 ->middleware('permission:hr.ats.candidates.create')
                 ->name('candidates.store');
-            Route::put('/candidates/{id}', [CandidateController::class, 'update'])
+            Route::put('/candidates/{candidate}', [CandidateController::class, 'update'])
                 ->middleware('permission:hr.ats.candidates.update')
                 ->name('candidates.update');
-            Route::post('/candidates/{id}/notes', [CandidateController::class, 'addNote'])
+            Route::delete('/candidates/{candidate}', [CandidateController::class, 'destroy'])
+                ->middleware('permission:hr.ats.candidates.delete')
+                ->name('candidates.destroy');
+            Route::post('/candidates/{candidate}/notes', [CandidateController::class, 'addNote'])
                 ->middleware('permission:hr.ats.candidates.update')
                 ->name('candidates.notes.store');
+
 
             // Applications
             Route::get('/applications', [ApplicationController::class, 'index'])
                 ->middleware('permission:hr.ats.applications.view')
                 ->name('applications.index');
-            Route::get('/applications/{id}', [ApplicationController::class, 'show'])
+            Route::get('/applications/{application}', [ApplicationController::class, 'show'])
                 ->middleware('permission:hr.ats.applications.view')
                 ->name('applications.show');
-            Route::put('/applications/{id}/status', [ApplicationController::class, 'updateStatus'])
+            Route::put('/applications/{application}/status', [ApplicationController::class, 'updateStatus'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.update-status');
-            Route::post('/applications/{id}/shortlist', [ApplicationController::class, 'shortlist'])
+            Route::post('/applications/{application}/shortlist', [ApplicationController::class, 'shortlist'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.shortlist');
-            Route::post('/applications/{id}/reject', [ApplicationController::class, 'reject'])
+            Route::post('/applications/{application}/reject', [ApplicationController::class, 'reject'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('applications.reject');
+            Route::post('/applications/{application}/move', [ApplicationController::class, 'move'])
+                ->middleware('permission:hr.ats.applications.update')
+                ->name('applications.move');
+            Route::post('/applications/{application}/schedule-interview', [ApplicationController::class, 'scheduleInterview'])
+                ->middleware('permission:hr.ats.applications.update')
+                ->name('applications.schedule-interview');
+            Route::post('/applications/{application}/generate-offer', [ApplicationController::class, 'generateOffer'])
+                ->middleware('permission:hr.ats.applications.update')
+                ->name('applications.generate-offer');
+            Route::post('/applications/{application}/notes', [ApplicationController::class, 'addNote'])
+                ->middleware('permission:hr.ats.applications.update')
+                ->name('applications.notes.store');
 
             // Interviews
             Route::get('/interviews', [InterviewController::class, 'index'])
@@ -451,7 +478,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::put('/interviews/{id}', [InterviewController::class, 'update'])
                 ->middleware('permission:hr.ats.interviews.schedule')
                 ->name('interviews.update');
-            Route::post('/interviews/{id}/feedback', [InterviewController::class, 'addFeedback'])
+            Route::post('/interviews/{id}/feedback', [InterviewController::class, 'updateFeedback'])
                 ->middleware('permission:hr.ats.interviews.schedule')
                 ->name('interviews.feedback');
             Route::post('/interviews/{id}/cancel', [InterviewController::class, 'cancel'])
@@ -460,18 +487,20 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
             Route::post('/interviews/{id}/complete', [InterviewController::class, 'markCompleted'])
                 ->middleware('permission:hr.ats.interviews.schedule')
                 ->name('interviews.complete');
-
+                
             // Hiring Pipeline
             Route::get('/hiring-pipeline', [HiringPipelineController::class, 'index'])
                 ->middleware('permission:hr.ats.view')
                 ->name('hiring-pipeline.index');
+            
             Route::put('/hiring-pipeline/applications/{id}/move', [HiringPipelineController::class, 'moveApplication'])
                 ->middleware('permission:hr.ats.applications.update')
                 ->name('hiring-pipeline.move');
+            
         });
 
         // Workforce Management Module
-        Route::prefix('workforce')->name('workforce.')->group(function () {
+        Route::prefix('workforce')->name('workforce.')->middleware('module:workforce')->group(function () {
             // Work Schedules
             Route::get('/schedules', [ScheduleController::class, 'index'])
                 ->middleware('permission:hr.workforce.schedules.view')
@@ -642,7 +671,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
         });
 
         // Offboarding Module
-        Route::prefix('offboarding')->name('offboarding.')->group(function () {
+        Route::prefix('offboarding')->name('offboarding.')->middleware('module:offboarding')->group(function () {
             // Offboarding Dashboard
             Route::get('/dashboard', [OffboardingDashboardController::class, 'index'])
                 ->middleware('permission:hr.offboarding.view')
@@ -786,7 +815,7 @@ Route::middleware(['auth', 'verified' , EnsureHRAccess::class])
         });
 
         // Timekeeping Module
-        Route::prefix('timekeeping')->name('timekeeping.')->group(function () {
+        Route::prefix('timekeeping')->name('timekeeping.')->middleware('module:timekeeping')->group(function () {
             // Attendance Management
             Route::get('/attendance', [AttendanceController::class, 'index'])
                 ->middleware('permission:hr.timekeeping.attendance.view')

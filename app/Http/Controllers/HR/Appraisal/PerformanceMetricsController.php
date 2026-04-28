@@ -31,25 +31,94 @@ class PerformanceMetricsController extends Controller
         $dateFrom = $request->input('date_from', '');
         $dateTo = $request->input('date_to', '');
 
-        // Mock performance metrics
-        $mockMetrics = $this->getMockPerformanceMetrics();
+        // Query completed/acknowledged appraisals with employee and department
+        $appraisalsQuery = \App\Models\Appraisal::with([
+            'employee.profile',
+            'employee.department',
+        ])->whereIn('status', ['completed', 'acknowledged']);
 
-        // Apply filters
         if ($departmentId) {
-            $mockMetrics = array_filter($mockMetrics, fn($m) => (string)$m['department_id'] === $departmentId);
-        }
-        if ($performanceCategory) {
-            $mockMetrics = array_filter($mockMetrics, fn($m) => $m['performance_category'] === $performanceCategory);
+            $appraisalsQuery->whereHas('employee', function ($q) use ($departmentId) {
+                $q->where('department_id', $departmentId);
+            });
         }
 
-        // Get departments for filter
-        $departments = $this->getMockDepartments();
+        if ($dateFrom) {
+            $appraisalsQuery->whereDate('submitted_at', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $appraisalsQuery->whereDate('submitted_at', '<=', $dateTo);
+        }
+
+        $appraisals = $appraisalsQuery->get();
+
+        // Get attendance rates for all employees in the result set
+        $employeeIds = $appraisals->pluck('employee_id')->unique()->values();
+        $attendanceRates = [];
+        if ($employeeIds->count() > 0) {
+            $attendanceData = \App\Models\DailyAttendanceSummary::selectRaw('employee_id, AVG(CASE WHEN is_present THEN 1 ELSE 0 END) * 100 as attendance_rate')
+                ->whereIn('employee_id', $employeeIds)
+                ->groupBy('employee_id')
+                ->pluck('attendance_rate', 'employee_id');
+            $attendanceRates = $attendanceData->toArray();
+        }
+
+        // Build metrics array
+        $metrics = $appraisals->map(function ($a) use ($attendanceRates) {
+            $employee = $a->employee;
+            $department = $employee?->department;
+            // Always provide a float for attendance and score
+            $attendance = isset($attendanceRates[$a->employee_id]) && is_numeric($attendanceRates[$a->employee_id])
+                ? floatval($attendanceRates[$a->employee_id])
+                : 0.0;
+            $overallScore = $a->overall_score !== null ? floatval($a->overall_score) : 0.0;
+
+            // Performance category logic
+            $category = 'medium';
+            if ($overallScore >= 7.5 && $attendance >= 90) {
+                $category = 'high';
+            } elseif ($overallScore < 5.0 || $attendance < 80) {
+                $category = 'low';
+            }
+
+            // Trend is not calculated here (requires historical data)
+            $trend = 'stable';
+
+            return [
+                'employee_id' => $employee->id,
+                'employee_name' => $employee->profile?->first_name . ' ' . $employee->profile?->last_name,
+                'employee_number' => $employee->employee_number,
+                'department_id' => $department?->id,
+                'department_name' => $department?->name,
+                'overall_score' => $overallScore,
+                'attendance_rate' => $attendance,
+                'behavior_score' => null, // Placeholder, needs more logic
+                'productivity_score' => null, // Placeholder, needs more logic
+                'performance_category' => $category,
+                'trend' => $trend,
+            ];
+        })->filter(function ($m) use ($performanceCategory) {
+            if ($performanceCategory && $performanceCategory !== 'all') {
+                return $m['performance_category'] === $performanceCategory;
+            }
+            return true;
+        })->values()->all();
 
         // Calculate summary statistics
-        $summary = $this->calculatePerformanceSummary($mockMetrics);
+        $summary = [
+            'average_score' => count($metrics) ? round(array_sum(array_column($metrics, 'overall_score')) / count($metrics), 2) : 0,
+            'high_performers' => count(array_filter($metrics, fn($m) => $m['performance_category'] === 'high')),
+            'low_performers' => count(array_filter($metrics, fn($m) => $m['performance_category'] === 'low')),
+            'completion_rate' => 100, // Placeholder, can be improved
+        ];
+
+        // Get departments for filter dropdown
+        $departments = \App\Models\Department::orderBy('name')->get(['id', 'name'])->map(function ($d) {
+            return ['id' => $d->id, 'name' => $d->name];
+        })->values();
 
         return Inertia::render('HR/PerformanceMetrics/Index', [
-            'metrics' => array_values($mockMetrics),
+            'metrics' => $metrics,
             'departments' => $departments,
             'summary' => $summary,
             'filters' => [

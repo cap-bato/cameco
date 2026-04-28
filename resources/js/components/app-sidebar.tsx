@@ -34,7 +34,7 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
-    const { auth } = usePage<SharedData>().props;
+    const { auth, features } = usePage<SharedData>().props;
     const userRoles = auth.roles || [];
     
     // Check user roles
@@ -64,19 +64,19 @@ export function AppSidebar() {
                 <NavMain items={mainNavItems} />
                 
                 {/* Office Admin Navigation - Show for Office Admin */}
-                {isOfficeAdmin && <NavAdmin />}
+                {isOfficeAdmin && features?.admin !== false && <NavAdmin />}
                 
                 {/* HR Navigation - Show for HR Manager and HR Staff */}
                 {hasHRAccess && <NavHR />}
                 
                 {/* Payroll Officer Navigation - Show only for Payroll Officer */}
-                {isPayrollOfficer && <NavPayroll />}
+                {isPayrollOfficer && features?.payroll !== false && <NavPayroll />}
                 
                 {/* Employee Navigation - Show only for Employee role */}
-                {isEmployee && <NavEmployee />}
+                {isEmployee && features?.employee !== false && <NavEmployee />}
                 
                 {/* System Admin Navigation - Show only for Superadmin */}
-                {isSuperadmin && <NavSystemAdmin />}
+                {isSuperadmin && features?.system !== false && <NavSystemAdmin />}
             </SidebarContent>
 
             <SidebarFooter>

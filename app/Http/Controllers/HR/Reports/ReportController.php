@@ -86,84 +86,83 @@ class ReportController extends Controller
     {
         $this->authorize('viewAny', Employee::class);
 
-        // Leave statistics (placeholder - will be replaced with actual leave data from ISSUE-5)
+        // Live leave statistics
+        $now = now();
+        $months = collect(range(0, 5))->map(function ($i) use ($now) {
+            return $now->copy()->subMonths($i)->startOfMonth();
+        })->reverse();
+        $earliestMonth = $months->first()->copy()->startOfMonth();
+        $latestMonth = $months->last()->copy()->endOfMonth();
+            $leaveRequests = \App\Models\LeaveRequest::with('leavePolicy')
+                ->whereDate('start_date', '>=', $earliestMonth->toDateString())
+                ->whereDate('start_date', '<=', $latestMonth->toDateString())
+                ->get();
+
+            // Debug: Log leaveRequests count and by_month data
+            \Log::debug('LeaveReportController.leave: leaveRequests count', ['count' => $leaveRequests->count()]);
+
         $summary = [
-            'total_pending_requests' => 12,
-            'total_approved_requests' => 45,
-            'total_rejected_requests' => 3,
-            'employees_on_leave' => 8,
-            'leave_days_used_this_year' => 156,
-            'leave_days_remaining_average' => 12.5,
+            'total_pending_requests' => $leaveRequests->where('status', 'pending')->count(),
+            'total_approved_requests' => $leaveRequests->where('status', 'approved')->count(),
+            'total_rejected_requests' => $leaveRequests->where('status', 'rejected')->count(),
+            'employees_on_leave' => \App\Models\LeaveRequest::where('status', 'approved')
+                ->where('start_date', '<=', $now->toDateString())
+                ->where('end_date', '>=', $now->toDateString())
+                ->distinct('employee_id')->count('employee_id'),
+            'leave_days_used_this_year' => $leaveRequests->where('status', 'approved')->sum('days_requested'),
+            'leave_days_remaining_average' => round(\App\Models\LeaveBalance::where('year', $now->year)->avg('remaining'), 1),
         ];
 
         // Leave by type
-        $byType = [
-            [
-                'leave_type' => 'Vacation Leave',
-                'count' => 25,
-                'percentage' => 37.88,
-            ],
-            [
-                'leave_type' => 'Sick Leave',
-                'count' => 12,
-                'percentage' => 18.18,
-            ],
-            [
-                'leave_type' => 'Emergency Leave',
-                'count' => 5,
-                'percentage' => 7.58,
-            ],
-            [
-                'leave_type' => 'Maternity/Paternity Leave',
-                'count' => 2,
-                'percentage' => 3.03,
-            ],
-            [
-                'leave_type' => 'Privilege Leave',
-                'count' => 8,
-                'percentage' => 12.12,
-            ],
-            [
-                'leave_type' => 'Bereavement Leave',
-                'count' => 3,
-                'percentage' => 4.55,
-            ],
-            [
-                'leave_type' => 'Special Leave',
-                'count' => 11,
-                'percentage' => 16.67,
-            ],
-        ];
+        $byType = $leaveRequests->groupBy(fn($r) => $r->leavePolicy?->name ?? 'Unknown')
+            ->map(function ($group, $type) use ($leaveRequests) {
+                $count = $group->count();
+                $total = $leaveRequests->count();
+                return [
+                    'leave_type' => $type,
+                    'count' => $count,
+                    'percentage' => $total > 0 ? round(($count / $total) * 100, 2) : 0,
+                ];
+            })->values();
 
         // Leave by status
-        $byStatus = [
-            [
-                'status' => 'Pending',
-                'count' => 12,
-                'percentage' => 17.39,
-            ],
-            [
-                'status' => 'Approved',
-                'count' => 45,
-                'percentage' => 65.22,
-            ],
-            [
-                'status' => 'Rejected',
-                'count' => 3,
-                'percentage' => 4.35,
-            ],
-            [
-                'status' => 'Cancelled',
-                'count' => 9,
-                'percentage' => 13.04,
-            ],
-        ];
+        $byStatus = $leaveRequests->groupBy('status')
+            ->map(function ($group, $status) use ($leaveRequests) {
+                $count = $group->count();
+                $total = $leaveRequests->count();
+                return [
+                    'status' => ucfirst($status),
+                    'count' => $count,
+                    'percentage' => $total > 0 ? round(($count / $total) * 100, 2) : 0,
+                ];
+            })->values();
+
+        // Monthly leave trends (last 6 months)
+        $months = collect(range(0, 5))->map(function ($i) use ($now) {
+            return $now->copy()->subMonths($i)->startOfMonth();
+        })->reverse();
+
+        $byMonth = $months->map(function ($month) use ($leaveRequests) {
+            $monthStr = $month->format('Y-m');
+            $requests = $leaveRequests->filter(function ($r) use ($month) {
+                return $r->start_date->format('Y-m') === $month->format('Y-m');
+            });
+            return [
+                'month' => $month->format('M Y'),
+                'total' => $requests->count(),
+                'approved' => $requests->where('status', 'approved')->count(),
+                'pending' => $requests->where('status', 'pending')->count(),
+                'rejected' => $requests->where('status', 'rejected')->count(),
+                'cancelled' => $requests->where('status', 'cancelled')->count(),
+            ];
+        });
+            \Log::debug('LeaveReportController.leave: byMonth', ['by_month' => $byMonth]);
 
         return Inertia::render('HR/Reports/Leave', [
             'summary' => $summary,
             'by_type' => $byType,
             'by_status' => $byStatus,
-            'by_month' => [],
+            'by_month' => $byMonth,
             'top_users' => [],
             'can_export' => auth()->user()->can('hr.leave.export'),
         ]);

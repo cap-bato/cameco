@@ -313,6 +313,28 @@ class SystemCronService
     }
 
     /**
+     * Record a scheduler-triggered execution by command signature.
+     *
+     * This keeps the Superadmin Cron UI in sync with jobs that run via
+     * Laravel's scheduler, not only jobs manually triggered from the UI.
+     */
+    public function recordScheduledExecutionByCommand(string $command, int $exitCode, string $output = ''): void
+    {
+        $job = $this->repository->findByCommand($command);
+
+        if (! $job) {
+            Log::warning('Skipped scheduled job execution recording because command was not found in scheduled_jobs', [
+                'command' => $command,
+                'exit_code' => $exitCode,
+            ]);
+
+            return;
+        }
+
+        $this->repository->recordExecution($job->id, $exitCode, $output);
+    }
+
+    /**
      * Get aggregated job metrics.
      *
      * @return array

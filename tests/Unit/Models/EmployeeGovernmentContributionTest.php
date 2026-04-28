@@ -14,20 +14,50 @@ class EmployeeGovernmentContributionTest extends TestCase
 {
     use RefreshDatabase;
 
-    private Employee $employee;
     private PayrollPeriod $period;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->employee = Employee::factory()->create();
-        $this->period   = PayrollPeriod::create([
-            'period_name'  => 'January 2026',
-            'period_month' => '2026-01',
-            'period_start' => '2026-01-01',
-            'period_end'   => '2026-01-31',
-            'status'       => 'finalized',
+        $this->period = $this->makePeriod('2026-01', 'A');
+    }
+
+    private function makePeriod(string $month, string $suffix = 'A'): PayrollPeriod
+    {
+        [$year, $m] = explode('-', $month);
+        $start = "{$year}-{$m}-01";
+        $end   = date('Y-m-t', strtotime($start));
+        return PayrollPeriod::create([
+            'period_number'           => "{$month}-{$suffix}",
+            'period_name'             => date('F Y', strtotime($start)) . " – Period {$suffix}",
+            'period_start'            => $start,
+            'period_end'              => $end,
+            'payment_date'            => date('Y-m-d', strtotime($end . ' +5 days')),
+            'period_month'            => $month,
+            'period_year'             => (int) $year,
+            'timekeeping_cutoff_date' => $end,
+            'leave_cutoff_date'       => $end,
+            'adjustment_deadline'     => date('Y-m-d', strtotime($end . ' +2 days')),
         ]);
+    }
+
+    /**
+     * Creates a fresh Employee per call so the UNIQUE(employee_id, payroll_period_id)
+     * constraint is never violated when multiple contributions share the same period.
+     */
+    private function makeContribution(array $overrides = []): EmployeeGovernmentContribution
+    {
+        return EmployeeGovernmentContribution::create(array_merge([
+            'employee_id'        => Employee::factory()->create()->id,
+            'payroll_period_id'  => $this->period->id,
+            'period_month'       => '2026-01',
+            'period_start'       => '2026-01-01',
+            'period_end'         => '2026-01-31',
+            'basic_salary'       => 0,
+            'gross_compensation' => 0,
+            'taxable_income'     => 0,
+            'status'             => 'pending',
+        ], $overrides));
     }
 
     // -------------------------------------------------------------------------
@@ -36,25 +66,14 @@ class EmployeeGovernmentContributionTest extends TestCase
 
     public function test_belongs_to_employee(): void
     {
-        $contribution = EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'pending',
-        ]);
-
-        $this->assertTrue($contribution->employee->is($this->employee));
+        $employee     = Employee::factory()->create();
+        $contribution = $this->makeContribution(['employee_id' => $employee->id]);
+        $this->assertTrue($contribution->employee->is($employee));
     }
 
     public function test_belongs_to_payroll_period(): void
     {
-        $contribution = EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'pending',
-        ]);
-
+        $contribution = $this->makeContribution();
         $this->assertTrue($contribution->payrollPeriod->is($this->period));
     }
 
@@ -62,13 +81,7 @@ class EmployeeGovernmentContributionTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $contribution = EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'pending',
-            'calculated_by'     => $user->id,
-        ]);
+        $contribution = $this->makeContribution(['calculated_by' => $user->id]);
 
         $this->assertTrue($contribution->calculatedBy->is($user));
     }
@@ -77,13 +90,7 @@ class EmployeeGovernmentContributionTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $contribution = EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'processed',
-            'processed_by'      => $user->id,
-        ]);
+        $contribution = $this->makeContribution(['status' => 'processed', 'processed_by' => $user->id]);
 
         $this->assertTrue($contribution->processedBy->is($user));
     }
@@ -94,18 +101,8 @@ class EmployeeGovernmentContributionTest extends TestCase
 
     public function test_scope_pending_returns_only_pending_records(): void
     {
-        EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'pending',
-        ]);
-        EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'processed',
-        ]);
+        $this->makeContribution(['status' => 'pending']);
+        $this->makeContribution(['status' => 'processed']);
 
         $pending = EmployeeGovernmentContribution::pending()->get();
 
@@ -115,18 +112,8 @@ class EmployeeGovernmentContributionTest extends TestCase
 
     public function test_scope_processed_returns_only_processed_records(): void
     {
-        EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'processed',
-        ]);
-        EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'remitted',
-        ]);
+        $this->makeContribution(['status' => 'processed']);
+        $this->makeContribution(['status' => 'remitted']);
 
         $processed = EmployeeGovernmentContribution::processed()->get();
 
@@ -136,18 +123,8 @@ class EmployeeGovernmentContributionTest extends TestCase
 
     public function test_scope_remitted_returns_only_remitted_records(): void
     {
-        EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'remitted',
-        ]);
-        EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'pending',
-        ]);
+        $this->makeContribution(['status' => 'remitted']);
+        $this->makeContribution(['status' => 'pending']);
 
         $remitted = EmployeeGovernmentContribution::remitted()->get();
 
@@ -157,18 +134,8 @@ class EmployeeGovernmentContributionTest extends TestCase
 
     public function test_scope_by_period_month_filters_correctly(): void
     {
-        EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'pending',
-        ]);
-        EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-02',
-            'status'            => 'pending',
-        ]);
+        $this->makeContribution(['period_month' => '2026-01']);
+        $this->makeContribution(['period_month' => '2026-02']);
 
         $results = EmployeeGovernmentContribution::byPeriodMonth('2026-01')->get();
 
@@ -178,18 +145,8 @@ class EmployeeGovernmentContributionTest extends TestCase
 
     public function test_scope_by_status_filters_correctly(): void
     {
-        EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'processed',
-        ]);
-        EmployeeGovernmentContribution::create([
-            'employee_id'       => $this->employee->id,
-            'payroll_period_id' => $this->period->id,
-            'period_month'      => '2026-01',
-            'status'            => 'remitted',
-        ]);
+        $this->makeContribution(['status' => 'processed']);
+        $this->makeContribution(['status' => 'remitted']);
 
         $results = EmployeeGovernmentContribution::byStatus('processed')->get();
 
@@ -203,10 +160,7 @@ class EmployeeGovernmentContributionTest extends TestCase
 
     public function test_decimal_casts_return_numeric_values(): void
     {
-        $contribution = EmployeeGovernmentContribution::create([
-            'employee_id'              => $this->employee->id,
-            'payroll_period_id'        => $this->period->id,
-            'period_month'             => '2026-01',
+        $contribution = $this->makeContribution([
             'status'                   => 'processed',
             'sss_employee_contribution' => 363.00,
             'sss_employer_contribution' => 759.70,
@@ -221,14 +175,10 @@ class EmployeeGovernmentContributionTest extends TestCase
 
     public function test_boolean_casts_return_bool(): void
     {
-        $contribution = EmployeeGovernmentContribution::create([
-            'employee_id'         => $this->employee->id,
-            'payroll_period_id'   => $this->period->id,
-            'period_month'        => '2026-01',
-            'status'              => 'pending',
-            'is_sss_exempted'     => false,
+        $contribution = $this->makeContribution([
+            'is_sss_exempted'        => false,
             'is_philhealth_exempted' => false,
-            'is_pagibig_exempted' => true,
+            'is_pagibig_exempted'    => true,
         ]);
 
         $fresh = $contribution->fresh();

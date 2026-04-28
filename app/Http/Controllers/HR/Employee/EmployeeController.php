@@ -48,14 +48,15 @@ class EmployeeController extends Controller
             ->get();
 
         // Get employee statistics
-        $statistics = \App\Models\Employee::selectRaw('status, COUNT(*) as count')
+        $statistics = \App\Models\Employee::withTrashed()
+            ->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
             ->get()
             ->pluck('count', 'status')
             ->toArray();
 
-        // Get grand total of all employees (unfiltered)
-        $grandTotal = \App\Models\Employee::count();
+        // Get grand total of all employees (including archived)
+        $grandTotal = \App\Models\Employee::withTrashed()->count();
 
         return Inertia::render('HR/Employees/Index', [
             'employees' => $employees,
@@ -292,8 +293,8 @@ class EmployeeController extends Controller
 
         $result = $this->employeeService->archiveEmployee(
             employeeId: $id,
-            reason: request()->input('reason', 'Archived by HR Manager'),
-            terminationDate: request()->input('termination_date', now()->format('Y-m-d'))
+            reason: request()->input('reason') ?: 'Archived by HR Manager',
+            terminationDate: request()->input('termination_date') ?: now()->format('Y-m-d')
         );
 
         if ($result['success']) {

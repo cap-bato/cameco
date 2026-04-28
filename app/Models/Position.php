@@ -15,6 +15,7 @@ class Position extends Model
 
     protected $fillable = [
         'title',
+        'code',
         'description',
         'department_id',
         'reports_to',
@@ -55,6 +56,14 @@ class Position extends Model
     public function directReports(): HasMany
     {
         return $this->hasMany(Position::class, 'reports_to');
+    }
+
+    /**
+     * Employees in this position
+     */
+    public function employees(): HasMany
+    {
+        return $this->hasMany(Employee::class, 'position_id');
     }
 
     /**

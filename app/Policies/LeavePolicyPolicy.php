@@ -12,7 +12,7 @@ class LeavePolicyPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->can('admin.leave-policies.view');
+        return $user->can('admin.leave-policies.view') || $user->can('hr.leave-policies.view');;
     }
 
     /**
@@ -20,7 +20,7 @@ class LeavePolicyPolicy
      */
     public function view(User $user, LeavePolicy $leavePolicy): bool
     {
-        return $user->can('admin.leave-policies.view');
+        return $user->can('admin.leave-policies.view') || $user->can('hr.leave-policies.view');
     }
 
     /**
@@ -28,7 +28,7 @@ class LeavePolicyPolicy
      */
     public function create(User $user): bool
     {
-        return $user->can('admin.leave-policies.create');
+        return $user->can('admin.leave-policies.create') || $user->can('hr.leave-policies.create');
     }
 
     /**
@@ -36,7 +36,7 @@ class LeavePolicyPolicy
      */
     public function update(User $user, LeavePolicy $leavePolicy): bool
     {
-        return $user->can('admin.leave-policies.edit');
+        return $user->can('admin.leave-policies.edit') || $user->can('hr.leave-policies.edit');
     }
 
     /**
@@ -47,7 +47,7 @@ class LeavePolicyPolicy
      */
     public function delete(User $user, LeavePolicy $leavePolicy): bool
     {
-        if (!$user->can('admin.leave-policies.delete')) {
+        if (!$user->can('admin.leave-policies.delete') || $user->can('hr.leave-policies.delete')) {
             return false;
         }
 
@@ -79,7 +79,7 @@ class LeavePolicyPolicy
      */
     public function restore(User $user, LeavePolicy $leavePolicy): bool
     {
-        return $user->can('admin.leave-policies.edit');
+        return $user->can('admin.leave-policies.edit') || $user->can('hr.leave-policies.edit');
     }
 
     /**

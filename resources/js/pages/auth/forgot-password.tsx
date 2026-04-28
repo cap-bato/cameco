@@ -12,6 +12,8 @@ import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
 
 export default function ForgotPassword({ status }: { status?: string }) {
+    const forgotPasswordRoute = email();
+
     return (
         <AuthLayout
             title="Forgot password"
@@ -26,7 +28,10 @@ export default function ForgotPassword({ status }: { status?: string }) {
             )}
 
             <div className="space-y-6">
-                <Form {...email.form()}>
+                <Form
+                    action={forgotPasswordRoute.url}
+                    method={forgotPasswordRoute.method}
+                >
                     {({ processing, errors }) => (
                         <>
                             <div className="grid gap-2">

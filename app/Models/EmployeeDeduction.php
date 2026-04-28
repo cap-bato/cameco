@@ -15,13 +15,18 @@ class EmployeeDeduction extends Model
 
     protected $fillable = [
         'employee_id',
+        'salary_component_id', // Added: required for salaryComponent relationship
         'deduction_type',
         'deduction_name',
         'amount',
+        'percentage',
+        'units',
         'frequency',
         'effective_date',
         'end_date',
         'is_active',
+        'is_prorated',
+        'requires_attendance',
         'notes',
         'created_by',
         'updated_by',
@@ -30,6 +35,8 @@ class EmployeeDeduction extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'is_active' => 'boolean',
+        'is_prorated' => 'boolean',
+        'requires_attendance' => 'boolean',
         'effective_date' => 'date',
         'end_date' => 'date',
         'created_at' => 'datetime',
@@ -38,12 +45,21 @@ class EmployeeDeduction extends Model
     ];
 
     // Relationships
+
     /**
      * Get the employee this deduction belongs to
      */
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Get the salary component this deduction is linked to
+     */
+    public function salaryComponent(): BelongsTo
+    {
+        return $this->belongsTo(SalaryComponent::class, 'salary_component_id');
     }
 
     /**
@@ -63,6 +79,7 @@ class EmployeeDeduction extends Model
     }
 
     // Scopes
+
     /**
      * Get only active deductions
      */
@@ -118,6 +135,7 @@ class EmployeeDeduction extends Model
     }
 
     // Accessors
+
     /**
      * Get formatted amount with currency symbol
      */
@@ -167,11 +185,12 @@ class EmployeeDeduction extends Model
             'court_order' => 'Court Order',
             'loan_deduction' => 'Loan Deduction',
             'other' => 'Other Deduction',
-            default => ucfirst(str_replace('_', ' ', $this->deduction_type)),
+            default => ucfirst(str_replace('_', ' ', $this->deduction_type ?? '')),
         };
     }
 
     // Methods
+
     /**
      * Check if this deduction is currently active (within date range)
      */
@@ -212,12 +231,10 @@ class EmployeeDeduction extends Model
      */
     public function calculateDeductionForPeriod(string $periodType = 'monthly'): float
     {
-        // If frequency matches period type, return full amount
         if ($this->frequency === $periodType || $this->frequency === 'per_payroll') {
             return floatval($this->amount);
         }
 
-        // If one-time, return amount only once on effective_date
         if ($this->frequency === 'one_time') {
             return floatval($this->amount);
         }
@@ -230,14 +247,12 @@ class EmployeeDeduction extends Model
     {
         parent::boot();
 
-        // Set created_by if not already set
         static::creating(function ($deduction) {
             if (!$deduction->created_by && auth()->check()) {
                 $deduction->created_by = auth()->id();
             }
         });
 
-        // Set updated_by on updates
         static::updating(function ($deduction) {
             if (auth()->check()) {
                 $deduction->updated_by = auth()->id();

@@ -101,10 +101,10 @@ function SortableHeader({ field, children, activeSort, sortOrder, onSort }: Sort
 
 export function BadgeManagementTable({ badges, onReplace }: Props) {
     const [search, setSearch] = useState('');
-    const [filterDepartment, setFilterDepartment] = useState('');
-    const [filterCardType, setFilterCardType] = useState('');
-    const [filterStatus, setFilterStatus] = useState('');
-    const [filterExpiration, setFilterExpiration] = useState(''); // 'expired', 'expiring-soon', 'valid'
+    const [filterDepartment, setFilterDepartment] = useState('all');
+    const [filterCardType, setFilterCardType] = useState('all');
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [filterExpiration, setFilterExpiration] = useState('all'); // 'expired', 'expiring-soon', 'valid'
     const [dateRangeStart, setDateRangeStart] = useState('');
     const [dateRangeEnd, setDateRangeEnd] = useState('');
     const [perPage, setPerPage] = useState('25');
@@ -166,17 +166,20 @@ export function BadgeManagementTable({ badges, onReplace }: Props) {
         const daysLeft = getDaysUntilExpiration(badge.expires_at);
         const showExpired = isExpired(daysLeft);
         const showWarning = isExpirationWarning(daysLeft);
+        const status = typeof badge.status === 'string' && badge.status.length > 0
+            ? badge.status
+            : (badge.is_active ? 'active' : 'inactive');
 
         let color = 'bg-green-500'; // active
         if (!badge.is_active) color = 'bg-gray-400'; // inactive
         if (showExpired) color = 'bg-red-500'; // expired
-        if (badge.status === 'lost' || badge.status === 'stolen') color = 'bg-red-700'; // lost/stolen
+        if (status === 'lost' || status === 'stolen') color = 'bg-red-700'; // lost/stolen
         if (showWarning) color = 'bg-amber-500'; // expiring soon
 
         return (
             <div
                 className={`h-3 w-3 rounded-full ${color}`}
-                title={badge.status.charAt(0).toUpperCase() + badge.status.slice(1)}
+                title={status.charAt(0).toUpperCase() + status.slice(1)}
             />
         );
     };
@@ -195,22 +198,22 @@ export function BadgeManagementTable({ badges, onReplace }: Props) {
             }
 
             // Department filter
-            if (filterDepartment && badge.department.toLowerCase() !== filterDepartment.toLowerCase()) {
+            if (filterDepartment !== 'all' && badge.department.toLowerCase() !== filterDepartment.toLowerCase()) {
                 return false;
             }
 
             // Card type filter
-            if (filterCardType && badge.card_type !== filterCardType) {
+            if (filterCardType !== 'all' && badge.card_type !== filterCardType) {
                 return false;
             }
 
             // Status filter
-            if (filterStatus && badge.status !== filterStatus) {
+            if (filterStatus !== 'all' && badge.status !== filterStatus) {
                 return false;
             }
 
             // Expiration filter
-            if (filterExpiration) {
+            if (filterExpiration !== 'all') {
                 const daysLeft = getDaysUntilExpiration(badge.expires_at);
                 if (filterExpiration === 'expired' && !isExpired(daysLeft)) return false;
                 if (filterExpiration === 'expiring-soon' && !isExpirationWarning(daysLeft)) return false;
@@ -269,14 +272,21 @@ export function BadgeManagementTable({ badges, onReplace }: Props) {
         }
     };
 
-    const hasActiveFilters = search || filterDepartment || filterCardType || filterStatus || filterExpiration || dateRangeStart || dateRangeEnd;
+    const hasActiveFilters =
+        search ||
+        filterDepartment !== 'all' ||
+        filterCardType !== 'all' ||
+        filterStatus !== 'all' ||
+        filterExpiration !== 'all' ||
+        dateRangeStart ||
+        dateRangeEnd;
 
     const clearAllFilters = () => {
         setSearch('');
-        setFilterDepartment('');
-        setFilterCardType('');
-        setFilterStatus('');
-        setFilterExpiration('');
+        setFilterDepartment('all');
+        setFilterCardType('all');
+        setFilterStatus('all');
+        setFilterExpiration('all');
         setDateRangeStart('');
         setDateRangeEnd('');
     };
@@ -306,7 +316,7 @@ export function BadgeManagementTable({ badges, onReplace }: Props) {
                             <SelectValue placeholder="Department" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">All Departments</SelectItem>
+                            <SelectItem value="all">All Departments</SelectItem>
                             <SelectItem value="operations">Operations</SelectItem>
                             <SelectItem value="engineering">Engineering</SelectItem>
                             <SelectItem value="warehouse">Warehouse</SelectItem>
@@ -317,7 +327,7 @@ export function BadgeManagementTable({ badges, onReplace }: Props) {
                             <SelectValue placeholder="Card Type" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">All Types</SelectItem>
+                            <SelectItem value="all">All Types</SelectItem>
                             <SelectItem value="mifare">Mifare</SelectItem>
                             <SelectItem value="desfire">DESFire</SelectItem>
                             <SelectItem value="em4100">EM4100</SelectItem>
@@ -332,7 +342,7 @@ export function BadgeManagementTable({ badges, onReplace }: Props) {
                             <SelectValue placeholder="Status" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">All Status</SelectItem>
+                            <SelectItem value="all">All Status</SelectItem>
                             <SelectItem value="active">Active</SelectItem>
                             <SelectItem value="inactive">Inactive</SelectItem>
                             <SelectItem value="expired">Expired</SelectItem>
@@ -346,7 +356,7 @@ export function BadgeManagementTable({ badges, onReplace }: Props) {
                             <SelectValue placeholder="Expiration" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">All Expirations</SelectItem>
+                            <SelectItem value="all">All Expirations</SelectItem>
                             <SelectItem value="expired">Expired</SelectItem>
                             <SelectItem value="expiring-soon">Expiring Soon (&lt;30 days)</SelectItem>
                             <SelectItem value="valid">Valid</SelectItem>

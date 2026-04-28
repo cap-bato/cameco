@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertCircle } from "lucide-react";
 import { useState } from "react";
+import { router } from "@inertiajs/react";
 import PagIbigContributionsTable from "@/components/payroll/government/pagibig-contributions-table";
 import PagIbigMCRFGenerator from "@/components/payroll/government/pagibig-mcrf-generator";
 import PagIbigRemittanceTracker from "@/components/payroll/government/pagibig-remittance-tracker";
@@ -55,72 +56,34 @@ export default function PagIbigIndex({
         { title: "Pag-IBIG", href: "/payroll/government/pagibig" },
     ];
 
-    const handleDownloadContributions = async () => {
-        try {
-            const response = await fetch(
-                `/payroll/government/pagibig/download-contributions/${selectedPeriod.id}`
+    const handleDownloadContributions = () => {
+        if (selectedPeriod) {
+            window.open(
+                `/payroll/government/pagibig/download-contributions/${selectedPeriod.id}`,
+                '_blank'
             );
-            if (!response.ok) throw new Error("Download failed");
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `pagibig_contributions_${selectedPeriod.month}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        } catch (error) {
-            console.error("Download error:", error);
         }
     };
 
-    const handleGenerateMCRF = async (periodId: number) => {
-        try {
-            const response = await fetch(`/payroll/government/pagibig/generate-mcrf/${periodId}`, {
-                method: "POST",
-            });
-            if (!response.ok) throw new Error("Generation failed");
-            // Refresh or handle success
-            window.location.reload();
-        } catch (error) {
-            console.error("Generation error:", error);
-        }
+    const handleGenerateMCRF = (periodId: number) => {
+        const period = periods.find((p) => Number(p.id) === periodId);
+        router.post(
+            `/payroll/government/pagibig/generate-mcrf/${periodId}`,
+            { month: period?.month ?? '' },
+            { onSuccess: () => router.reload() }
+        );
     };
 
-    const handleDownloadMCRF = async (reportId: number) => {
-        try {
-            const response = await fetch(`/payroll/government/pagibig/download-mcrf/${reportId}`);
-            if (!response.ok) throw new Error("Download failed");
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `pb_mcrf_${new Date().toISOString().split("T")[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        } catch (error) {
-            console.error("Download error:", error);
-        }
+    const handleDownloadMCRF = (reportId: number) => {
+        window.open(`/payroll/government/pagibig/download-mcrf/${reportId}`, '_blank');
     };
 
-    const handleSubmitMCRF = async (reportId: number) => {
-        try {
-            const response = await fetch(`/payroll/government/pagibig/submit/${reportId}`, {
-                method: "POST",
-            });
-            if (!response.ok) throw new Error("Submission failed");
-            // Refresh or handle success
-            window.location.reload();
-        } catch (error) {
-            console.error("Submission error:", error);
-        }
-    };
 
+    const handleSubmitMCRF = (reportId: number) => {
+        router.post(`/payroll/government/pagibig/submit/${reportId}`, {}, {
+            onSuccess: () => router.reload(),
+        });
+    };
     return (
         <AppLayout breadcrumbs={breadcrumb}>
             <Head title="Pag-IBIG Contributions" />

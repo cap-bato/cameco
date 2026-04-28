@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
+import { DepartmentArchiveDialog } from '@/components/hr/department-archive-dialog';
 import type { BreadcrumbItem } from '@/types';
 
 type Department = {
@@ -22,6 +23,7 @@ type Department = {
   budget: number | null;
   is_active: boolean;
   positions_count: number;
+  employee_count: number;
   created_at: string;
 };
 
@@ -40,6 +42,7 @@ type DepartmentHierarchy = {
   manager_name: string | null;
   is_active: boolean;
   positions_count: number;
+  employee_count: number;
   depth: number;
   children: DepartmentHierarchy[];
 };
@@ -60,6 +63,7 @@ export default function Departments({ departments, hierarchical, managers, stats
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [departmentToArchive, setDepartmentToArchive] = useState<Department | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -102,10 +106,8 @@ export default function Departments({ departments, hierarchical, managers, stats
     setShowForm(true);
   };
 
-  const handleDelete = (id: number) => {
-    if (confirm('Delete this department?')) {
-      router.delete(`/system/organization/departments/${id}`);
-    }
+  const handleDelete = (dept: Department) => {
+    setDepartmentToArchive(dept);
   };
 
   const resetForm = () => {
@@ -388,7 +390,7 @@ export default function Departments({ departments, hierarchical, managers, stats
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleDelete(dept.id)}
+                        onClick={() => handleDelete(dept)}
                         className="text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -405,6 +407,18 @@ export default function Departments({ departments, hierarchical, managers, stats
             </div>
           </CardContent>
         </Card>
+
+        {/* Department Archive Dialog */}
+        {departmentToArchive && (
+          <DepartmentArchiveDialog
+            open={!!departmentToArchive}
+            onOpenChange={(open) => !open && setDepartmentToArchive(null)}
+            departmentId={departmentToArchive.id}
+            departmentName={departmentToArchive.name}
+            employeeCount={departmentToArchive.employee_count}
+            routePrefix="/system/organization"
+          />
+        )}
       </div>
     </AppLayout>
 );

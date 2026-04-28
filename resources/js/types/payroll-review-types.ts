@@ -38,7 +38,7 @@ export interface PayrollPeriodSummary {
     start_date: string;
     end_date: string;
     pay_date: string;
-    status: 'calculated' | 'reviewing' | 'approved';
+    status: 'calculated' | 'approved';
     total_employees: number;
     total_gross_pay: number;
     total_deductions: number;

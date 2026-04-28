@@ -1,34 +1,14 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import SuperadminOnboardingCard from '@/components/system/superadmin-onboarding-card';
 import { SystemHealthWidgets, CronJobsCard } from '@/components/system/system-health-widgets';
-import SLAWidgets from '@/components/system/sla-widgets';
 import { ModuleGrid } from '@/components/module-grid';
 import { ModuleCategory } from '@/types/modules';
-
-interface ChecklistItem {
-    id: string;
-    title: string;
-    description: string;
-    completed: boolean;
-    action_url?: string;
-    action_label?: string;
-    required: boolean;
-}
 
 interface SystemOnboarding {
     id: number;
     status: string;
     checklist_json?: string | Record<string, unknown>;
-}
-
-interface UserOnboarding {
-    id: number | null;
-    user_id: number;
-    status: string;
-    checklist_json?: ChecklistItem[];
-    completion_percentage?: number;
 }
 
 interface SystemHealthData {
@@ -109,35 +89,6 @@ interface CronMetrics {
     status: 'healthy' | 'warning' | 'critical' | 'unavailable';
 }
 
-interface SLAMetrics {
-    uptime: {
-        current_uptime_hours: number;
-        uptime_percentage: number;
-        last_downtime: string | null;
-        total_downtime_hours_this_month: number;
-    };
-    incidents: {
-        open_critical: number;
-        open_major: number;
-        open_minor: number;
-        avg_response_time_critical: string;
-        avg_resolution_time_critical: string;
-        incidents_this_month: number;
-    };
-    patches: {
-        current_version: string;
-        latest_patch_date: string;
-        pending_patches: number;
-        next_scheduled_patch: string;
-    };
-    support: {
-        status: 'available' | 'offline';
-        hours: string;
-        days_until_support_end: number;
-        support_end_date: string;
-    };
-}
-
 interface SystemDashboardProps {
     counts: {
         users: number;
@@ -146,14 +97,11 @@ interface SystemDashboardProps {
         name: string | null;
     };
     systemOnboarding: SystemOnboarding | null;
-    userOnboarding: UserOnboarding | null;
     onboardingStatus: string;
-    showSetupModal: boolean;
     canCompleteOnboarding: boolean;
     welcomeText: string;
     systemHealth: SystemHealthData | null;
     cronMetrics: CronMetrics | null;
-    slaMetrics: SLAMetrics | null;
     moduleCategories?: Array<{
         id: string;
         title: string;
@@ -185,11 +133,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function Dashboard({
     company,
     welcomeText,
-    userOnboarding,
-    showSetupModal,
     systemHealth,
     cronMetrics,
-    slaMetrics,
     moduleCategories = [],
 }: SystemDashboardProps) {
     return (
@@ -203,17 +148,6 @@ export default function Dashboard({
                     </h1>
                     <p className="text-muted-foreground">{welcomeText}</p>
                 </div>
-
-                {/* User Onboarding Section - Show if profile is incomplete */}
-                {userOnboarding && showSetupModal && (
-                    <div className="mb-2">
-                        <SuperadminOnboardingCard 
-                            onboarding={userOnboarding}
-                            compact={false}
-                            dismissible={false}
-                        />
-                    </div>
-                )}
 
                 {/* System Health Monitoring - Premium positioning */}
                 {systemHealth && (
@@ -230,14 +164,6 @@ export default function Dashboard({
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                             <CronJobsCard cronMetrics={cronMetrics} />
                         </div>
-                    </div>
-                )}
-
-                {/* SLA Monitoring - Remote vendor metrics */}
-                {slaMetrics && (
-                    <div className="space-y-4">
-                        <h2 className="text-lg font-semibold">Service Level Monitoring</h2>
-                        <SLAWidgets sla={slaMetrics} />
                     </div>
                 )}
 

@@ -23,7 +23,7 @@ class DepartmentController extends Controller
     public function index(): Response
     {
         $departments = Department::with(['parent', 'manager', 'children'])
-            ->withCount('positions')
+            ->withCount(['positions', 'employees'])
             ->get();
 
         // Build hierarchical structure
@@ -285,6 +285,7 @@ class DepartmentController extends Controller
                 'budget' => $department->budget,
                 'is_active' => $department->is_active,
                 'positions_count' => $department->positions_count ?? 0,
+                'employee_count' => $department->employees_count ?? 0,
                 'created_at' => $department->created_at,
                 'updated_at' => $department->updated_at,
             ];
@@ -303,6 +304,7 @@ class DepartmentController extends Controller
             'manager_name' => $department->manager?->name,
             'is_active' => $department->is_active,
             'positions_count' => $department->positions_count ?? 0,
+            'employee_count' => $department->employees_count ?? 0,
             'depth' => $depth,
             'children' => $department->children
                 ->map(fn($child) => $this->formatDepartmentTree($child, $depth + 1))

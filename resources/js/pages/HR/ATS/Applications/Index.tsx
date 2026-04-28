@@ -17,8 +17,19 @@ import type { PageProps } from '@inertiajs/core';
 import type { Application, ApplicationSummary, ApplicationFilters as ApplicationFiltersType } from '@/types/ats-pages';
 import axios from 'axios';
 
+// Laravel paginator shape
+interface PaginatedApplications {
+  data: Application[];
+  total: number;
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  from: number | null;
+  to: number | null;
+}
+
 interface ApplicationsIndexProps extends PageProps {
-  applications: Application[];
+  applications: PaginatedApplications;
   statistics: ApplicationSummary;
   filters: ApplicationFiltersType;
 }
@@ -26,7 +37,7 @@ interface ApplicationsIndexProps extends PageProps {
 const breadcrumbs = [
   { title: 'Dashboard', href: '/dashboard' },
   { title: 'Recruitment', href: '#' },
-  { title: 'Applications', href: '/applications' },
+  { title: 'Applications', href: '/hr/ats/applications' },
 ];
 
 export default function ApplicationsIndex({
@@ -34,7 +45,8 @@ export default function ApplicationsIndex({
   statistics,
   filters: initialFilters,
 }: ApplicationsIndexProps) {
-  const [apps, setApps] = useState<Application[]>(Array.isArray(applications) ? applications : []);
+  // Unwrap the Laravel paginator — applications.data is the actual array
+  const [apps, setApps] = useState<Application[]>(applications?.data ?? []);
   const [statusFilter, setStatusFilter] = useState(initialFilters?.status || '');
   const [jobFilter, setJobFilter] = useState(initialFilters?.job || '');
   const [scoreFromFilter, setScoreFromFilter] = useState(initialFilters?.scoreFrom?.toString() || '');
@@ -56,10 +68,9 @@ export default function ApplicationsIndex({
     location_type: 'office' as 'office' | 'video_call' | 'phone',
   });
 
+  // Keep apps in sync when Inertia re-renders the page (e.g. after a status change)
   useEffect(() => {
-    if (Array.isArray(applications)) {
-      setApps(applications);
-    }
+    setApps(applications?.data ?? []);
   }, [applications]);
 
   const getFilteredApplications = () => {
@@ -115,11 +126,8 @@ export default function ApplicationsIndex({
 
     try {
       await axios.post(`/hr/ats/applications/${actionApplication.id}/reject`, { reason: 'Rejected via UI' });
-
       setApps((prev) =>
-        prev.map((a) =>
-          a.id === actionApplication.id ? { ...a, status: 'rejected' } : a
-        )
+        prev.map((a) => (a.id === actionApplication.id ? { ...a, status: 'rejected' } : a))
       );
     } catch (err) {
       console.error('Failed to reject application:', err);
@@ -130,26 +138,24 @@ export default function ApplicationsIndex({
     }
   };
 
-  // Open Schedule Interview Modal
+  // Schedule Interview
   const handleScheduleInterviewClick = (application: Application) => {
     setInterviewApplication(application);
     setIsInterviewModalOpen(true);
   };
 
-  // Submit Schedule Interview
   const handleScheduleInterviewSubmit = async () => {
     if (!interviewApplication) return;
 
     try {
       await axios.post(`/hr/ats/applications/${interviewApplication.id}/schedule-interview`, {
-        scheduled_date: interviewFormData.scheduled_date,
-        scheduled_time: interviewFormData.scheduled_time,
-        duration_minutes: interviewFormData.duration_minutes,
-        location_type: interviewFormData.location_type,
-        interviewer_name: 'HR Manager',
+        scheduled_date:    interviewFormData.scheduled_date,
+        scheduled_time:    interviewFormData.scheduled_time,
+        duration_minutes:  interviewFormData.duration_minutes,
+        location_type:     interviewFormData.location_type,
+        interviewer_name:  'HR Manager',
       });
 
-      // Optimistic UI update
       setApps((prev) =>
         prev.map((a) =>
           a.id === interviewApplication.id ? { ...a, status: 'interviewed' } : a
@@ -159,10 +165,10 @@ export default function ApplicationsIndex({
       setIsInterviewModalOpen(false);
       setInterviewApplication(undefined);
       setInterviewFormData({
-        scheduled_date: '',
-        scheduled_time: '',
+        scheduled_date:   '',
+        scheduled_time:   '',
         duration_minutes: 60,
-        location_type: 'office',
+        location_type:    'office',
       });
     } catch (err) {
       console.error('Failed to schedule interview:', err);
@@ -193,7 +199,7 @@ export default function ApplicationsIndex({
     setBulkAction('shortlist');
     try {
       setApps((prev) => prev.map((a) => (selectedIds.has(a.id) ? { ...a, status: 'shortlisted' } : a)));
-      await Promise.all(Array.from(selectedIds).map(id => axios.post(`/hr/ats/applications/${id}/shortlist`)));
+      await Promise.all(Array.from(selectedIds).map((id) => axios.post(`/hr/ats/applications/${id}/shortlist`)));
       setSelectedIds(new Set());
     } catch (err) {
       console.error('Failed to bulk shortlist:', err);
@@ -209,7 +215,11 @@ export default function ApplicationsIndex({
     setBulkAction('reject');
     try {
       setApps((prev) => prev.map((a) => (selectedIds.has(a.id) ? { ...a, status: 'rejected' } : a)));
-      await Promise.all(Array.from(selectedIds).map(id => axios.post(`/hr/ats/applications/${id}/reject`, { reason: 'Rejected via UI' })));
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          axios.post(`/hr/ats/applications/${id}/reject`, { reason: 'Rejected via UI' })
+        )
+      );
       setSelectedIds(new Set());
     } catch (err) {
       console.error('Failed to bulk reject:', err);
@@ -232,13 +242,17 @@ export default function ApplicationsIndex({
         {/* Summary Cards */}
         {statistics && (
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            {['total_applications','submitted','shortlisted','interviewed','offered'].map((key) => (
+            {(['total_applications', 'submitted', 'shortlisted', 'interviewed', 'offered'] as const).map((key) => (
               <Card key={key}>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">{key.replace('_',' ').toUpperCase()}</CardTitle>
+                  <CardTitle className="text-sm font-medium">
+                    {key.replace(/_/g, ' ').toUpperCase()}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">{statistics[key as keyof ApplicationSummary]}</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {statistics[key as keyof ApplicationSummary]}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -250,19 +264,19 @@ export default function ApplicationsIndex({
           selectedCount={selectedIds.size}
           actions={[
             {
-              label: 'Shortlist All',
-              onClick: handleBulkShortlist,
-              disabled: isBulkLoading,
+              label:       'Shortlist All',
+              onClick:     handleBulkShortlist,
+              disabled:    isBulkLoading,
               loadingText: 'Shortlisting...',
-              isLoading: isBulkLoading && bulkAction === 'shortlist',
+              isLoading:   isBulkLoading && bulkAction === 'shortlist',
             },
             {
-              label: 'Reject All',
-              variant: 'destructive',
-              onClick: handleBulkReject,
-              disabled: isBulkLoading,
+              label:       'Reject All',
+              variant:     'destructive',
+              onClick:     handleBulkReject,
+              disabled:    isBulkLoading,
               loadingText: 'Rejecting...',
-              isLoading: isBulkLoading && bulkAction === 'reject',
+              isLoading:   isBulkLoading && bulkAction === 'reject',
             },
           ]}
           onClear={() => setSelectedIds(new Set())}
@@ -290,7 +304,9 @@ export default function ApplicationsIndex({
             selectedIds={selectedIds}
             onSelectApplication={toggleSelectApplication}
             onSelectAll={toggleSelectAll}
-            onViewClick={(application) => window.location.href = `/hr/ats/applications/${application.id}`}
+            onViewClick={(application) =>
+              (window.location.href = `/hr/ats/applications/${application.id}`)
+            }
             onShortlistClick={handleShortlistClick}
             onRejectClick={handleRejectClick}
             onScheduleInterviewClick={handleScheduleInterviewClick}
@@ -299,6 +315,13 @@ export default function ApplicationsIndex({
           <div className="bg-card rounded-lg border p-8 text-center">
             <p className="text-muted-foreground">No applications found</p>
           </div>
+        )}
+
+        {/* Pagination info */}
+        {applications?.total > 0 && (
+          <p className="text-sm text-muted-foreground text-right">
+            Showing {applications.from}–{applications.to} of {applications.total} applications
+          </p>
         )}
       </div>
 
@@ -309,11 +332,22 @@ export default function ApplicationsIndex({
             <DialogTitle>Reject Application</DialogTitle>
           </DialogHeader>
           <p className="py-4 text-sm text-muted-foreground">
-            Are you sure you want to reject {actionApplication?.candidate_name || 'this candidate'}? This action cannot be undone.
+            Are you sure you want to reject{' '}
+            <span className="font-medium text-foreground">
+              {actionApplication?.candidate_name || 'this candidate'}
+            </span>
+            ? This action cannot be undone.
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
-            <Button type="button" variant="destructive" onClick={handleConfirmReject} disabled={isDeleteLoading}>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmReject}
+              disabled={isDeleteLoading}
+            >
               {isDeleteLoading ? 'Rejecting...' : 'Reject'}
             </Button>
           </DialogFooter>
@@ -328,25 +362,63 @@ export default function ApplicationsIndex({
           </DialogHeader>
 
           <p className="text-sm text-muted-foreground mb-4">
-            Candidate: <span className="font-semibold">{interviewApplication?.candidate_name}</span>
+            Candidate:{' '}
+            <span className="font-semibold text-foreground">
+              {interviewApplication?.candidate_name}
+            </span>
           </p>
 
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Date</label>
-              <input type="date" className="mt-1 w-full border px-3 py-2 rounded" value={interviewFormData.scheduled_date} onChange={(e) => setInterviewFormData({...interviewFormData, scheduled_date: e.target.value})}/>
+              <input
+                type="date"
+                className="mt-1 w-full border px-3 py-2 rounded"
+                value={interviewFormData.scheduled_date}
+                onChange={(e) =>
+                  setInterviewFormData({ ...interviewFormData, scheduled_date: e.target.value })
+                }
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Time</label>
-              <input type="time" className="mt-1 w-full border px-3 py-2 rounded" value={interviewFormData.scheduled_time} onChange={(e) => setInterviewFormData({...interviewFormData, scheduled_time: e.target.value})}/>
+              <input
+                type="time"
+                className="mt-1 w-full border px-3 py-2 rounded"
+                value={interviewFormData.scheduled_time}
+                onChange={(e) =>
+                  setInterviewFormData({ ...interviewFormData, scheduled_time: e.target.value })
+                }
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Duration (minutes)</label>
-              <input type="number" className="mt-1 w-full border px-3 py-2 rounded" min={15} step={15} value={interviewFormData.duration_minutes} onChange={(e) => setInterviewFormData({...interviewFormData, duration_minutes: parseInt(e.target.value)||60})}/>
+              <input
+                type="number"
+                className="mt-1 w-full border px-3 py-2 rounded"
+                min={15}
+                step={15}
+                value={interviewFormData.duration_minutes}
+                onChange={(e) =>
+                  setInterviewFormData({
+                    ...interviewFormData,
+                    duration_minutes: parseInt(e.target.value) || 60,
+                  })
+                }
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Location</label>
-              <select className="mt-1 w-full border px-3 py-2 rounded" value={interviewFormData.location_type} onChange={(e) => setInterviewFormData({...interviewFormData, location_type: e.target.value as 'office' | 'video_call' | 'phone'})}>
+              <select
+                className="mt-1 w-full border px-3 py-2 rounded"
+                value={interviewFormData.location_type}
+                onChange={(e) =>
+                  setInterviewFormData({
+                    ...interviewFormData,
+                    location_type: e.target.value as 'office' | 'video_call' | 'phone',
+                  })
+                }
+              >
                 <option value="office">Office</option>
                 <option value="video_call">Video Call</option>
                 <option value="phone">Phone</option>
@@ -355,8 +427,14 @@ export default function ApplicationsIndex({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsInterviewModalOpen(false)}>Cancel</Button>
-            <Button type="button" onClick={handleScheduleInterviewSubmit} disabled={!interviewFormData.scheduled_date || !interviewFormData.scheduled_time}>
+            <Button type="button" variant="outline" onClick={() => setIsInterviewModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleScheduleInterviewSubmit}
+              disabled={!interviewFormData.scheduled_date || !interviewFormData.scheduled_time}
+            >
               Schedule Interview
             </Button>
           </DialogFooter>

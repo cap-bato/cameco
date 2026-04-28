@@ -6,7 +6,8 @@ import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import { ArrowRight, Users, Calendar, FileText, TrendingUp, Shield, Clock, UserCircle, Briefcase } from 'lucide-react';
 
 export default function Welcome() {
-    const { auth } = usePage<SharedData>().props;
+    const { auth, features } = usePage<SharedData & { features?: Record<string, boolean> }>().props;
+    const isAtsEnabled = features?.ats !== false;
 
     return (
         <>
@@ -37,12 +38,14 @@ export default function Welcome() {
                         
                         <div className="flex items-center gap-4">
                             <AppearanceToggleDropdown />
-                            <Button variant="outline" asChild className="gap-2">
-                                <Link href="/job-postings">
-                                    <Briefcase className="h-4 w-4" />
-                                    Careers
-                                </Link>
-                            </Button>
+                            {isAtsEnabled && (
+                                <Button variant="outline" asChild className="gap-2">
+                                    <Link href="/job-postings">
+                                        <Briefcase className="h-4 w-4" />
+                                        Careers
+                                    </Link>
+                                </Button>
+                            )}
                             {auth.user ? (
                                 <Button asChild variant="default" className="bg-blue-600 hover:bg-blue-700">
                                     <Link href={dashboard()}>
@@ -207,24 +210,26 @@ export default function Welcome() {
                                 </p>
                             </div>
                             
-                            <div className="group rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-50/50 p-6 shadow-sm transition-all hover:shadow-md dark:border-blue-900 dark:from-blue-950/20 dark:to-blue-900/10 dark:bg-slate-900">
-                                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white dark:bg-blue-700">
-                                    <Briefcase className="h-6 w-6" />
+                            {isAtsEnabled && (
+                                <div className="group rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-50/50 p-6 shadow-sm transition-all hover:shadow-md dark:border-blue-900 dark:from-blue-950/20 dark:to-blue-900/10 dark:bg-slate-900">
+                                    <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 text-white dark:bg-blue-700">
+                                        <Briefcase className="h-6 w-6" />
+                                    </div>
+                                    <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+                                        Career Opportunities
+                                    </h3>
+                                    <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
+                                        Join Cathay Metal Corporation! Browse open positions, submit applications, 
+                                        and explore exciting career opportunities with us.
+                                    </p>
+                                    <Button asChild variant="outline" size="sm" className="gap-2 border-blue-300 dark:border-blue-700">
+                                        <Link href="/job-postings">
+                                            View Open Positions
+                                            <ArrowRight className="h-3 w-3" />
+                                        </Link>
+                                    </Button>
                                 </div>
-                                <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                                    Career Opportunities
-                                </h3>
-                                <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
-                                    Join Cathay Metal Corporation! Browse open positions, submit applications, 
-                                    and explore exciting career opportunities with us.
-                                </p>
-                                <Button asChild variant="outline" size="sm" className="gap-2 border-blue-300 dark:border-blue-700">
-                                    <Link href="/job-postings">
-                                        View Open Positions
-                                        <ArrowRight className="h-3 w-3" />
-                                    </Link>
-                                </Button>
-                            </div>
+                            )}
                         </div>
                     </div>
                     

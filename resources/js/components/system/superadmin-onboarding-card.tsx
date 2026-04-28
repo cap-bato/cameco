@@ -21,8 +21,8 @@ interface UserOnboarding {
     id: number | null;
     user_id: number;
     status: string;
-    checklist_json?: ChecklistItem[];
-    completion_percentage?: number;
+    checklist_json?: unknown;
+    completion_percentage?: number | string;
 }
 
 interface SuperadminOnboardingCardProps {
@@ -40,11 +40,13 @@ export default function SuperadminOnboardingCard({
 }: SuperadminOnboardingCardProps) {
     const [isOpen, setIsOpen] = useState(!compact);
 
-    const checklist = onboarding.checklist_json || [];
+    const checklist = normalizeChecklist(onboarding.checklist_json);
     const completedItems = checklist.filter((item) => item.completed).length;
     const totalItems = checklist.length;
-    const completionPercentage = onboarding.completion_percentage || 
-        (totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0);
+    const explicitCompletion = Number(onboarding.completion_percentage);
+    const completionPercentage = Number.isFinite(explicitCompletion)
+        ? Math.max(0, Math.min(100, Math.round(explicitCompletion)))
+        : (totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0);
 
     const requiredItems = checklist.filter((item) => item.required && !item.completed);
     const optionalItems = checklist.filter((item) => !item.required && !item.completed);
@@ -188,6 +190,42 @@ export default function SuperadminOnboardingCard({
             )}
         </Card>
     );
+}
+
+function normalizeChecklist(rawChecklist: unknown): ChecklistItem[] {
+    let source: unknown = rawChecklist;
+
+    if (typeof source === 'string') {
+        try {
+            source = JSON.parse(source);
+        } catch {
+            return [];
+        }
+    }
+
+    if (!Array.isArray(source)) {
+        if (source && typeof source === 'object' && Array.isArray((source as { checklist?: unknown }).checklist)) {
+            source = (source as { checklist: unknown[] }).checklist;
+        } else {
+            return [];
+        }
+    }
+
+    return source
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+        .map((item, index) => ({
+            id: String(item.id ?? item.key ?? `item-${index}`),
+            title: String(item.title ?? item.label ?? item.name ?? 'Checklist Item'),
+            description: String(item.description ?? item.details ?? ''),
+            completed: Boolean(item.completed ?? item.done ?? item.checked ?? false),
+            action_url: typeof item.action_url === 'string'
+                ? item.action_url
+                : (typeof item.actionUrl === 'string' ? item.actionUrl : undefined),
+            action_label: typeof item.action_label === 'string'
+                ? item.action_label
+                : (typeof item.actionLabel === 'string' ? item.actionLabel : undefined),
+            required: Boolean(item.required ?? true),
+        }));
 }
 
 function ChecklistItemCard({ item }: { item: ChecklistItem }) {

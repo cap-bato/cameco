@@ -28,12 +28,11 @@ class LeaveBalanceService
     public function hasSufficientBalance(int $employeeId, int $leavePolicyId, float $requestedDays): bool
     {
         $balance = $this->getBalance($employeeId, $leavePolicyId);
-
         if (!$balance) {
             return false;
         }
-
-        return $balance->available_days >= $requestedDays;
+        // Use the computed remaining attribute (earned + carried_forward - used)
+        return $balance->remaining >= $requestedDays;
     }
 
     /**
@@ -50,31 +49,27 @@ class LeaveBalanceService
         try {
             DB::transaction(function () use ($employeeId, $leavePolicyId, $days, $reason) {
                 $balance = $this->getBalance($employeeId, $leavePolicyId);
-
                 if (!$balance) {
-                    throw new \Exception("Leave balance not found for employee {$employeeId} and policy {$leavePolicyId}");
+                    // Try to auto-create the balance using the policy's annual entitlement
+                    $policy = LeavePolicy::find($leavePolicyId);
+                    $entitlement = $policy ? ($policy->annual_entitlement ?? 0) : 0;
+                    $balance = $this->createBalance($employeeId, $leavePolicyId, $entitlement);
                 }
-
-                if ($balance->available_days < $days) {
-                    throw new \Exception("Insufficient leave balance. Available: {$balance->available_days}, Requested: {$days}");
+                if ($balance->remaining < $days) {
+                    throw new \Exception("Insufficient leave balance. Available: {$balance->remaining}, Requested: {$days}");
                 }
-
-                // Deduct from available days and increment used days
+                // Increment used, do not touch earned/carried_forward here
                 $balance->update([
-                    'used_days' => DB::raw("used_days + {$days}"),
-                    'available_days' => DB::raw("available_days - {$days}"),
+                    'used' => DB::raw("used + {$days}")
                 ]);
-
-                // Log the deduction
                 Log::info('Leave balance deducted', [
                     'employee_id' => $employeeId,
                     'leave_policy_id' => $leavePolicyId,
                     'days_deducted' => $days,
-                    'remaining_balance' => $balance->fresh()->available_days,
+                    'remaining_balance' => $balance->fresh()->remaining,
                     'reason' => $reason ?? 'Leave approved'
                 ]);
             });
-
             return true;
         } catch (\Exception $e) {
             Log::error('Failed to deduct leave balance', [
@@ -83,7 +78,6 @@ class LeaveBalanceService
                 'days' => $days,
                 'error' => $e->getMessage()
             ]);
-
             return false;
         }
     }
@@ -102,27 +96,21 @@ class LeaveBalanceService
         try {
             DB::transaction(function () use ($employeeId, $leavePolicyId, $days, $reason) {
                 $balance = $this->getBalance($employeeId, $leavePolicyId);
-
                 if (!$balance) {
                     throw new \Exception("Leave balance not found for employee {$employeeId} and policy {$leavePolicyId}");
                 }
-
-                // Restore to available days and decrement used days
+                // Decrement used, do not touch earned/carried_forward here
                 $balance->update([
-                    'used_days' => DB::raw("GREATEST(used_days - {$days}, 0)"),
-                    'available_days' => DB::raw("available_days + {$days}"),
+                    'used' => DB::raw("GREATEST(used - {$days}, 0)")
                 ]);
-
-                // Log the restoration
                 Log::info('Leave balance restored', [
                     'employee_id' => $employeeId,
                     'leave_policy_id' => $leavePolicyId,
                     'days_restored' => $days,
-                    'new_balance' => $balance->fresh()->available_days,
+                    'new_balance' => $balance->fresh()->remaining,
                     'reason' => $reason ?? 'Leave cancelled'
                 ]);
             });
-
             return true;
         } catch (\Exception $e) {
             Log::error('Failed to restore leave balance', [
@@ -131,7 +119,6 @@ class LeaveBalanceService
                 'days' => $days,
                 'error' => $e->getMessage()
             ]);
-
             return false;
         }
     }
@@ -146,8 +133,7 @@ class LeaveBalanceService
     public function getAvailableBalance(int $employeeId, int $leavePolicyId): float
     {
         $balance = $this->getBalance($employeeId, $leavePolicyId);
-
-        return $balance ? $balance->available_days : 0;
+        return $balance ? $balance->remaining : 0;
     }
 
     /**
@@ -160,8 +146,7 @@ class LeaveBalanceService
     public function getUsedBalance(int $employeeId, int $leavePolicyId): float
     {
         $balance = $this->getBalance($employeeId, $leavePolicyId);
-
-        return $balance ? $balance->used_days : 0;
+        return $balance ? $balance->used : 0;
     }
 
     /**
@@ -174,8 +159,7 @@ class LeaveBalanceService
     public function getTotalBalance(int $employeeId, int $leavePolicyId): float
     {
         $balance = $this->getBalance($employeeId, $leavePolicyId);
-
-        return $balance ? $balance->total_days : 0;
+        return $balance ? ($balance->earned + $balance->carried_forward) : 0;
     }
 
     /**
@@ -205,9 +189,9 @@ class LeaveBalanceService
         return LeaveBalance::create([
             'employee_id' => $employeeId,
             'leave_policy_id' => $leavePolicyId,
-            'total_days' => $totalDays,
-            'used_days' => 0,
-            'available_days' => $totalDays,
+            'earned' => $totalDays,
+            'used' => 0,
+            'carried_forward' => 0,
             'year' => now()->year,
         ]);
     }

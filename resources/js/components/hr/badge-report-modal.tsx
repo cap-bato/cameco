@@ -140,7 +140,12 @@ export function BadgeReportModal({
 
     // Get unique statuses
     const statuses = useMemo(() => {
-        const stats = new Set(badges.data.map(b => b.status));
+        const stats = new Set(
+            badges.data
+                .map((b) => (typeof b.status === 'string' ? b.status.trim() : ''))
+                .filter((status) => status.length > 0)
+        );
+
         return Array.from(stats).sort();
     }, [badges.data]);
 
@@ -537,7 +542,7 @@ export function BadgeReportModal({
                                             <SelectItem value="">All Statuses</SelectItem>
                                             {statuses.map((status) => (
                                                 <SelectItem key={status} value={status}>
-                                                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                                                    {status[0].toUpperCase() + status.slice(1)}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>

@@ -19,570 +19,214 @@ use Carbon\Carbon;
  * 3. Monitor completion progress as appraisals are filled out
  * 4. Close cycle when all appraisals are completed and acknowledged
  */
+
 class AppraisalCycleController extends Controller
 {
     /**
-     * Display a listing of appraisal cycles
+     * Update the specified appraisal cycle in storage.
      */
-    public function index(Request $request)
+    public function update(Request $request, $id)
     {
-        $status = $request->input('status', 'all');
-        $year = $request->input('year', date('Y'));
+        $cycle = \App\Models\AppraisalCycle::findOrFail($id);
 
-        // Mock appraisal cycles data
-        $mockCycles = [
-            [
-                'id' => 1,
-                'name' => 'Annual Review 2025',
-                'start_date' => '2025-01-01',
-                'end_date' => '2025-12-31',
-                'status' => 'open',
-                'total_appraisals' => 45,
-                'completed_appraisals' => 38,
-                'average_score' => 7.4,
-                'created_by' => 'HR Manager',
-                'created_at' => '2025-01-05 08:30:00',
-                'updated_at' => '2025-11-20 14:22:00',
-            ],
-            [
-                'id' => 2,
-                'name' => 'Mid-Year Review 2025',
-                'start_date' => '2025-06-01',
-                'end_date' => '2025-06-30',
-                'status' => 'open',
-                'total_appraisals' => 45,
-                'completed_appraisals' => 18,
-                'average_score' => 7.1,
-                'created_by' => 'HR Manager',
-                'created_at' => '2025-05-25 10:15:00',
-                'updated_at' => '2025-11-15 09:45:00',
-            ],
-            [
-                'id' => 3,
-                'name' => 'Annual Review 2024',
-                'start_date' => '2024-01-01',
-                'end_date' => '2024-12-31',
-                'status' => 'closed',
-                'total_appraisals' => 42,
-                'completed_appraisals' => 42,
-                'average_score' => 7.2,
-                'created_by' => 'HR Manager',
-                'created_at' => '2024-01-08 07:30:00',
-                'updated_at' => '2024-12-20 16:00:00',
-            ],
-            [
-                'id' => 4,
-                'name' => 'Mid-Year Review 2024',
-                'start_date' => '2024-06-01',
-                'end_date' => '2024-06-30',
-                'status' => 'closed',
-                'total_appraisals' => 42,
-                'completed_appraisals' => 42,
-                'average_score' => 6.9,
-                'created_by' => 'HR Manager',
-                'created_at' => '2024-05-20 09:00:00',
-                'updated_at' => '2024-06-30 17:30:00',
-            ],
-            [
-                'id' => 5,
-                'name' => 'Annual Review 2023',
-                'start_date' => '2023-01-01',
-                'end_date' => '2023-12-31',
-                'status' => 'closed',
-                'total_appraisals' => 38,
-                'completed_appraisals' => 38,
-                'average_score' => 7.0,
-                'created_by' => 'HR Manager',
-                'created_at' => '2023-01-10 08:00:00',
-                'updated_at' => '2023-12-22 15:45:00',
-            ],
-        ];
-
-        // Filter by status
-        if ($status !== 'all') {
-            $mockCycles = array_filter($mockCycles, fn($c) => $c['status'] === $status);
-        }
-
-        // Filter by year
-        $mockCycles = array_filter($mockCycles, function ($c) use ($year) {
-            $startYear = substr($c['start_date'], 0, 4);
-            return $startYear === $year;
-        });
-
-        // Calculate stats
-        $allCycles = [
-            [
-                'id' => 1,
-                'name' => 'Annual Review 2025',
-                'start_date' => '2025-01-01',
-                'end_date' => '2025-12-31',
-                'status' => 'open',
-                'total_appraisals' => 45,
-                'completed_appraisals' => 38,
-                'average_score' => 7.4,
-                'created_by' => 'HR Manager',
-                'created_at' => '2025-01-05 08:30:00',
-                'updated_at' => '2025-11-20 14:22:00',
-            ],
-            [
-                'id' => 2,
-                'name' => 'Mid-Year Review 2025',
-                'start_date' => '2025-06-01',
-                'end_date' => '2025-06-30',
-                'status' => 'open',
-                'total_appraisals' => 45,
-                'completed_appraisals' => 18,
-                'average_score' => 7.1,
-                'created_by' => 'HR Manager',
-                'created_at' => '2025-05-25 10:15:00',
-                'updated_at' => '2025-11-15 09:45:00',
-            ],
-            [
-                'id' => 3,
-                'name' => 'Annual Review 2024',
-                'start_date' => '2024-01-01',
-                'end_date' => '2024-12-31',
-                'status' => 'closed',
-                'total_appraisals' => 42,
-                'completed_appraisals' => 42,
-                'average_score' => 7.2,
-                'created_by' => 'HR Manager',
-                'created_at' => '2024-01-08 07:30:00',
-                'updated_at' => '2024-12-20 16:00:00',
-            ],
-            [
-                'id' => 4,
-                'name' => 'Mid-Year Review 2024',
-                'start_date' => '2024-06-01',
-                'end_date' => '2024-06-30',
-                'status' => 'closed',
-                'total_appraisals' => 42,
-                'completed_appraisals' => 42,
-                'average_score' => 6.9,
-                'created_by' => 'HR Manager',
-                'created_at' => '2024-05-20 09:00:00',
-                'updated_at' => '2024-06-30 17:30:00',
-            ],
-            [
-                'id' => 5,
-                'name' => 'Annual Review 2023',
-                'start_date' => '2023-01-01',
-                'end_date' => '2023-12-31',
-                'status' => 'closed',
-                'total_appraisals' => 38,
-                'completed_appraisals' => 38,
-                'average_score' => 7.0,
-                'created_by' => 'HR Manager',
-                'created_at' => '2023-01-10 08:00:00',
-                'updated_at' => '2023-12-22 15:45:00',
-            ],
-        ];
-
-        $totalCycles = count($allCycles);
-        $activeCycles = count(array_filter($allCycles, fn($c) => $c['status'] === 'open'));
-        $avgCompletion = count($allCycles) > 0 
-            ? round(array_reduce($allCycles, function ($carry, $c) {
-                return $carry + ($c['completed_appraisals'] / $c['total_appraisals'] * 100);
-            }, 0) / count($allCycles), 1)
-            : 0;
-        $pendingAppraisals = array_reduce($allCycles, function ($carry, $c) {
-            return $carry + ($c['total_appraisals'] - $c['completed_appraisals']);
-        }, 0);
-
-        // Mock employees data for assignment modal
-        $mockEmployees = [
-            ['id' => 1, 'name' => 'John Doe', 'employee_number' => 'EMP001', 'department' => 'Engineering', 'position' => 'Software Engineer'],
-            ['id' => 2, 'name' => 'Jane Smith', 'employee_number' => 'EMP002', 'department' => 'Engineering', 'position' => 'Senior Engineer'],
-            ['id' => 3, 'name' => 'Bob Johnson', 'employee_number' => 'EMP003', 'department' => 'Sales', 'position' => 'Sales Manager'],
-            ['id' => 4, 'name' => 'Alice Williams', 'employee_number' => 'EMP004', 'department' => 'Marketing', 'position' => 'Marketing Specialist'],
-            ['id' => 5, 'name' => 'Charlie Brown', 'employee_number' => 'EMP005', 'department' => 'HR', 'position' => 'HR Specialist'],
-            ['id' => 6, 'name' => 'Diana Davis', 'employee_number' => 'EMP006', 'department' => 'Finance', 'position' => 'Accountant'],
-            ['id' => 7, 'name' => 'Eve Miller', 'employee_number' => 'EMP007', 'department' => 'Engineering', 'position' => 'QA Engineer'],
-            ['id' => 8, 'name' => 'Frank Wilson', 'employee_number' => 'EMP008', 'department' => 'Operations', 'position' => 'Operations Manager'],
-            ['id' => 9, 'name' => 'Grace Taylor', 'employee_number' => 'EMP009', 'department' => 'Sales', 'position' => 'Sales Executive'],
-            ['id' => 10, 'name' => 'Henry Anderson', 'employee_number' => 'EMP010', 'department' => 'Marketing', 'position' => 'Marketing Manager'],
-        ];
-
-        // Add completion_percentage to cycles
-        $filteredCyclesWithPercentage = array_map(function ($c) {
-            return array_merge($c, [
-                'completion_percentage' => $c['total_appraisals'] > 0 
-                    ? round(($c['completed_appraisals'] / $c['total_appraisals']) * 100)
-                    : 0,
-                'criteria' => [
-                    ['name' => 'Quality of Work', 'weight' => 20],
-                    ['name' => 'Attendance & Punctuality', 'weight' => 20],
-                    ['name' => 'Behavior & Conduct', 'weight' => 20],
-                    ['name' => 'Productivity', 'weight' => 20],
-                    ['name' => 'Teamwork', 'weight' => 20],
-                ],
-            ]);
-        }, array_values($mockCycles));
-
-        return Inertia::render('HR/Appraisals/Cycles/Index', [
-            'cycles' => $filteredCyclesWithPercentage,
-            'employees' => $mockEmployees,
-            'stats' => [
-                'total_cycles' => $totalCycles,
-                'active_cycles' => $activeCycles,
-                'avg_completion_rate' => $avgCompletion,
-                'pending_appraisals' => $pendingAppraisals,
-            ],
-            'filters' => [
-                'status' => $status,
-                'year' => $year,
-            ],
-        ]);
-    }
-
-    /**
-     * Show the form for creating a new appraisal cycle
-     */
-    public function create()
-    {
-        // Return empty form with default criteria
-        $defaultCriteria = [
-            ['name' => 'Quality of Work', 'weight' => 20],
-            ['name' => 'Attendance & Punctuality', 'weight' => 20],
-            ['name' => 'Behavior & Conduct', 'weight' => 20],
-            ['name' => 'Productivity', 'weight' => 20],
-            ['name' => 'Teamwork', 'weight' => 20],
-        ];
-
-        return Inertia::render('HR/Appraisals/Cycles/Create', [
-            'defaultCriteria' => $defaultCriteria,
-        ]);
-    }
-
-    /**
-     * Store a newly created appraisal cycle
-     */
-    public function store(Request $request)
-    {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
-            'criteria' => 'required|array|min:3',
-            'criteria.*.name' => 'required|string|max:100',
-            'criteria.*.weight' => 'required|numeric|min:1|max:100',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'criteria' => 'nullable|array',
+            'criteria.*' => 'string',
         ]);
 
-        // Verify total weight equals 100
-        $totalWeight = array_sum(array_column($validated['criteria'], 'weight'));
-        if ($totalWeight !== 100) {
-            return back()->withErrors(['criteria' => 'Total weight must equal 100%']);
-        }
+        $cycle->name = $validated['name'];
+        $cycle->start_date = $validated['start_date'];
+        $cycle->end_date = $validated['end_date'];
+        $cycle->criteria = $validated['criteria'] ?? [];
+        $cycle->save();
 
-        // In production, save to database
-        // For now, return success response
-        return redirect()
-            ->route('hr.appraisals.cycles.index')
-            ->with('success', 'Appraisal cycle created successfully');
+        return redirect()->route('hr.appraisals.cycles.show', $cycle->id)
+            ->with('success', 'Appraisal cycle updated successfully.');
     }
+
+    /**
+     * Show the form for editing the specified appraisal cycle.
+     */
+    public function edit($id)
+    {
+        $cycle = \App\Models\AppraisalCycle::with(['createdBy'])
+            ->findOrFail($id);
+
+        $cycleData = [
+            'id' => $cycle->id,
+            'name' => $cycle->name,
+            'start_date' => $cycle->start_date,
+            'end_date' => $cycle->end_date,
+            'status' => $cycle->status,
+            'criteria' => $cycle->criteria,
+            'created_by' => $cycle->createdBy ? [
+                'id' => $cycle->createdBy->id,
+                'name' => $cycle->createdBy->name,
+                'email' => $cycle->createdBy->email,
+            ] : null,
+        ];
+
+        return Inertia::render('HR/Appraisals/Cycles/Edit', [
+            'cycle' => $cycleData,
+        ]);
+    }
+
+    /**
+     * Close the specified appraisal cycle.
+     */
+    public function close($id)
+    {
+        $cycle = \App\Models\AppraisalCycle::findOrFail($id);
+        $cycle->status = 'closed';
+        $cycle->save();
+        return redirect()->route('hr.appraisals.cycles.show', $id)->with('success', 'Appraisal cycle closed successfully.');
+    }
+
+    /**
+     * Remove the specified appraisal cycle from storage.
+     */
+    public function destroy($id)
+    {
+        $cycle = \App\Models\AppraisalCycle::findOrFail($id);
+        // Optionally: check for related appraisals and handle as needed (cascade or restrict)
+        $cycle->delete();
+        return redirect()->route('hr.appraisals.cycles.index')->with('success', 'Appraisal cycle deleted successfully.');
+    }
+
 
     /**
      * Display the specified appraisal cycle details
      */
     public function show($id)
     {
-        // Mock cycle details with analytics
-        $cycle = [
-            'id' => 1,
-            'name' => 'Annual Review 2025',
-            'start_date' => '2025-01-01',
-            'end_date' => '2025-12-31',
-            'status' => 'open',
-            'total_appraisals' => 45,
-            'completed_appraisals' => 38,
-            'average_score' => 7.4,
-            'created_by' => 'HR Manager',
-            'created_at' => '2025-01-05 08:30:00',
-            'updated_at' => '2025-11-20 14:22:00',
+        $cycle = \App\Models\AppraisalCycle::with(['createdBy', 'appraisals.employee.profile', 'appraisals.employee.department', 'appraisals.employee.position'])
+            ->findOrFail($id);
+
+        // Format cycle data for frontend
+        $cycleData = [
+            'id' => $cycle->id,
+            'name' => $cycle->name,
+            'start_date' => $cycle->start_date,
+            'end_date' => $cycle->end_date,
+            'status' => $cycle->status,
+            'criteria' => $cycle->criteria,
+            'created_by' => $cycle->createdBy ? [
+                'id' => $cycle->createdBy->id,
+                'name' => $cycle->createdBy->name,
+                'email' => $cycle->createdBy->email,
+            ] : null,
         ];
 
-        // Mock appraisals in this cycle
-        $appraisals = [
-            [
-                'id' => 1,
-                'employee_id' => 1,
-                'employee_name' => 'Juan dela Cruz',
-                'employee_number' => 'EMP-2023-001',
-                'department_id' => 1,
-                'department_name' => 'Engineering',
-                'cycle_id' => 1,
-                'cycle_name' => 'Annual Review 2025',
-                'status' => 'completed',
-                'status_label' => 'Completed',
-                'status_color' => 'bg-green-100 text-green-800',
-                'overall_score' => 8.2,
-                'feedback' => 'Excellent performance',
-                'scores' => [],
-                'attendance_rate' => 98,
-                'lateness_count' => 1,
-                'violation_count' => 0,
-                'created_by' => 'HR Manager',
-                'updated_by' => 'HR Manager',
-                'created_at' => '2025-01-10',
-                'updated_at' => '2025-01-15',
-            ],
-            [
-                'id' => 2,
-                'employee_id' => 2,
-                'employee_name' => 'Maria Santos',
-                'employee_number' => 'EMP-2023-002',
-                'department_id' => 2,
-                'department_name' => 'Finance',
-                'cycle_id' => 1,
-                'cycle_name' => 'Annual Review 2025',
-                'status' => 'completed',
-                'status_label' => 'Completed',
-                'status_color' => 'bg-green-100 text-green-800',
-                'overall_score' => 7.8,
-                'feedback' => 'Good performance',
-                'scores' => [],
-                'attendance_rate' => 96,
-                'lateness_count' => 2,
-                'violation_count' => 0,
-                'created_by' => 'HR Manager',
-                'updated_by' => 'HR Manager',
-                'created_at' => '2025-01-15',
-                'updated_at' => '2025-01-18',
-            ],
-            [
-                'id' => 3,
-                'employee_id' => 3,
-                'employee_name' => 'Carlos Reyes',
-                'employee_number' => 'EMP-2023-003',
-                'department_id' => 3,
-                'department_name' => 'Operations',
-                'cycle_id' => 1,
-                'cycle_name' => 'Annual Review 2025',
-                'status' => 'in_progress',
-                'status_label' => 'In Progress',
-                'status_color' => 'bg-blue-100 text-blue-800',
-                'overall_score' => null,
-                'feedback' => null,
-                'scores' => [],
-                'attendance_rate' => 94,
-                'lateness_count' => 3,
-                'violation_count' => 0,
-                'created_by' => 'HR Manager',
-                'updated_by' => null,
-                'created_at' => '2025-01-12',
-                'updated_at' => '2025-01-12',
-            ],
-            [
-                'id' => 4,
-                'employee_id' => 4,
-                'employee_name' => 'Ana Garcia',
-                'employee_number' => 'EMP-2023-004',
-                'department_id' => 4,
-                'department_name' => 'Sales',
-                'cycle_id' => 1,
-                'cycle_name' => 'Annual Review 2025',
-                'status' => 'draft',
-                'status_label' => 'Draft',
-                'status_color' => 'bg-gray-100 text-gray-800',
-                'overall_score' => null,
-                'feedback' => null,
-                'scores' => [],
-                'attendance_rate' => 92,
-                'lateness_count' => 4,
-                'violation_count' => 1,
-                'created_by' => 'HR Manager',
-                'updated_by' => null,
-                'created_at' => '2025-01-20',
-                'updated_at' => '2025-01-20',
-            ],
-            [
-                'id' => 5,
-                'employee_id' => 5,
-                'employee_name' => 'Miguel Torres',
-                'employee_number' => 'EMP-2023-005',
-                'department_id' => 1,
-                'department_name' => 'Engineering',
-                'cycle_id' => 1,
-                'cycle_name' => 'Annual Review 2025',
-                'status' => 'completed',
-                'status_label' => 'Completed',
-                'status_color' => 'bg-green-100 text-green-800',
-                'overall_score' => 6.9,
-                'feedback' => 'Satisfactory performance',
-                'scores' => [],
-                'attendance_rate' => 97,
-                'lateness_count' => 1,
-                'violation_count' => 0,
-                'created_by' => 'HR Manager',
-                'updated_by' => 'HR Manager',
-                'created_at' => '2025-01-18',
-                'updated_at' => '2025-01-22',
-            ],
-        ];
-
-        // Mock analytics data - matches CycleAnalytics interface
-        $analytics = [
-            'cycle_id' => 1,
-            'total_appraisals' => 45,
-            'completed_appraisals' => 38,
-            'completion_rate' => 84.4,
-            'average_score' => 7.4,
-            'high_performers' => 15,
-            'medium_performers' => 18,
-            'low_performers' => 5,
-            'department_breakdown' => [
-                [
-                    'id' => 1,
-                    'name' => 'Engineering',
-                    'average_score' => 7.5,
-                    'total_employees' => 10,
-                    'appraised_employees' => 8,
-                ],
-                [
-                    'id' => 2,
-                    'name' => 'Finance',
-                    'average_score' => 7.6,
-                    'total_employees' => 8,
-                    'appraised_employees' => 6,
-                ],
-                [
-                    'id' => 3,
-                    'name' => 'Operations',
-                    'average_score' => 7.1,
-                    'total_employees' => 14,
-                    'appraised_employees' => 12,
-                ],
-                [
-                    'id' => 4,
-                    'name' => 'Sales',
-                    'average_score' => 7.2,
-                    'total_employees' => 13,
-                    'appraised_employees' => 10,
-                ],
-            ],
-        ];
+        $appraisals = $cycle->appraisals->map(function ($a) {
+            return [
+                'id' => $a->id,
+                'employee_id' => $a->employee_id,
+                'employee_name' => $a->employee && $a->employee->profile ? ($a->employee->profile->first_name . ' ' . $a->employee->profile->last_name) : '',
+                'employee_number' => $a->employee ? $a->employee->employee_number : '',
+                'department' => $a->employee && $a->employee->department ? $a->employee->department->name : '',
+                'position' => $a->employee && $a->employee->position ? $a->employee->position->title : '',
+                'status' => $a->status,
+                'overall_score' => $a->overall_score,
+                'created_at' => $a->created_at,
+                'updated_at' => $a->updated_at,
+            ];
+        });
 
         return Inertia::render('HR/Appraisals/Cycles/Show', [
-            'cycle' => $cycle,
+            'cycle' => $cycleData,
             'appraisals' => $appraisals,
-            'analytics' => $analytics,
         ]);
     }
 
     /**
-     * Show the form for editing an appraisal cycle
-     */
-    public function edit($id)
-    {
-        $cycle = [
-            'id' => 1,
-            'name' => 'Annual Review 2025',
-            'start_date' => '2025-01-01',
-            'end_date' => '2025-12-31',
-            'status' => 'open',
-            'total_appraisals' => 45,
-            'completed_appraisals' => 38,
-            'average_score' => 7.4,
-            'created_by' => 'HR Manager',
-            'created_at' => '2025-01-05 08:30:00',
-            'updated_at' => '2025-11-20 14:22:00',
-            'criteria' => [
-                ['name' => 'Quality of Work', 'weight' => 20],
-                ['name' => 'Attendance & Punctuality', 'weight' => 20],
-                ['name' => 'Behavior & Conduct', 'weight' => 20],
-                ['name' => 'Productivity', 'weight' => 20],
-                ['name' => 'Teamwork', 'weight' => 20],
-            ],
-        ];
-
-        return Inertia::render('HR/Appraisals/Cycles/Edit', [
-            'cycle' => $cycle,
-        ]);
-    }
-
-    /**
-     * Update the specified appraisal cycle
-     */
-    public function update(Request $request, $id)
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
-            'criteria' => 'required|array|min:3',
-            'criteria.*.name' => 'required|string|max:100',
-            'criteria.*.weight' => 'required|numeric|min:1|max:100',
-        ]);
-
-        // Verify total weight equals 100
-        $totalWeight = array_sum(array_column($validated['criteria'], 'weight'));
-        if ($totalWeight !== 100) {
-            return back()->withErrors(['criteria' => 'Total weight must equal 100%']);
-        }
-
-        // In production, update database
-        return redirect()
-            ->route('hr.appraisals.cycles.index')
-            ->with('success', 'Appraisal cycle updated successfully');
-    }
-
-    /**
-     * Close an appraisal cycle
-     */
-    public function close(Request $request, $id)
-    {
-        // In production, update cycle status to 'closed'
-        return back()->with('success', 'Appraisal cycle closed successfully');
-    }
-
-    /**
-     * Show employee assignment form
-     */
-    public function assignEmployees($id)
-    {
-        // Mock employees for assignment
-        $employees = $this->getMockEmployees();
-
-        return Inertia::render('HR/Appraisals/Cycles/AssignEmployees', [
-            'cycleId' => $id,
-            'employees' => $employees,
-        ]);
-    }
-
-    /**
-     * Store employee assignments
+     * Assign employees to an appraisal cycle
      */
     public function storeAssignment(Request $request, $id)
     {
         $validated = $request->validate([
             'employee_ids' => 'required|array|min:1',
-            'employee_ids.*' => 'required|integer',
-            'due_date' => 'required|date|after:today',
+            'employee_ids.*' => 'integer|exists:employees,id',
+            'due_date' => 'required|date',
             'notes' => 'nullable|string|max:500',
         ]);
 
-        // In production, create appraisal records for each employee
-        $employeeCount = count($validated['employee_ids']);
+        // Create Appraisal records for each assigned employee if not already present for this cycle
+        $created = 0;
+        foreach ($validated['employee_ids'] as $employeeId) {
+            $exists = \App\Models\Appraisal::where('appraisal_cycle_id', $id)
+                ->where('employee_id', $employeeId)
+                ->exists();
+            if (!$exists) {
+                \App\Models\Appraisal::create([
+                    'appraisal_cycle_id' => $id,
+                    'employee_id' => $employeeId,
+                    'status' => 'draft',
+                    'created_by' => auth()->id(),
+                ]);
+                $created++;
+            }
+        }
 
-        return back()->with('success', "Successfully assigned appraisals to {$employeeCount} employee(s)");
+        return redirect()->route('hr.appraisals.cycles.show', $id)
+            ->with('success', $created . ' employees assigned successfully.');
     }
 
     /**
-     * Get mock employees list
+     * Display a listing of appraisal cycles
      */
-    private function getMockEmployees()
+    public function index(Request $request)
     {
-        return [
-            ['id' => 1, 'employee_number' => 'EMP-2023-001', 'name' => 'Juan dela Cruz', 'department' => 'Engineering'],
-            ['id' => 2, 'employee_number' => 'EMP-2023-002', 'name' => 'Maria Santos', 'department' => 'Finance'],
-            ['id' => 3, 'employee_number' => 'EMP-2023-003', 'name' => 'Carlos Reyes', 'department' => 'Operations'],
-            ['id' => 4, 'employee_number' => 'EMP-2023-004', 'name' => 'Ana Garcia', 'department' => 'Sales'],
-            ['id' => 5, 'employee_number' => 'EMP-2023-005', 'name' => 'Miguel Torres', 'department' => 'Engineering'],
-            ['id' => 6, 'employee_number' => 'EMP-2023-006', 'name' => 'Linda Rodriguez', 'department' => 'HR'],
-            ['id' => 7, 'employee_number' => 'EMP-2023-007', 'name' => 'Ramon Martinez', 'department' => 'Operations'],
-            ['id' => 8, 'employee_number' => 'EMP-2023-008', 'name' => 'Sophie Mercado', 'department' => 'Finance'],
-            ['id' => 9, 'employee_number' => 'EMP-2023-009', 'name' => 'Daniel Perez', 'department' => 'Sales'],
-            ['id' => 10, 'employee_number' => 'EMP-2023-010', 'name' => 'Rebecca Lopez', 'department' => 'Engineering'],
-        ];
+        // --- DB-driven implementation ---
+        $status = $request->input('status', 'all');
+        $year = $request->input('year', date('Y'));
+
+        $query = \App\Models\AppraisalCycle::withCount(['appraisals'])
+            ->with(['createdBy'])
+            ->orderByDesc('start_date');
+
+        if ($status !== 'all') {
+            $query->where('status', $status);
+        }
+        if ($year) {
+            $query->whereYear('start_date', $year);
+        }
+
+        $cycles = $query->get();
+
+        // Stats
+        $totalCycles = $cycles->count();
+        $activeCycles = $cycles->where('status', 'open')->count();
+        $avgCompletion = 0; // Placeholder, implement if you have completion data
+        $pendingAppraisals = 0; // Placeholder, implement if you have appraisals data
+
+        // Get active employees for assignment modal
+        $employees = \App\Models\Employee::with(['profile', 'department', 'position'])
+            ->whereNull('termination_date')
+            ->where('status', 'active')
+            ->get()
+            ->map(function ($e) {
+                return [
+                    'id' => $e->id,
+                    'name' => $e->profile ? ($e->profile->first_name . ' ' . $e->profile->last_name) : $e->employee_number,
+                    'employee_number' => $e->employee_number,
+                    'department' => $e->department ? $e->department->name : '',
+                    'position' => $e->position ? $e->position->title : '',
+                ];
+            });
+
+        return Inertia::render('HR/Appraisals/Cycles/Index', [
+            'cycles' => $cycles,
+            'stats' => [
+                'total_cycles' => $totalCycles,
+                'active_cycles' => $activeCycles,
+                'avg_completion_rate' => $avgCompletion,
+                'pending_appraisals' => $pendingAppraisals,
+            ],
+            'filters' => compact('status', 'year'),
+            'employees' => $employees,
+        ]);
     }
 }

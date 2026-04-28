@@ -80,32 +80,120 @@ class PhilHealthController extends Controller
         ]);
     }
 
-    public function downloadRF1(int $reportId)
-    {
-        $report = GovernmentReport::findOrFail($reportId);
-
-        if (!$report->file_path || !Storage::exists($report->file_path)) {
-            return response()->json(['success' => false, 'message' => 'Report file not available'], 404);
-        }
-
-        return Storage::download($report->file_path, $report->file_name ?? 'rf1_report.csv');
-    }
-
-    public function downloadContributions(int $periodId)
-    {
+public function downloadRF1(int $reportId)
+{
+    try {
         $report = GovernmentReport::where('agency', 'philhealth')
-            ->where('report_type', 'contributions')
-            ->where('payroll_period_id', $periodId)
-            ->latest()
-            ->first();
+            ->where('report_type', 'rf1')
+            ->findOrFail($reportId);
 
-        if (!$report || !$report->file_path || !Storage::exists($report->file_path)) {
-            return response()->json(['success' => false, 'message' => 'Contributions report not available'], 404);
+        // Serve stored file if it exists
+        if ($report->file_path && Storage::exists($report->file_path)) {
+            return Storage::download($report->file_path, $report->file_name ?? 'rf1_report.csv');
         }
 
-        return Storage::download($report->file_path, $report->file_name ?? 'philhealth_contributions.csv');
-    }
+        // Otherwise generate on the fly
+        $contributions = $this->philHealthService->getContributions('philhealth', $report->payroll_period_id);
+        $filename      = $report->file_name ?? "PhilHealth-RF1-{$report->report_period}.csv";
 
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'no-cache, no-store, must-revalidate',
+        ];
+
+        $callback = function () use ($contributions) {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, [
+                'Sequence No.',
+                'PhilHealth Number',
+                'Employee Name',
+                'Monthly Basic Salary',
+                'EE Premium',
+                'ER Premium',
+                'Total Premium',
+            ]);
+
+            $seq = 1;
+            foreach ($contributions as $row) {
+                fputcsv($handle, [
+                    $seq++,
+                    $row['philhealth_number'],
+                    $row['employee_name'],
+                    number_format($row['monthly_basic'], 2, '.', ''),
+                    number_format($row['employee_premium'], 2, '.', ''),
+                    number_format($row['employer_premium'], 2, '.', ''),
+                    number_format($row['total_premium'], 2, '.', ''),
+                ]);
+            }
+
+            fclose($handle);
+        };
+
+        return response()->stream($callback, 200, $headers);
+
+    } catch (\Exception $e) {
+        Log::error('PhilHealth RF1 download error', ['error' => $e->getMessage()]);
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+}
+public function downloadContributions(int $periodId)
+{
+    try {
+        $contributions = $this->philHealthService->getContributions('philhealth', $periodId);
+
+        if ($contributions->isEmpty()) {
+            return response()->json(['error' => 'No contribution data found for this period.'], 404);
+        }
+
+        $period   = \App\Models\PayrollPeriod::find($periodId);
+        $month    = $period?->period_start?->format('Y-m') ?? 'unknown';
+        $filename = "PhilHealth-Contributions-{$month}.csv";
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'no-cache, no-store, must-revalidate',
+        ];
+
+        $callback = function () use ($contributions) {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, [
+                'Employee Number',
+                'Employee Name',
+                'PhilHealth Number',
+                'Month',
+                'Monthly Basic Salary',
+                'Employee Premium (2.5%)',
+                'Employer Premium (2.5%)',
+                'Total Premium',
+            ]);
+
+            foreach ($contributions as $row) {
+                fputcsv($handle, [
+                    $row['employee_number'],
+                    $row['employee_name'],
+                    $row['philhealth_number'],
+                    $row['month'],
+                    number_format($row['monthly_basic'], 2, '.', ''),
+                    number_format($row['employee_premium'], 2, '.', ''),
+                    number_format($row['employer_premium'], 2, '.', ''),
+                    number_format($row['total_premium'], 2, '.', ''),
+                ]);
+            }
+
+            fclose($handle);
+        };
+
+        return response()->stream($callback, 200, $headers);
+
+    } catch (\Exception $e) {
+        Log::error('PhilHealth contributions download error', ['error' => $e->getMessage()]);
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+}
     public function download(Request $request, int $reportId)
     {
         $type = $request->query('type', 'rf1');

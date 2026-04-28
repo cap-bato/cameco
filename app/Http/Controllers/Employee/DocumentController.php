@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 /**
@@ -15,7 +16,7 @@ use Inertia\Inertia;
  *
  * Handles employee self-service document operations:
  * - View own documents
- * - Request new documents (COE, Payslip, 2316 Form)
+ * - Request new documents (COE, Payslip (removed employee can already download their payslips), 2316 Form)
  * - Download documents
  *
  * @package App\Http\Controllers\Employee
@@ -47,8 +48,8 @@ class DocumentController extends Controller
             return response()->json(['error' => 'Document not found'], 404);
         }
 
-        $filePath = storage_path("app/{$document->file_path}");
-        if (!file_exists($filePath)) {
+        $filePath = $this->resolveStoredFilePath($document->file_path);
+        if (!$filePath || !file_exists($filePath)) {
             return response()->json(['error' => 'File not found'], 404);
         }
 
@@ -153,6 +154,26 @@ class DocumentController extends Controller
             ->where('status', 'pending')
             ->count();
 
+        // Get latest pending requests for inline visibility on documents page
+        $pendingRequestItems = \DB::table('document_requests')
+            ->where('employee_id', $employee->id)
+            ->where('status', 'pending')
+            ->orderBy('requested_at', 'desc')
+            ->limit(5)
+            ->get()
+            ->map(function ($request) {
+                return [
+                    'id' => $request->id,
+                    'document_type' => $this->formatDocumentType($request->document_type),
+                    'requested_at' => $request->requested_at
+                        ? \Carbon\Carbon::parse($request->requested_at)->format('M d, Y h:i A')
+                        : null,
+                    'purpose' => $request->purpose,
+                    'status' => $request->status,
+                ];
+            })
+            ->toArray();
+
         return Inertia::render('Employee/Documents/Index', [
             'employee' => [
                 'id' => $employee->id,
@@ -163,6 +184,7 @@ class DocumentController extends Controller
             'categories' => $categories,
             'selectedCategory' => $category,
             'pendingRequests' => $pendingRequests,
+            'pendingRequestItems' => $pendingRequestItems,
             'totalDocuments' => count($documents),
         ]);
     }
@@ -187,11 +209,6 @@ class DocumentController extends Controller
                 'value' => 'certificate_of_employment',
                 'label' => 'Certificate of Employment',
                 'description' => 'Official document confirming your employment',
-            ],
-            [
-                'value' => 'payslip',
-                'label' => 'Payslip',
-                'description' => 'Salary statement for a specific period',
             ],
             [
                 'value' => 'bir_form_2316',
@@ -225,9 +242,8 @@ class DocumentController extends Controller
     {
         // Validate request
         $validated = $request->validate([
-            'document_type' => 'required|string|in:certificate_of_employment,payslip,bir_form_2316,government_compliance',
+            'document_type' => 'required|string|in:certificate_of_employment,bir_form_2316,government_compliance',
             'purpose' => 'nullable|string|max:500',
-            'period' => 'nullable|string', // For payslip: month-year format (e.g., "01-2024")
         ]);
 
         $user = Auth::user();
@@ -238,15 +254,20 @@ class DocumentController extends Controller
         }
 
         try {
+            $notes = null;
+            if (!empty($validated['period'])) {
+                $notes = 'Requested period: ' . $validated['period'];
+            }
+
             // Create document request
-            $documentRequest = \DB::table('document_requests')->insert([
+            \DB::table('document_requests')->insert([
                 'employee_id' => $employee->id,
                 'document_type' => $validated['document_type'],
                 'purpose' => $validated['purpose'] ?? null,
-                'period' => $validated['period'] ?? null,
                 'status' => 'pending',
-                'requested_by' => $user->id,
+                'request_source' => 'employee_portal',
                 'requested_at' => now(),
+                'notes' => $notes,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -295,8 +316,8 @@ class DocumentController extends Controller
         }
 
         // Check if document file exists
-        $filePath = storage_path("app/{$document->file_path}");
-        if (!file_exists($filePath)) {
+        $filePath = $this->resolveStoredFilePath($document->file_path);
+        if (!$filePath || !file_exists($filePath)) {
             \Log::warning('Document file not found', [
                 'document_id' => $documentId,
                 'file_path' => $document->file_path,
@@ -306,20 +327,15 @@ class DocumentController extends Controller
         }
 
         try {
-            // Log download action
-            \DB::table('activity_logs')->insert([
-                'subject_type' => 'App\Models\EmployeeDocument',
-                'subject_id' => $documentId,
-                'causer_type' => 'App\Models\User',
-                'causer_id' => $user->id,
-                'event' => 'downloaded',
-                'properties' => json_encode([
+            // Best-effort audit logging; do not block the actual file download.
+            $this->recordDownloadAudit(
+                'App\\Models\\EmployeeDocument',
+                (int) $documentId,
+                [
                     'document_type' => $document->document_type,
                     'employee_id' => $employee->id,
-                ]),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+                ]
+            );
 
             // Download file
             return response()->download(
@@ -437,7 +453,7 @@ public function requestHistory(Request $request)
             'document_type' => $this->formatDocumentType($request->document_type),
             'document_type_key' => $request->document_type,
             'purpose' => $request->purpose ?? 'Not specified',
-            'period' => $request->period,
+            'period' => $this->extractRequestedPeriod($request->notes ?? null),
             'status' => $request->status,
             'status_display' => $this->getRequestStatusDisplay($request->status),
             'requested_at' => \Carbon\Carbon::parse($request->requested_at)->format('M d, Y h:i A'),
@@ -484,11 +500,26 @@ private function formatDocumentType(string $type): string
 {
     return match($type) {
         'certificate_of_employment' => 'Certificate of Employment',
-        'payslip' => 'Payslip',
         'bir_form_2316' => 'BIR Form 2316',
         'government_compliance' => 'Government Compliance Document',
         default => ucwords(str_replace('_', ' ', $type)),
     };
+}
+
+/**
+ * Extract requested period from request notes.
+ */
+private function extractRequestedPeriod(?string $notes): ?string
+{
+    if (!$notes) {
+        return null;
+    }
+
+    if (preg_match('/Requested period:\s*([0-9]{4}-[0-9]{2})/i', $notes, $matches) === 1) {
+        return $matches[1];
+    }
+
+    return null;
 }
 
 /**
@@ -629,8 +660,8 @@ public function downloadFromRequest($requestId)
         }
 
         // Check if file exists
-        $filePath = storage_path("app/{$request->file_path}");
-        if (!file_exists($filePath)) {
+        $filePath = $this->resolveStoredFilePath($request->file_path);
+        if (!$filePath || !file_exists($filePath)) {
             \Log::warning('Request document file not found', [
                 'request_id' => $requestId,
                 'file_path' => $request->file_path,
@@ -639,20 +670,15 @@ public function downloadFromRequest($requestId)
             return back()->with('error', 'Document file not found on server');
         }
 
-        // Log download
-        \DB::table('activity_logs')->insert([
-            'subject_type' => 'App\Models\DocumentRequest',
-            'subject_id' => $requestId,
-            'causer_type' => 'App\Models\User',
-            'causer_id' => $user->id,
-            'event' => 'downloaded',
-            'properties' => json_encode([
+        // Best-effort audit logging; do not block the actual file download.
+        $this->recordDownloadAudit(
+            'App\\Models\\DocumentRequest',
+            (int) $requestId,
+            [
                 'document_type' => $request->document_type,
                 'employee_id' => $employee->id,
-            ]),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+            ]
+        );
 
         // Download file
         $filename = $this->formatDocumentType($request->document_type);
@@ -668,6 +694,60 @@ public function downloadFromRequest($requestId)
         ]);
 
         return back()->with('error', 'Failed to download document. Please try again.');
+    }
+}
+
+/**
+ * Resolve absolute file path across common storage disks.
+ */
+private function resolveStoredFilePath(?string $relativePath): ?string
+{
+    if (!$relativePath) {
+        return null;
+    }
+
+    $defaultDisk = config('filesystems.default', 'local');
+    $candidateDisks = array_values(array_unique([$defaultDisk, 'local', 'public']));
+
+    foreach ($candidateDisks as $disk) {
+        try {
+            if (Storage::disk($disk)->exists($relativePath)) {
+                return Storage::disk($disk)->path($relativePath);
+            }
+        } catch (\Throwable $e) {
+            // Continue checking other disks if one disk is misconfigured.
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Record download events without interrupting the user flow.
+ */
+private function recordDownloadAudit(string $subjectType, int $subjectId, array $properties): void
+{
+    try {
+        if (!\Schema::hasTable('activity_logs')) {
+            return;
+        }
+
+        \DB::table('activity_logs')->insert([
+            'subject_type' => $subjectType,
+            'subject_id' => $subjectId,
+            'causer_type' => 'App\\Models\\User',
+            'causer_id' => Auth::id(),
+            'event' => 'downloaded',
+            'properties' => json_encode($properties),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    } catch (\Throwable $e) {
+        \Log::warning('Download audit log skipped', [
+            'subject_type' => $subjectType,
+            'subject_id' => $subjectId,
+            'error' => $e->getMessage(),
+        ]);
     }
 }
 }

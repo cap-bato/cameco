@@ -25,6 +25,8 @@ import {
 export function NavEmployee() {
     const page = usePage();
 
+    const features = page.props.features as Record<string, boolean>;
+
     // Main menu items for employee self-service
     const mainMenuItems = [
         {
@@ -32,26 +34,30 @@ export function NavEmployee() {
             icon: User,
             href: '/employee/profile',
             description: 'View and update personal information',
+            show: true, // Profile is always available if employee module is on
         },
         {
             title: 'Attendance',
             icon: Clock,
             href: '/employee/attendance',
             description: 'View time logs and report issues',
+            show: features?.timekeeping !== false,
         },
         {
             title: 'Payslips',
             icon: DollarSign,
             href: '/employee/payslips',
             description: 'View and download payslips',
+            show: features?.payroll !== false,
         },
         {
             title: 'Documents',
             href: '/employee/documents',
             icon: FileText,
             description: 'View and manage documents',
+            show: features?.documents !== false,
         }
-    ];
+    ].filter(item => item.show);
 
     // Leave Management submenu
     const leaveMenuItems = [
@@ -73,6 +79,7 @@ export function NavEmployee() {
     ];
 
     const isLeaveActive = page.url.startsWith('/employee/leave');
+    const showLeaveMenu = features?.leave !== false;
 
     return (
         <>
@@ -102,39 +109,41 @@ export function NavEmployee() {
             </SidebarGroup>
 
             {/* Leave Management Section */}
-            <SidebarGroup className="px-2 py-0">
-                <Collapsible defaultOpen={isLeaveActive} className="group/collapsible">
-                    <SidebarMenuItem>
-                        <CollapsibleTrigger asChild>
-                            <SidebarMenuButton tooltip="Leave Management">
-                                <Calendar className="h-4 w-4" />
-                                <span>Leave Management</span>
-                                <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                            </SidebarMenuButton>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                            <SidebarMenuSub>
-                                {leaveMenuItems.map((item) => {
-                                    const isActive = page.url === item.href;
-                                    
-                                    return (
-                                        <SidebarMenuSubItem key={item.href}>
-                                            <SidebarMenuSubButton
-                                                asChild
-                                                isActive={isActive}
-                                            >
-                                                <Link href={item.href}>
-                                                    <span>{item.title}</span>
-                                                </Link>
-                                            </SidebarMenuSubButton>
-                                        </SidebarMenuSubItem>
-                                    );
-                                })}
-                            </SidebarMenuSub>
-                        </CollapsibleContent>
-                    </SidebarMenuItem>
-                </Collapsible>
-            </SidebarGroup>
+            {showLeaveMenu && (
+                <SidebarGroup className="px-2 py-0">
+                    <Collapsible defaultOpen={isLeaveActive} className="group/collapsible">
+                        <SidebarMenuItem>
+                            <CollapsibleTrigger asChild>
+                                <SidebarMenuButton tooltip="Leave Management">
+                                    <Calendar className="h-4 w-4" />
+                                    <span>Leave Management</span>
+                                    <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                                </SidebarMenuButton>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                                <SidebarMenuSub>
+                                    {leaveMenuItems.map((item) => {
+                                        const isActive = page.url === item.href;
+                                        
+                                        return (
+                                            <SidebarMenuSubItem key={item.href}>
+                                                <SidebarMenuSubButton
+                                                    asChild
+                                                    isActive={isActive}
+                                                >
+                                                    <Link href={item.href}>
+                                                        <span>{item.title}</span>
+                                                    </Link>
+                                                </SidebarMenuSubButton>
+                                            </SidebarMenuSubItem>
+                                        );
+                                    })}
+                                </SidebarMenuSub>
+                            </CollapsibleContent>
+                        </SidebarMenuItem>
+                    </Collapsible>
+                </SidebarGroup>
+            )}
 
             {/* Notifications */}
             <SidebarGroup className="px-2 py-0">

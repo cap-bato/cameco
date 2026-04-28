@@ -70,6 +70,8 @@ const StatCard = ({ title, value, icon: Icon, color }: StatCardProps) => (
 
 export default function CyclesIndex({ cycles: rawCycles, employees, stats }: CyclesIndexProps) {
     const cycles = rawCycles as Array<AppraisalCycle & { completion_percentage: number; criteria?: Array<{ name: string; weight: number }> }>;
+    // Ensure employees is always an array to prevent undefined errors
+    const safeEmployees = Array.isArray(employees) ? employees : [];
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isAssignmentOpen, setIsAssignmentOpen] = useState(false);
     const [selectedCycleForAssignment, setSelectedCycleForAssignment] = useState<number | null>(null);
@@ -485,7 +487,7 @@ export default function CyclesIndex({ cycles: rawCycles, employees, stats }: Cyc
                         setSelectedCycleForAssignment(null);
                     }}
                     cycleId={selectedCycleForAssignment}
-                    employees={employees}
+                    employees={safeEmployees}
                 />
             )}
         </AppLayout>

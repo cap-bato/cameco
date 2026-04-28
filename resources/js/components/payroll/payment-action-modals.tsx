@@ -180,8 +180,15 @@ export function MarkPaidConfirmationDialog({
                     <AlertCircle className="h-5 w-5 text-green-600" />
                     Confirm Payment
                 </AlertDialogTitle>
-                <AlertDialogDescription className="space-y-3">
-                    <p>
+
+                {/* Simple one-liner description for accessibility — no block elements */}
+                <AlertDialogDescription>
+                    Mark payment as paid for {payment.employee_name} — {payment.period_name}
+                </AlertDialogDescription>
+
+                {/* Rich content lives outside AlertDialogDescription */}
+                <div className="space-y-3 mt-2">
+                    <p className="text-sm text-gray-700">
                         Are you sure you want to mark this payment as <strong>paid</strong>?
                     </p>
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
@@ -201,7 +208,8 @@ export function MarkPaidConfirmationDialog({
                     <p className="text-xs text-amber-700">
                         ⚠️ This action will update the payment status to "Paid" and cannot be easily reversed.
                     </p>
-                </AlertDialogDescription>
+                </div>
+
                 <div className="flex gap-3 justify-end mt-4">
                     <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
                     <AlertDialogAction

@@ -18,17 +18,14 @@ class PayrollPaymentsSeeder extends Seeder
      */
     public function run(): void
     {
-        // Avoid duplicate seeding
-        if (PayrollPayment::count() > 0) {
-            $this->command->warn('payroll_payments already seeded — skipping.');
-            return;
-        }
+        // Truncate payroll_payments table for fresh seeding
+        \DB::statement('TRUNCATE TABLE payroll_payments RESTART IDENTITY CASCADE');
 
-        // Get approved or completed periods
-        $periods = PayrollPeriod::whereIn('status', ['approved', 'completed'])->get();
+        // Get all payroll periods (regardless of status)
+        $periods = PayrollPeriod::all();
         
         if ($periods->isEmpty()) {
-            $this->command->warn('No approved/completed payroll periods found. Run PayrollPeriodsSeeder first.');
+            $this->command->warn('No payroll periods found. Run PayrollPeriodsSeeder first.');
             return;
         }
 
@@ -88,24 +85,10 @@ class PayrollPaymentsSeeder extends Seeder
                 $netPay = $grossPay - $totalDeductions;
 
                 // Determine payment status based on period status and payment method
-                if ($period->status === 'completed') {
-                    if ($paymentMethod->method_type === 'cash') {
-                        // 90% claimed, 10% unclaimed for cash
-                        $status = rand(1, 100) <= 90 ? 'paid' : 'unclaimed';
-                        $paidAt = $status === 'paid' ? Carbon::parse($period->payment_date)->addHours(rand(0, 48)) : null;
-                        $claimedAt = $paidAt;
-                    } else {
-                        // All bank payments completed for completed periods
-                        $status = 'paid';
-                        $paidAt = Carbon::parse($period->payment_date)->addHours(rand(1, 6));
-                        $claimedAt = null;
-                    }
-                } else {
-                    // Approved but not yet paid
-                    $status = 'pending';
-                    $paidAt = null;
-                    $claimedAt = null;
-                }
+                // Always set payment status to 'paid' for all seeded payments
+                $status = 'paid';
+                $paidAt = Carbon::parse($period->payment_date)->addHours(rand(0, 48));
+                $claimedAt = $paidAt;
 
                 $payments[] = [
                     'employee_id' => $employee->id,

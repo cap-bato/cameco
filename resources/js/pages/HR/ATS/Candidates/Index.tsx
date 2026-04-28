@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Head } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -41,6 +42,7 @@ export default function CandidatesIndex({
   statistics,
   filters: initialFilters,
 }: CandidatesIndexProps) {
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState(initialFilters?.search || '');
   const [sourceFilter, setSourceFilter] = useState(initialFilters?.source || '');
   const [statusFilter, setStatusFilter] = useState(initialFilters?.status || '');
@@ -55,6 +57,11 @@ export default function CandidatesIndex({
    * Filter candidates based on search query, source, and status
    */
   const getFilteredCandidates = () => {
+    // Guard: ensure candidates is an array
+    if (!Array.isArray(candidates)) {
+      return [];
+    }
+
     return candidates.filter((candidate) => {
       // Filter by search query (case-insensitive name search)
       if (searchQuery.trim()) {
@@ -93,29 +100,74 @@ export default function CandidatesIndex({
   };
 
   const handleDeleteClick = (candidate: Candidate) => {
+    console.log('Delete click - candidate object:', candidate);
+    console.log('Delete click - candidate.id:', candidate.id);
     setActionCandidate(candidate);
     setIsDeleteDialogOpen(true);
   };
 
 const handleConfirmDelete = async () => {
-  if (!actionCandidate) return;
+  console.log('handleConfirmDelete - full actionCandidate object:', JSON.stringify(actionCandidate, null, 2));
+  console.log('handleConfirmDelete - actionCandidate.id:', actionCandidate?.id);
+  console.log('handleConfirmDelete - typeof actionCandidate.id:', typeof actionCandidate?.id);
+  console.log('handleConfirmDelete - !actionCandidate:', !actionCandidate);
+  console.log('handleConfirmDelete - !actionCandidate.id:', !actionCandidate?.id);
+  
+  if (!actionCandidate || !actionCandidate.id) {
+    console.warn('Validation failed: actionCandidate or id is missing');
+    toast({
+      title: 'Error',
+      description: 'Invalid candidate. Please try again.',
+      variant: 'destructive',
+    });
+    setIsDeleteDialogOpen(false);
+    return;
+  }
 
   setIsDeleteLoading(true);
 
   try {
-    await axios.delete(`/hr/ats/candidates/${actionCandidate.id}`);
+    const deleteUrl = `/hr/ats/candidates/${actionCandidate.id}`;
+    console.log('Making DELETE request to:', deleteUrl);
+    await axios.delete(deleteUrl);
 
-    alert(`Candidate ${actionCandidate.first_name} ${actionCandidate.last_name} deleted successfully`);
+    toast({
+      title: 'Success',
+      description: `Candidate ${actionCandidate.first_name} ${actionCandidate.last_name} deleted successfully`,
+    });
 
-    // Refresh frontend list
-    window.location.reload();
+    // Close dialog immediately
+    setIsDeleteDialogOpen(false);
+
+    // Refresh frontend list after toast displays
+    setTimeout(() => window.location.reload(), 2000);
 
   } catch (error: any) {
-    console.error("Error deleting candidate:", error.response?.data || error);
-    alert("Failed to delete candidate. Check console for details.");
+    // Suppress detailed error logging for handled errors (404, 405)
+    if (error.response?.status && ![404, 405].includes(error.response.status)) {
+      console.error("Error deleting candidate:", error.response?.data || error);
+    }
+    
+    // Determine error message
+    let errorMessage = 'Failed to delete candidate.';
+    if (error.response?.status === 404) {
+      errorMessage = 'Candidate not found. It may have been already deleted.';
+    } else if (error.response?.status === 405) {
+      errorMessage = 'Unable to delete candidate. Please refresh and try again.';
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    }
+
+    toast({
+      title: 'Error',
+      description: errorMessage,
+      variant: 'destructive',
+    });
+    
+    // Close dialog after showing error
+    setIsDeleteDialogOpen(false);
   } finally {
     setIsDeleteLoading(false);
-    setIsDeleteDialogOpen(false);
     setActionCandidate(undefined);
   }
 };
@@ -135,28 +187,39 @@ const handleAddCandidateSubmit = async (data: CandidateFormData) => {
       }
     });
 
-    // IMPORTANT: if resume is a File, append separately
-    if (data.resume instanceof File) {
-      formData.append("resume", data.resume);
-    }
-
     await axios.post('/hr/ats/candidates', formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
     });
 
-    alert('Candidate created successfully!');
-    window.location.reload();
+    toast({
+      title: 'Success',
+      description: 'Candidate created successfully!',
+    });
     setIsAddCandidateModalOpen(false);
+    // Refresh after toast displays
+    setTimeout(() => window.location.reload(), 2000);
 
   } catch (error: any) {
+    // If it's a validation error (422), let the modal handle it
+    if (error.response?.status === 422 && error.response?.data?.errors) {
+      throw error;
+    }
+    
+    // For other errors, show a toast
     const message =
       error.response?.data?.message ||
+      error.message ||
       "An unexpected error occurred. Please try again.";
 
-    alert(message);
-    console.error("Error submitting candidate:", error.response?.data || error.message);
+    toast({
+      title: 'Error',
+      description: message,
+      variant: 'destructive',
+    });
+    
+    throw error;
   }
 };
 
@@ -174,12 +237,20 @@ const handleAddNoteSubmit = async (noteData: { note: string; is_private: boolean
   try {
     await axios.post(`/hr/ats/candidates/${noteCandidate.id}/notes`, noteData);
 
-    alert("Note added successfully!");
-    window.location.reload(); // reload to show notes
+    toast({
+      title: 'Success',
+      description: 'Note added successfully!',
+    });
     setIsAddNoteModalOpen(false);
+    // Reload after toast displays
+    setTimeout(() => window.location.reload(), 2000);
   } catch (error: any) {
     console.error(error);
-    alert(error.response?.data?.message || "Something went wrong.");
+    toast({
+      title: 'Error',
+      description: error.response?.data?.message || 'Something went wrong.',
+      variant: 'destructive',
+    });
   }
 };
 

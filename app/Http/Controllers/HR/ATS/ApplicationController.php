@@ -12,8 +12,7 @@ use App\Models\ApplicationStatusHistory;
 use App\Models\Interview;
 use App\Models\Offer;
 use App\Models\Note;
-
-use function Laravel\Prompts\alert;
+use Illuminate\Support\Facades\Auth;
 
 class ApplicationController extends Controller
 {
@@ -27,99 +26,106 @@ class ApplicationController extends Controller
         $minScore = $request->input('min_score');
         $maxScore = $request->input('max_score');
 
-        $applications = Application::with(['candidate', 'jobPosting', 'interviews'])
+        $applications = Application::with(['candidate.profile', 'jobPosting', 'interviews'])
             ->when($status, fn($q) => $q->where('status', $status))
             ->when($jobId, fn($q) => $q->where('job_posting_id', $jobId))
             ->when($minScore, fn($q) => $q->where('score', '>=', $minScore))
             ->when($maxScore, fn($q) => $q->where('score', '<=', $maxScore))
             ->latest('applied_at')
-            ->get()
-            ->map(function ($app) {
+            ->paginate(20)
+            ->through(function ($app) {
+                $candidate = $app->candidate;
+                $profile = $candidate?->profile;
+                $firstName = $candidate?->first_name ?? $profile?->first_name ?? '';
+                $middleName = $candidate?->middle_name ?? $profile?->middle_name ?? '';
+                $lastName = $candidate?->last_name ?? $profile?->last_name ?? '';
+                $email = $candidate?->email ?? $profile?->email ?? 'N/A';
+                $phone = $candidate?->phone ?? $profile?->phone ?? 'N/A';
+                // Ensure score is always float or null (never string or empty string)
+                $score = $app->score;
+                if ($score === '' || $score === null) {
+                    $score = null;
+                } elseif (!is_numeric($score)) {
+                    $score = null;
+                } else {
+                    $score = (float)$score;
+                }
                 return [
-                    'id' => $app->id,
-                    'status' => $app->status,
-                    'score' => $app->score ?? 'N/A',
-                    'applied_at' => $app->applied_at,
-                    'candidate_name' => $app->candidate
-                        ? trim(
-                            ($app->candidate->first_name ?? '') . ' ' .
-                            ($app->candidate->middle_name ?? '') . ' ' .
-                            ($app->candidate->last_name ?? '')
-                        )
-                        : 'Unknown',
-                    'candidate_email' => $app->candidate->email ?? 'N/A',
-                    'candidate_phone' => $app->candidate->phone ?? 'N/A',
-                    'job_title' => $app->jobPosting->title ?? 'Unknown',
+                    'id'               => $app->id,
+                    'status'           => $app->status,
+                    'score'            => $score,
+                    'applied_at'       => $app->applied_at,
+                    'candidate_name'   => trim("$firstName $middleName $lastName") ?: 'Unknown',
+                    'candidate_email'  => $email,
+                    'candidate_phone'  => $phone,
+                    'job_title'        => $app->jobPosting->title ?? 'Unknown',
                     'interviews_count' => $app->interviews->count(),
                 ];
             });
 
         $statistics = [
             'total_applications' => Application::count(),
-            'submitted'   => Application::where('status', 'submitted')->count(),
-            'shortlisted' => Application::where('status', 'shortlisted')->count(),
-            'interviewed' => Application::where('status', 'interviewed')->count(),
-            'offered'     => Application::where('status', 'offered')->count(),
-            'hired'       => Application::where('status', 'hired')->count(),
-            'rejected'    => Application::where('status', 'rejected')->count(),
+            'submitted'          => Application::where('status', 'submitted')->count(),
+            'shortlisted'        => Application::where('status', 'shortlisted')->count(),
+            'interviewed'        => Application::where('status', 'interviewed')->count(),
+            'offered'            => Application::where('status', 'offered')->count(),
+            'hired'              => Application::where('status', 'hired')->count(),
+            'rejected'           => Application::where('status', 'rejected')->count(),
         ];
 
         return Inertia::render('HR/ATS/Applications/Index', [
             'applications' => $applications,
-            'filters' => [
+            'filters'      => [
                 'status' => $status,
                 'job_id' => $jobId,
+                'min_score' => $minScore,
+                'max_score' => $maxScore,
             ],
-            'statistics' => $statistics,
-            'jobPostings' => JobPosting::select('id', 'title')->get(),
+            'statistics'   => $statistics,
+            'jobPostings'  => JobPosting::select('id', 'title')->get(),
         ]);
     }
 
     /**
      * Show a single application with full details.
+     * Route must be defined as {application} for implicit model binding to work.
      */
-public function show(Application $application): Response
-{
-    $application->load([
-        'candidate',
-        'jobPosting.department',
-        'interviews',
-        'statusHistory',
-        'notes'
-    ]);
+    public function show(Application $application): Response
+    {
+        $application->load([
+            'candidate.profile',
+            'jobPosting.department',
+            'interviews',
+            'statusHistory',
+            'notes',
+        ]);
 
-    // Calculate permissions
-    $canScheduleInterview = in_array($application->status, ['shortlisted', 'interviewed']);
-    $canGenerateOffer = $application->status === 'interviewed';
-return Inertia::render('HR/ATS/Applications/Show', [
-    'application' => [
-        'id' => $application->id,
-        'candidate_name' => trim(
-            ($application->candidate->first_name ?? '') . ' ' .
-            ($application->candidate->middle_name ?? '') . ' ' .
-            ($application->candidate->last_name ?? '')
-        ) ?: 'Unknown',
-        'candidate_email' => $application->candidate->email ?? null,
-        'candidate_phone' => $application->candidate->phone ?? null,
-        'job_title' => $application->jobPosting->title ?? 'Unknown Position',
-        'status' => match($application->status) {
-            'new' => 'submitted',
-            'in_process' => 'shortlisted',
-            default => $application->status,
-        },
-        'original_status' => $application->status, // <— send original DB status
-        'score' => $application->score,
-        'applied_at' => $application->applied_at,
-    ],
-    'interviews' => $application->interviews,
-    'status_history' => $application->statusHistory,
-    'notes' => $application->notes ?? [],
-    'can_schedule_interview' => in_array($application->status, ['shortlisted', 'interviewed']),
-    'can_generate_offer' => $application->status === 'interviewed',
-]);
+        $candidate = $application->candidate;
+        $profile = $candidate?->profile;
+        $firstName = $candidate?->first_name ?? $profile?->first_name ?? '';
+        $middleName = $candidate?->middle_name ?? $profile?->middle_name ?? '';
+        $lastName = $candidate?->last_name ?? $profile?->last_name ?? '';
+        $email = $candidate?->email ?? $profile?->email ?? 'N/A';
+        $phone = $candidate?->phone ?? $profile?->phone ?? 'N/A';
+        $canScheduleInterview = in_array($application->status, ['shortlisted', 'interviewed']);
+        $canGenerateOffer     = $application->status === 'interviewed';
 
-}
+        // Merge candidate_name, candidate_email, candidate_phone into application prop for frontend
+        $application->candidate_name = trim("$firstName $middleName $lastName") ?: 'Unknown';
+        $application->candidate_email = $email;
+        $application->candidate_phone = $phone;
 
+        return Inertia::render('HR/ATS/Applications/Show', [
+            'application'          => $application,
+            'candidate'            => $candidate,
+            'job'                  => $application->jobPosting,
+            'interviews'           => $application->interviews,
+            'status_history'       => $application->statusHistory,
+            'notes'                => $application->notes ?? [],
+            'can_schedule_interview' => $canScheduleInterview,
+            'can_generate_offer'   => $canGenerateOffer,
+        ]);
+    }
 
     /**
      * Update application status.
@@ -137,7 +143,7 @@ return Inertia::render('HR/ATS/Applications/Show', [
         ApplicationStatusHistory::create([
             'application_id' => $application->id,
             'status'         => $validated['status'],
-            'changed_by'     => 1,
+            'changed_by'     => Auth::id(),
             'notes'          => $validated['reason'] ?? null,
         ]);
 
@@ -155,7 +161,7 @@ return Inertia::render('HR/ATS/Applications/Show', [
         ApplicationStatusHistory::create([
             'application_id' => $application->id,
             'status'         => 'shortlisted',
-            'changed_by'     => 1,
+            'changed_by'     => Auth::id(),
         ]);
 
         return back()->with('success', 'Application shortlisted.');
@@ -176,7 +182,7 @@ return Inertia::render('HR/ATS/Applications/Show', [
         ApplicationStatusHistory::create([
             'application_id' => $application->id,
             'status'         => 'rejected',
-            'changed_by'     => 1,
+            'changed_by'     => Auth::id(),
             'notes'          => $validated['reason'],
         ]);
 
@@ -190,19 +196,29 @@ return Inertia::render('HR/ATS/Applications/Show', [
     public function scheduleInterview(Request $request, Application $application)
     {
         $validated = $request->validate([
-            'scheduled_date' => 'required|date',
-            'scheduled_time' => 'required',
-            'location_type'  => 'required|in:office,virtual',
+            'scheduled_date'   => 'required|date',
+            'scheduled_time'   => 'required',
+            'location_type'    => 'required|in:office,video_call,phone',
             'interviewer_name' => 'required|string',
         ]);
 
         Interview::create([
-            'application_id'  => $application->id,
-            'job_title'       => $application->jobPosting->title,
-            'scheduled_date'  => $validated['scheduled_date'],
-            'scheduled_time'  => $validated['scheduled_time'],
-            'location_type'   => $validated['location_type'],
-            'interviewer_name'=> $validated['interviewer_name'],
+            'application_id'   => $application->id,
+            'job_title'        => $application->jobPosting->title,
+            'scheduled_date'   => $validated['scheduled_date'],
+            'scheduled_time'   => $validated['scheduled_time'],
+            'location_type'    => $validated['location_type'],
+            'interviewer_name' => $validated['interviewer_name'],
+        ]);
+
+        // Update application status to interviewed
+        $application->status = 'interviewed';
+        $application->save();
+
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'status'         => 'interviewed',
+            'changed_by'     => Auth::id(),
         ]);
 
         return back()->with('success', 'Interview scheduled.');
@@ -213,10 +229,19 @@ return Inertia::render('HR/ATS/Applications/Show', [
      */
     public function generateOffer(Request $request, Application $application)
     {
+        $validated = $request->validate([
+            'salary'     => 'required|numeric|min:0',
+            'start_date' => 'required|date|after_or_equal:today',
+            'notes'      => 'nullable|string|max:2000',
+        ]);
+
         Offer::create([
             'application_id' => $application->id,
-            'title'          => $application->jobPosting->title,
-            'created_by'     => 1,
+            'title'          => $application->jobPosting->title ?? 'Job Offer',
+            'salary'         => $validated['salary'],
+            'start_date'     => $validated['start_date'],
+            'notes'          => $validated['notes'] ?? null,
+            'created_by'     => Auth::id(),
         ]);
 
         $application->status = 'offered';
@@ -225,31 +250,51 @@ return Inertia::render('HR/ATS/Applications/Show', [
         ApplicationStatusHistory::create([
             'application_id' => $application->id,
             'status'         => 'offered',
-            'changed_by'     => 1,
+            'changed_by'     => Auth::id(),
         ]);
 
         return back()->with('success', 'Offer generated.');
     }
 
+    /**
+     * Move application to a new status (JSON response).
+     */
     public function move(Request $request, Application $application)
-{
-    $validated = $request->validate([
-        'status' => 'required|in:submitted,shortlisted,interviewed,offered,hired,rejected,withdrawn',
-        'notes'  => 'nullable|string|max:1000',
-    ]);
+    {
+        $validated = $request->validate([
+            'status' => 'required|in:submitted,shortlisted,interviewed,offered,hired,rejected,withdrawn',
+            'notes'  => 'nullable|string|max:1000',
+        ]);
 
-    $application->status = $validated['status'];
-    $application->save();
+        $application->status = $validated['status'];
+        $application->save();
 
-    // Save to status history
-    ApplicationStatusHistory::create([
-        'application_id' => $application->id,
-        'status'         => $validated['status'],
-        'changed_by'     =>  1, // use logged-in user if available
-        'notes'          => $validated['notes'] ?? null,
-    ]);
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'status'         => $validated['status'],
+            'changed_by'     => Auth::id(),
+            'notes'          => $validated['notes'] ?? null,
+        ]);
 
-    alert('Success', 'Application moved successfully.', 'success');
-}
+        return response()->json(['success' => true, 'status' => $validated['status']]);
+    }
 
+    /**
+     * Add a note to an application.
+     */
+    public function addNote(Request $request, Application $application)
+    {
+        $validated = $request->validate([
+            'note'       => 'required|string|max:5000',
+            'is_private' => 'boolean',
+        ]);
+
+        $application->notes()->create([
+            'note'       => $validated['note'],
+            'is_private' => $validated['is_private'] ?? false,
+            'user_id'    => Auth::id(),
+        ]);
+
+        return back()->with('success', 'Note added.');
+    }
 }

@@ -17,11 +17,8 @@ class CashDistributionBatchSeeder extends Seeder
      */
     public function run(): void
     {
-        // Avoid duplicate seeding
-        if (CashDistributionBatch::count() > 0) {
-            $this->command->warn('cash_distribution_batches already seeded — skipping.');
-            return;
-        }
+        // Truncate cash_distribution_batches table for fresh seeding
+        \DB::statement('TRUNCATE TABLE cash_distribution_batches RESTART IDENTITY CASCADE');
 
         // Get completed periods
         $periods = PayrollPeriod::where('status', 'completed')->get();

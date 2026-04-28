@@ -83,6 +83,10 @@ class JobPostingsController extends Controller
      */
     public function apply(Request $request, int $jobId)
     {
+        \Log::debug('JobPostingsController@apply: method entered', [
+            'jobId' => $jobId,
+            'request' => $request->all(),
+        ]);
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
@@ -91,18 +95,23 @@ class JobPostingsController extends Controller
             'resume' => 'required|file|mimes:pdf,doc,docx|max:5120', // 5MB max
             'cover_letter' => 'nullable|string|max:2000',
         ]);
-        
+        \Log::debug('JobPostingsController@apply: after validate', [
+            'validated' => $validated,
+        ]);
         // Verify job exists and is open
         $jobPosting = JobPosting::where('status', 'open')->findOrFail($jobId);
-        
+        \Log::debug('JobPostingsController@apply: jobPosting found', [
+            'jobPostingId' => $jobPosting->id,
+        ]);
         DB::beginTransaction();
-        
         try {
             // Check if candidate already exists by email
             $candidate = Candidate::whereHas('profile', function($q) use ($validated) {
                 $q->where('email', $validated['email']);
             })->first();
-            
+            \Log::debug('JobPostingsController@apply: candidate lookup', [
+                'candidate_id' => $candidate?->id,
+            ]);
             if (!$candidate) {
                 // Create profile
                 $profile = \App\Models\Profile::create([
@@ -111,35 +120,50 @@ class JobPostingsController extends Controller
                     'email' => $validated['email'],
                     'phone' => $validated['phone'],
                 ]);
-                
+                \Log::debug('JobPostingsController@apply: profile created', [
+                    'profile_id' => $profile->id,
+                ]);
                 // Create candidate
                 $candidate = Candidate::create([
                     'profile_id' => $profile->id,
+                    'first_name' => $validated['first_name'],
+                    'last_name' => $validated['last_name'],
+                    'email' => $validated['email'],
+                    'phone' => $validated['phone'],
                     'source' => 'job_board',
                     'status' => 'new',
                     'applied_at' => now(),
                 ]);
+                \Log::debug('JobPostingsController@apply: candidate created', [
+                    'candidate_id' => $candidate->id,
+                ]);
             }
-            
             // Check if candidate already applied to this job
             $existingApplication = Application::where('candidate_id', $candidate->id)
-                ->where('job_id', $jobPosting->id)
+                ->where('job_posting_id', $jobPosting->id)
                 ->first();
-            
+            \Log::debug('JobPostingsController@apply: existingApplication check', [
+                'existingApplication' => $existingApplication?->id,
+            ]);
             if ($existingApplication) {
                 DB::rollBack();
+                \Log::debug('JobPostingsController@apply: duplicate application', [
+                    'candidate_id' => $candidate->id,
+                    'job_posting_id' => $jobPosting->id,
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'You have already applied to this position.',
                 ], 422);
             }
-            
             // Upload resume
             $resumePath = null;
             if ($request->hasFile('resume')) {
                 $resumePath = $request->file('resume')->store('resumes', 'public');
+                \Log::debug('JobPostingsController@apply: resume uploaded', [
+                    'resumePath' => $resumePath,
+                ]);
             }
-            
             // Create application
             $application = Application::create([
                 'candidate_id' => $candidate->id,
@@ -149,22 +173,27 @@ class JobPostingsController extends Controller
                 'cover_letter' => $validated['cover_letter'],
                 'applied_at' => now(),
             ]);
-            
+            \Log::debug('JobPostingsController@apply: application created', [
+                'application_id' => $application->id,
+            ]);
             DB::commit();
-            
+            \Log::debug('JobPostingsController@apply: transaction committed');
             return response()->json([
                 'success' => true,
                 'message' => 'Your application has been submitted successfully!',
                 'application_id' => $application->id,
             ], 201);
-            
         } catch (\Exception $e) {
             DB::rollBack();
-            
+            \Log::error('JobPostingsController@apply: exception', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while submitting your application. Please try again.',
                 'error' => config('app.debug') ? $e->getMessage() : null,
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null,
             ], 500);
         }
     }
